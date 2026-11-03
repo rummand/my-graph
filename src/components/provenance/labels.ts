@@ -71,6 +71,35 @@ export function relationLabel(r: string): string {
   return r.replace(/_/g, " ");
 }
 
+/** "parent of" → "Parent of", for headings. */
+export function sentenceCase(s: string): string {
+  return s ? s[0].toUpperCase() + s.slice(1) : s;
+}
+
+/** "92% sure": how sure we are, as people say it. */
+export function percentSure(c: number): string {
+  return `${Math.round(c * 100)}% sure`;
+}
+
+/**
+ * Who recorded a piece of evidence and how, as one phrase: "Uploaded by Anna", "Picked out by the assistant
+ * (qwen3-local)", "Entered by Anna", "Guessed by rule: birthday".
+ */
+export function provenanceByline(activity: string, agentType: string, agentId: string, names: Record<string, string> = {}): string {
+  const how = activityLabel(activity);
+  if (agentType === "user") {
+    const who = agentLabel(agentType, agentId, names);
+    if (activity === "manual_edit") return `Entered by ${who}`;
+    return `${how} by ${who}`;
+  }
+  if (agentType === "model") {
+    const model = agentId.replace(/^mux:/, "");
+    const base = /assistant/i.test(how) ? how : `${how} by the assistant`;
+    return model ? `${base} (${model})` : base;
+  }
+  return `${how}, ${agentLabel(agentType, agentId, names).replace(/^Rule/, "rule")}`;
+}
+
 /** A node's place in time, at the precision we know it. */
 export function formatWhen(start: Date | string | null, end: Date | string | null, precision: string | null): string {
   if (!start) return "";
@@ -78,9 +107,17 @@ export function formatWhen(start: Date | string | null, end: Date | string | nul
   const s = format(new Date(start), pattern);
   if (!end) return s;
   const e = format(new Date(end), pattern);
+  if (precision === "minute" && format(new Date(start), "yyyy-MM-dd") === format(new Date(end), "yyyy-MM-dd")) {
+    return `${s}–${format(new Date(end), "HH:mm")}`;
+  }
   return e === s ? s : `${s} – ${e}`;
 }
 
 export function formatDate(d: Date | string): string {
   return format(new Date(d), "d MMM yyyy");
+}
+
+/** "Mon 16 Nov 2026" for a single day, as shown in headers. */
+export function formatDay(d: Date | string): string {
+  return format(new Date(d), "EEE d MMM yyyy");
 }

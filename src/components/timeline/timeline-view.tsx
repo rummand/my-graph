@@ -1,21 +1,19 @@
 "use client";
-/** The timeline page body: filters, search, presets, then swimlanes (desktop) or a month list (phones), plus the drawer. */
+/** The timeline page body: range and search, people and topic filters, then swimlanes (desktop) or a list (phones). */
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { Search } from "lucide-react";
-import { Button, EmptyState } from "@/components/ui";
-import { formatWhen, presetDomain, searchItems, type Preset } from "@/lib/timeline/pure";
+import { Button, EmptyState, Tabs, buttonClass } from "@/components/ui";
+import { personStyle } from "@/lib/ui/person-color";
+import { dataExtent, formatWhen, searchItems } from "@/lib/timeline/pure";
 import type { TimelineData, TimelineItem } from "@/lib/timeline/types";
 import { EventDrawer } from "./event-drawer";
 import { useMediaQuery } from "./hooks";
-import { ItemGlyph, Legend } from "./marks";
+import { RANGES, matchRange, openingRange, type RangeKey } from "./layout";
+import { ItemGlyph, MarkSwatch } from "./marks";
 import { MobileList } from "./mobile-list";
 import { Swimlanes, type SwimlaneHandle } from "./swimlanes";
-
-const PRESETS: { key: Preset; label: string }[] = [
-  { key: "week", label: "Week" }, { key: "month", label: "Month" }, { key: "year", label: "Year" }, { key: "all", label: "All" },
-];
 
 type Filters = { people: string[]; topics: string[]; uploads: boolean };
 const NO_FILTERS: Filters = { people: [], topics: [], uploads: false };
@@ -37,6 +35,7 @@ export function TimelineView({ initial, initialError }: { initial: TimelineData 
   const [reload, setReload] = useState(0);
   const [selected, setSelected] = useState<TimelineItem | null>(null);
   const [jumpId, setJumpId] = useState<string | null>(null);
+  const [activeRange, setActiveRange] = useState<RangeKey | null>(null);
   const lanesRef = useRef<SwimlaneHandle>(null);
   const firstFetch = useRef(!!initial);
 
@@ -61,21 +60,21 @@ export function TimelineView({ initial, initialError }: { initial: TimelineData 
 
   const peopleById = useMemo(() => new Map((data?.people ?? []).map((p) => [p.id, p.label])), [data]);
   const items = useMemo(() => data?.items ?? [], [data]);
+  const extent = useMemo(() => dataExtent(items), [items]);
 
   // Keep the open drawer pointing at fresh data after a refetch (or close it if the item is gone).
   useEffect(() => {
     setSelected((s) => (s ? items.find((i) => i.id === s.id) ?? null : s));
   }, [items]);
 
-  const initialPreset = useMemo<Preset>(() => {
-    const [a, b] = presetDomain("year", new Date(), null);
-    return items.some((i) => { const t = new Date(i.start).getTime(); return t >= a.getTime() && t <= b.getTime(); }) ? "year" : "all";
+  const initialRange = useMemo<RangeKey>(() => openingRange(items, Date.now()),
     // Only decided once, from the first data we have.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data === null]);
+    [data === null]);
 
   const onSelect = useCallback((it: TimelineItem) => setSelected(it), []);
   const onClose = useCallback(() => setSelected(null), []);
+  const onViewChange = useCallback((v: [number, number]) => setActiveRange(matchRange(v, Date.now(), extent)), [extent]);
 
   const jumpTo = (it: TimelineItem) => {
     setSelected(it);
@@ -86,14 +85,15 @@ export function TimelineView({ initial, initialError }: { initial: TimelineData 
   const filtered = filters.people.length > 0 || filters.topics.length > 0;
   const toggle = (key: "people" | "topics", id: string) =>
     setFilters((f) => ({ ...f, [key]: f[key].includes(id) ? f[key].filter((x) => x !== id) : [...f[key], id] }));
+  const clear = () => setFilters((f) => ({ ...NO_FILTERS, uploads: f.uploads }));
 
   if (!data && loading) return <TimelineSkeleton />;
   if (!data) {
     return (
-      <div role="alert" className="rounded-lg border border-line bg-surface p-6">
-        <p className="font-medium">The timeline didn&apos;t load.</p>
-        <p className="mt-1 text-sm text-muted">{error ?? "Something went wrong."}</p>
-        <Button className="mt-4" variant="secondary" onClick={() => setReload((n) => n + 1)}>Try again</Button>
+      <div role="alert" className="rounded-lg bg-danger-tint px-5 py-4">
+        <p className="font-medium text-danger">The timeline didn&apos;t load.</p>
+        <p className="mt-1 text-sm">{error ?? "Something went wrong on our side."}</p>
+        <Button className="mt-3" variant="secondary" size="sm" onClick={() => setReload((n) => n + 1)}>Try again</Button>
       </div>
     );
   }
@@ -101,148 +101,159 @@ export function TimelineView({ initial, initialError }: { initial: TimelineData 
   const nothingAtAll = items.length === 0 && !filtered;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {nothingAtAll && !filters.uploads ? (
-        <EmptyState title="Nothing on the timeline yet">
-          <p className="mx-auto max-w-md">
-            Events appear here when you upload documents — school letters, appointment cards, invitations — or write wiki
-            pages that mention dates. Each event gets a lane for the people it involves.
-          </p>
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            <Link href="/library" className="inline-flex items-center rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:opacity-90">Upload a document</Link>
-            <Link href="/wiki" className="inline-flex items-center rounded-md border border-line bg-surface px-3 py-2 text-sm font-medium text-fg hover:bg-surface-2">Write a wiki page</Link>
-          </div>
-          <button type="button" className="mt-3 text-xs font-medium text-accent hover:underline" onClick={() => setFilters((f) => ({ ...f, uploads: true }))}>
-            Already uploaded something? Show uploads on the timeline
-          </button>
+        <EmptyState title="Nothing on the timeline yet"
+          action={
+            <div className="flex flex-col items-center gap-3">
+              <div className="flex flex-wrap justify-center gap-2">
+                <Link href="/library" className={buttonClass("primary")}>Upload a document</Link>
+                <Link href="/wiki" className={buttonClass("secondary")}>Write a wiki page</Link>
+              </div>
+              <button type="button" className="text-sm font-medium text-accent hover:underline" onClick={() => setFilters((f) => ({ ...f, uploads: true }))}>
+                Show what&apos;s already in the library
+              </button>
+            </div>
+          }>
+          School letters, appointment cards and invitations put their dates here, in a lane for each person they involve.
         </EmptyState>
       ) : (
         <>
           <Toolbar
-            data={data} filters={filters} isPhone={isPhone} loading={loading}
-            onPreset={(p) => lanesRef.current?.zoomToPreset(p)}
+            data={data} filters={filters} isPhone={isPhone} loading={loading} activeRange={activeRange}
+            onRange={(r) => lanesRef.current?.zoomToRange(r)}
+            onToday={() => lanesRef.current?.goToday()}
             onToggle={toggle}
             onUploads={(uploads) => setFilters((f) => ({ ...f, uploads }))}
-            onClear={() => setFilters((f) => ({ ...NO_FILTERS, uploads: f.uploads }))}
+            onClear={clear}
             onJump={jumpTo}
           />
 
           {error && (
-            <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-line bg-surface px-3 py-2 text-sm">
+            <div role="alert" className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-danger-tint px-4 py-2.5 text-sm">
               <span className="text-danger">{error}</span>
-              <button type="button" className="font-medium text-accent hover:underline" onClick={() => setReload((n) => n + 1)}>Try again</button>
+              <button type="button" className="font-medium text-fg underline-offset-2 hover:underline" onClick={() => setReload((n) => n + 1)}>Try again</button>
             </div>
           )}
           {data.truncated && (
-            <p className="rounded-md bg-surface-2 px-3 py-2 text-sm text-muted">
-              There are more events than we can draw at once, so only the first {items.filter((i) => i.kind === "event").length.toLocaleString()} are shown. Filter by a person or topic to see the rest.
+            <p className="rounded-lg bg-warn-tint px-4 py-2.5 text-sm text-warn">
+              Only the first {items.filter((i) => i.kind === "event").length.toLocaleString()} events fit. Pick a person or a topic to see the rest.
             </p>
           )}
 
           {items.length === 0 ? (
-            <EmptyState title="Nothing matches these filters">
-              <p>Try fewer people or topics.</p>
-              <Button variant="secondary" className="mt-3" onClick={() => setFilters((f) => ({ ...NO_FILTERS, uploads: f.uploads }))}>Clear filters</Button>
+            <EmptyState title="Nothing matches these filters" action={<Button variant="secondary" onClick={clear}>Clear filters</Button>}>
+              Try fewer people or topics.
             </EmptyState>
           ) : (
-            <div className={clsx("transition-opacity", loading && "opacity-60")} aria-busy={loading}>
+            <div className={clsx("transition-opacity duration-150", loading && "opacity-60")} aria-busy={loading}>
               {isPhone ? (
                 <MobileList items={items} peopleById={peopleById} selectedId={selected?.id ?? null} onSelect={onSelect} scrollToId={jumpId} />
               ) : (
                 <Swimlanes ref={lanesRef} lanes={data.lanes} items={items} peopleById={peopleById}
-                  selectedId={selected?.id ?? null} onSelect={onSelect} initialPreset={initialPreset} />
+                  selectedId={selected?.id ?? null} onSelect={onSelect} initialRange={initialRange} onViewChange={onViewChange} />
               )}
             </div>
           )}
-
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <Legend />
-            {!isPhone && <p className="text-xs text-muted">Scroll or pinch to zoom · drag to move · ← → + − and T on the keyboard</p>}
-          </div>
         </>
       )}
 
-      <EventDrawer item={selected} peopleById={peopleById} onClose={onClose} />
+      <EventDrawer item={selected} peopleById={peopleById} onClose={onClose} isPhone={isPhone} />
     </div>
   );
 }
 
-function Toolbar({ data, filters, isPhone, loading, onPreset, onToggle, onUploads, onClear, onJump }: {
-  data: TimelineData; filters: Filters; isPhone: boolean; loading: boolean;
-  onPreset: (p: Preset) => void;
+function Toolbar({ data, filters, isPhone, loading, activeRange, onRange, onToday, onToggle, onUploads, onClear, onJump }: {
+  data: TimelineData; filters: Filters; isPhone: boolean; loading: boolean; activeRange: RangeKey | null;
+  onRange: (r: RangeKey) => void;
+  onToday: () => void;
   onToggle: (key: "people" | "topics", id: string) => void;
   onUploads: (on: boolean) => void;
   onClear: () => void;
   onJump: (it: TimelineItem) => void;
 }) {
   const [showAllTopics, setShowAllTopics] = useState(false);
-  const topics = showAllTopics ? data.topics : data.topics.slice(0, 10);
+  const topics = showAllTopics ? data.topics : data.topics.slice(0, 8);
   const anyFilter = filters.people.length > 0 || filters.topics.length > 0;
-  // Keep chips for selected topics visible even when collapsed.
+  // Keep chips for chosen topics visible even when the list is folded.
   const shownTopics = [...topics, ...data.topics.filter((t) => filters.topics.includes(t.id) && !topics.includes(t))];
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         {!isPhone && (
-          <div role="group" aria-label="Show a range of time" className="inline-flex overflow-hidden rounded-md border border-line bg-surface">
-            {PRESETS.map((p, i) => (
-              <button key={p.key} type="button" onClick={() => onPreset(p.key)}
-                className={clsx("px-3 py-1.5 text-sm hover:bg-surface-2", i > 0 && "border-l border-line")}>
-                {p.label}
-              </button>
-            ))}
-          </div>
+          <>
+            <Tabs<RangeKey | "custom"> items={RANGES.map((r) => ({ value: r.key, label: r.label }))} value={activeRange ?? "custom"} onSelect={(v) => v !== "custom" && onRange(v)} />
+            <Button variant="ghost" size="md" onClick={onToday}>Today</Button>
+          </>
         )}
-        <SearchBox items={data.items} onJump={onJump} />
-        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-muted">
-          <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={filters.uploads} onChange={(e) => onUploads(e.target.checked)} />
-          Show uploads
-        </label>
-        {loading && <span className="text-xs text-muted" role="status">Updating…</span>}
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+          {loading && <span className="text-sm text-muted" role="status">Updating…</span>}
+          <SearchBox items={data.items} onJump={onJump} />
+          <button type="button" aria-pressed={filters.uploads} onClick={() => onUploads(!filters.uploads)}
+            className={clsx("inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-sm transition-colors",
+              filters.uploads ? "bg-fg font-medium text-bg" : "bg-surface-2 text-fg hover:bg-line")}>
+            <span style={{ "--muted": filters.uploads ? "var(--bg)" : "var(--muted)" } as CSSProperties} className="inline-flex"><MarkSwatch kind="upload" size={14} /></span>
+            Uploads
+          </button>
+        </div>
       </div>
 
-      {data.people.length > 0 && (
-        <ChipRow label="People">
-          {data.people.map((p) => (
-            <Chip key={p.id} on={filters.people.includes(p.id)} onClick={() => onToggle("people", p.id)}>{p.label}</Chip>
-          ))}
-        </ChipRow>
-      )}
-      {data.topics.length > 0 && (
-        <ChipRow label="Topics">
-          {shownTopics.map((t) => (
-            <Chip key={t.id} on={filters.topics.includes(t.id)} onClick={() => onToggle("topics", t.id)} tone="topic">{t.label}</Chip>
-          ))}
-          {data.topics.length > 10 && (
-            <button type="button" className="px-1 text-xs font-medium text-accent hover:underline" onClick={() => setShowAllTopics((v) => !v)}>
-              {showAllTopics ? "Fewer topics" : `All ${data.topics.length} topics`}
-            </button>
+      {(data.people.length > 0 || data.topics.length > 0) && (
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
+          {data.people.length > 0 && (
+            <FilterGroup label="People">
+              {data.people.map((p) => (
+                <PersonToggle key={p.id} id={p.id} label={p.label} on={filters.people.includes(p.id)} onClick={() => onToggle("people", p.id)} />
+              ))}
+            </FilterGroup>
           )}
-        </ChipRow>
-      )}
-      {anyFilter && (
-        <button type="button" onClick={onClear} className="text-xs font-medium text-accent hover:underline">Clear filters</button>
+          {data.topics.length > 0 && (
+            <FilterGroup label="Topics">
+              {shownTopics.map((t) => (
+                <TopicToggle key={t.id} on={filters.topics.includes(t.id)} onClick={() => onToggle("topics", t.id)}>{t.label}</TopicToggle>
+              ))}
+              {data.topics.length > 8 && (
+                <button type="button" className="px-1 text-sm font-medium text-accent hover:underline" onClick={() => setShowAllTopics((v) => !v)}>
+                  {showAllTopics ? "Fewer" : `All ${data.topics.length}`}
+                </button>
+              )}
+            </FilterGroup>
+          )}
+          {anyFilter && <button type="button" onClick={onClear} className="text-sm font-medium text-accent hover:underline">Clear filters</button>}
+        </div>
       )}
     </div>
   );
 }
 
-function ChipRow({ label, children }: { label: string; children: React.ReactNode }) {
+function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div role="group" aria-label={`Filter by ${label.toLowerCase()}`} className="flex items-start gap-2">
-      <span className="w-14 shrink-0 pt-1 text-xs font-medium text-muted">{label}</span>
-      <div className="flex min-w-0 flex-wrap gap-1.5">{children}</div>
+    <div role="group" aria-label={`Show only these ${label.toLowerCase()}`}
+      className="-mx-4 flex w-[calc(100%+32px)] min-w-0 items-center gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] *:shrink-0 sm:mx-0 sm:w-auto sm:flex-wrap sm:overflow-visible sm:px-0">
+      <span className="mr-1 text-sm text-muted">{label}</span>
+      {children}
     </div>
   );
 }
 
-function Chip({ on, onClick, children, tone = "person" }: { on: boolean; onClick: () => void; children: React.ReactNode; tone?: "person" | "topic" }) {
-  const color = tone === "person" ? "var(--t-person)" : "var(--t-topic)";
+/** A person filter: their dot on grey when off, their own tint when on. */
+function PersonToggle({ id, label, on, onClick }: { id: string; label: string; on: boolean; onClick: () => void }) {
+  return (
+    <button type="button" aria-pressed={on} onClick={onClick} style={personStyle(id) as CSSProperties}
+      className={clsx("inline-flex h-7 items-center gap-1.5 rounded-full pl-2 pr-2.5 text-sm transition-colors active:scale-[0.97]",
+        on ? "bg-[var(--person-tint)] font-medium text-[var(--person)] ring-1 ring-inset ring-[var(--person)]" : "bg-surface-2 text-fg hover:bg-line")}>
+      <span className="size-2 rounded-full bg-[var(--person)]" aria-hidden="true" />
+      {label}
+    </button>
+  );
+}
+
+function TopicToggle({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
   return (
     <button type="button" aria-pressed={on} onClick={onClick}
-      className={clsx("rounded-full border px-2.5 py-1 text-xs font-medium transition", on ? "" : "bg-surface hover:bg-surface-2")}
-      style={on ? { background: color, borderColor: color, color: "var(--surface)" } : { borderColor: "var(--line)", color }}>
+      className={clsx("inline-flex h-7 items-center rounded-full px-2.5 text-sm transition-colors active:scale-[0.97]",
+        on ? "bg-fg font-medium text-bg" : "bg-surface-2 text-fg hover:bg-line")}>
       {children}
     </button>
   );
@@ -256,8 +267,8 @@ function SearchBox({ items, onJump }: { items: TimelineItem[]; onJump: (it: Time
   const choose = (it: TimelineItem) => { onJump(it); setOpen(false); setQ(""); };
 
   return (
-    <div className="relative min-w-[12rem] flex-1 sm:max-w-xs">
-      <Search size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
+    <div className="relative min-w-0 flex-1 sm:max-w-72">
+      <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" aria-hidden="true" />
       <input
         type="search"
         role="combobox"
@@ -266,7 +277,7 @@ function SearchBox({ items, onJump }: { items: TimelineItem[]; onJump: (it: Time
         aria-activedescendant={open && results[active] ? `tsr-${active}` : undefined}
         aria-autocomplete="list"
         aria-label="Find an event"
-        placeholder="Find an event…"
+        placeholder="Find an event"
         value={q}
         onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(0); }}
         onFocus={() => setOpen(true)}
@@ -277,21 +288,21 @@ function SearchBox({ items, onJump }: { items: TimelineItem[]; onJump: (it: Time
           else if (e.key === "Enter" && results[active]) { e.preventDefault(); choose(results[active]); }
           else if (e.key === "Escape") setOpen(false);
         }}
-        className="w-full rounded-md border border-line bg-surface py-1.5 pl-8 pr-3 text-sm placeholder:text-muted"
+        className="h-9 w-full rounded-md bg-surface pl-9 pr-3 text-sm text-fg ring-1 ring-inset ring-line placeholder:text-muted/80 hover:ring-muted/40 focus:outline-none focus:ring-2 focus:ring-accent"
       />
       {open && q.trim() && (
         <ul id="timeline-search-results" role="listbox"
-          className="absolute left-0 right-0 top-full z-40 mt-1 max-h-80 overflow-y-auto rounded-md border border-line bg-surface py-1 shadow-lg">
-          {results.length === 0 && <li className="px-3 py-2 text-sm text-muted">No event called that.</li>}
+          className="absolute right-0 top-full z-40 mt-1.5 max-h-80 w-full min-w-72 overflow-y-auto rounded-lg bg-surface p-1.5 shadow-float">
+          {results.length === 0 && <li className="px-2.5 py-2 text-sm text-muted">Nothing called that on the timeline.</li>}
           {results.map((it, i) => (
             <li key={it.id} id={`tsr-${i}`} role="option" aria-selected={i === active}
               onMouseDown={(e) => { e.preventDefault(); choose(it); }}
               onMouseEnter={() => setActive(i)}
-              className={clsx("flex cursor-pointer items-start gap-2 px-3 py-2 text-sm", i === active && "bg-surface-2")}>
-              <span className="mt-0.5"><ItemGlyph item={it} size={14} /></span>
+              className={clsx("flex cursor-pointer items-start gap-2.5 rounded-md px-2.5 py-2 text-sm", i === active && "bg-surface-2")}>
+              <span className="mt-0.5"><ItemGlyph item={it} personId={it.personIds[0]} size={15} /></span>
               <span className="min-w-0">
                 <span className="block truncate font-medium">{it.title}</span>
-                <span className="block text-xs text-muted">{formatWhen(it.start, it.end, it.precision)}</span>
+                <span className="block text-muted">{formatWhen(it.start, it.end, it.precision)}</span>
               </span>
             </li>
           ))}
@@ -303,14 +314,14 @@ function SearchBox({ items, onJump }: { items: TimelineItem[]; onJump: (it: Time
 
 export function TimelineSkeleton() {
   return (
-    <div aria-busy="true" aria-live="polite" className="space-y-4">
+    <div aria-busy="true" aria-live="polite" className="space-y-5">
       <span className="sr-only">Loading the timeline…</span>
       <div className="flex gap-2">
-        <div className="h-8 w-56 animate-pulse rounded bg-surface-2" />
-        <div className="h-8 w-48 animate-pulse rounded bg-surface-2" />
+        <div className="h-9 w-80 animate-pulse rounded-md bg-surface-2" />
+        <div className="ml-auto h-9 w-72 animate-pulse rounded-md bg-surface-2" />
       </div>
-      <div className="h-6 w-2/3 animate-pulse rounded bg-surface-2" />
-      <div className="h-80 animate-pulse rounded-lg bg-surface-2" />
+      <div className="h-7 w-1/2 animate-pulse rounded-full bg-surface-2" />
+      <div className="h-[360px] animate-pulse rounded-lg bg-surface" />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
 import { graph, isUuid } from "@/lib/gbrain";
-import { PageHeader } from "@/components/ui";
+import { getMeta } from "@/lib/meta";
 import { GraphExplorer, type GraphData } from "@/components/graph";
 
 export const metadata: Metadata = { title: "Graph · My Graph" };
@@ -13,20 +13,28 @@ export default async function GraphPage({ searchParams }: { searchParams: Promis
   const v = await requireUser();
   const raw = (await searchParams).center;
   const center = typeof raw === "string" && isUuid(raw) ? raw : null;
-  const g = await graph(v, { limit: LIMIT, centerId: center ?? undefined });
+  const [g, meta] = await Promise.all([graph(v, { limit: LIMIT, centerId: center ?? undefined }), getMeta(v)]);
   const data: GraphData = {
-    nodes: g.nodes.map((n) => ({ id: n.id, type: n.type, label: n.label, summary: n.summary, aliases: n.aliases })),
-    edges: g.edges.map((e) => ({ id: e.id, from: e.fromId, to: e.toId, relation: e.relation, status: e.status, confidence: e.confidence })),
+    nodes: g.nodes.map((n) => ({
+      id: n.id, type: n.type, label: n.label, summary: n.summary, aliases: n.aliases,
+      kindLabel: meta.kind(n.type, n.kind)?.label ?? null,
+    })),
+    edges: g.edges.map((e) => ({
+      id: e.id, from: e.fromId, to: e.toId, relation: e.relation, status: e.status, confidence: e.confidence,
+      label: meta.relationLabel(e.relation, "out"), inverseLabel: meta.relationLabel(e.relation, "in"),
+    })),
   };
   const centerLabel = center ? g.nodes.find((n) => n.id === center)?.label : null;
   return (
     <>
-      <PageHeader
-        title={centerLabel ? `Around ${centerLabel}` : "Graph"}
-        lead={centerLabel
-          ? "Everything within two steps. Dashed lines are the assistant's guesses; faint lines aren't confirmed yet."
-          : "Everyone and everything in your brain and how they connect. Dashed lines are the assistant's guesses; faint lines aren't confirmed yet."}
-      />
+      <header className="mb-5">
+        <h1 className="text-[28px]/[1.15] font-semibold tracking-[-0.02em]">{centerLabel ? `Around ${centerLabel}` : "Graph"}</h1>
+        <p className="mt-1.5 max-w-[60ch] text-muted">
+          {centerLabel
+            ? `Everyone and everything within two steps of ${centerLabel}.`
+            : "Who and what your family's brain knows about, and how they connect."}
+        </p>
+      </header>
       <GraphExplorer data={data} centerId={center} truncated={!center && g.nodes.length >= LIMIT} />
     </>
   );

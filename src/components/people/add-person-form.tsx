@@ -1,7 +1,9 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Button, Card, Input } from "@/components/ui";
+import { clsx } from "clsx";
+import { ChevronRight } from "lucide-react";
+import { Button, Input, Select } from "@/components/ui";
 import { attributesFor } from "@/lib/meta/model";
 import { CIRCLE_LABELS, type Circle, type MetaAttribute, type MetaKind, type MetaModel, type MetaRelation } from "@/lib/meta/types";
 import { VISIBILITY_LABELS, type Visibility } from "@/lib/people/types";
@@ -79,74 +81,78 @@ export function AddPersonForm({ kinds, relations, model, people, defaultOtherId,
     }
   }
 
-  if (isGuest) return <Card><p className="text-sm text-muted">Guests can look at what’s been shared with them, but can’t add people.</p></Card>;
+  if (isGuest) return <p className="rounded-lg bg-surface p-4 text-sm text-muted">Guests can look at what’s been shared with them, but can’t add people.</p>;
 
   return (
-    <form onSubmit={submit} className="space-y-5" noValidate>
-      <Card className="space-y-4">
-        <div>
-          <label htmlFor="p-name" className="mb-1 block text-sm font-medium">Name</label>
-          <Input id="p-name" value={label} onChange={(e) => setLabel(e.target.value)} autoFocus required maxLength={120}
-            placeholder="e.g. Mette Hansen" aria-invalid={!!errors.label || undefined} aria-describedby={errors.label ? "p-name-err" : undefined} />
-          {errors.label && <p id="p-name-err" className="mt-1 text-xs text-danger">{errors.label}</p>}
+    <form onSubmit={submit} className="space-y-8" noValidate>
+      <FormBlock title="Who are they?">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label htmlFor="p-name" className="mb-1.5 block text-sm font-medium">Name</label>
+            <Input id="p-name" value={label} onChange={(e) => setLabel(e.target.value)} autoFocus required maxLength={120}
+              placeholder="Mette Hansen" aria-invalid={!!errors.label || undefined} aria-describedby={errors.label ? "p-name-err" : undefined} />
+            {errors.label && <p id="p-name-err" className="mt-1.5 text-[13px] text-danger">{errors.label}</p>}
+          </div>
+          <div>
+            <label htmlFor="p-kind" className="mb-1.5 block text-sm font-medium">Kind</label>
+            <Select id="p-kind" value={kind} onChange={(e) => pickKind(e.target.value)}>
+              <option value="">Choose…</option>
+              {byCircle.map(([circle, ks]) => (
+                <optgroup key={circle} label={CIRCLE_LABELS[circle as Circle] ?? circle}>
+                  {ks.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+                </optgroup>
+              ))}
+            </Select>
+            {kindRow?.description && <p className="mt-1.5 text-[13px] text-muted">{kindRow.description}</p>}
+            {errors.kind && <p className="mt-1.5 text-[13px] text-danger">{errors.kind}</p>}
+          </div>
         </div>
+      </FormBlock>
 
-        <div>
-          <label htmlFor="p-kind" className="mb-1 block text-sm font-medium">Who are they?</label>
-          <select id="p-kind" value={kind} onChange={(e) => pickKind(e.target.value)} className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
-            <option value="">Choose…</option>
-            {byCircle.map(([circle, ks]) => (
-              <optgroup key={circle} label={CIRCLE_LABELS[circle as Circle] ?? circle}>
-                {ks.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
-              </optgroup>
-            ))}
-          </select>
-          {kindRow?.description && <p className="mt-1 text-xs text-muted">{kindRow.description}</p>}
-          {errors.kind && <p className="mt-1 text-xs text-danger">{errors.kind}</p>}
-        </div>
-      </Card>
-
-      <Card className="space-y-3">
-        <h2 className="text-sm font-medium">How are they connected?</h2>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
+      <FormBlock title="How are they connected?">
+        <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{label.trim() || "This person"}</span>
-          <span>is</span>
+          <span className="text-muted">is</span>
           <label className="sr-only" htmlFor="p-rel">Relation</label>
-          <select id="p-rel" value={rel} onChange={(e) => { setRel(e.target.value); setRelTouched(true); }} className="rounded-md border border-line bg-surface px-2 py-1.5 text-sm">
+          <Select id="p-rel" value={rel} onChange={(e) => { setRel(e.target.value); setRelTouched(true); }} className="!w-auto max-w-full">
             <option value="">not connected to anyone yet</option>
             {options.map((o) => <option key={o.value} value={o.value}>{o.phrase}</option>)}
-          </select>
+          </Select>
           {rel && (
             <>
               <label className="sr-only" htmlFor="p-other">Person</label>
-              <select id="p-other" value={otherId} onChange={(e) => setOtherId(e.target.value)} className="rounded-md border border-line bg-surface px-2 py-1.5 text-sm">
+              <Select id="p-other" value={otherId} onChange={(e) => setOtherId(e.target.value)} className="!w-auto max-w-full">
                 <option value="">choose a person…</option>
                 {people.map((p) => <option key={p.id} value={p.id}>{p.isViewer ? "you" : p.label}{p.kindLabel && !p.isViewer ? ` (${p.kindLabel.toLowerCase()})` : ""}</option>)}
-              </select>
+              </Select>
             </>
           )}
         </div>
-        {rel && !otherId && <p className="text-xs text-warn">Pick who they’re connected to, or choose “not connected”.</p>}
-        {rel && otherName && <p className="text-xs text-muted">We’ll record this as a confirmed fact, added by you.</p>}
-      </Card>
+        {rel && !otherId && <p className="mt-2 text-[13px] text-warn">Pick who they’re connected to, or choose “not connected”.</p>}
+        {rel && otherName && <p className="mt-2 text-[13px] text-muted">Saved as a confirmed fact, added by you.</p>}
+      </FormBlock>
 
-      <Card>
+      <FormBlock title="Who can see them?">
         <fieldset>
-          <legend className="mb-2 text-sm font-medium">Who can see them?</legend>
+          <legend className="sr-only">Who can see them?</legend>
           <div className="grid gap-2 sm:grid-cols-3">
             {(["private", "parents", "household"] as Visibility[]).map((v) => (
-              <label key={v} className={`flex cursor-pointer gap-2 rounded-md border p-2 text-sm ${visibility === v ? "border-accent bg-accent-tint" : "border-line"}`}>
-                <input type="radio" name="vis" value={v} checked={visibility === v} onChange={() => { setVisibility(v); setVisTouched(true); }} className="mt-0.5 accent-[var(--accent)]" />
-                <span><span className="block font-medium">{VISIBILITY_LABELS[v]}</span><span className="block text-xs text-muted">{VIS_HELP[v]}</span></span>
+              <label key={v} className={clsx("flex cursor-pointer gap-2.5 rounded-md p-3 text-sm transition-colors",
+                visibility === v ? "bg-surface ring-2 ring-inset ring-fg" : "bg-surface-2/60 hover:bg-surface-2")}>
+                <input type="radio" name="vis" value={v} checked={visibility === v} onChange={() => { setVisibility(v); setVisTouched(true); }} className="mt-0.5 accent-[var(--fg)]" />
+                <span><span className="block font-medium">{VISIBILITY_LABELS[v]}</span><span className="block text-[13px] text-muted">{VIS_HELP[v]}</span></span>
               </label>
             ))}
           </div>
         </fieldset>
-      </Card>
+      </FormBlock>
 
-      <details className="rounded-lg border border-line bg-surface p-4">
-        <summary className="cursor-pointer text-sm font-medium">More details <span className="font-normal text-muted">(optional — you can add these later)</span></summary>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <details className="group rounded-lg bg-surface p-4">
+        <summary className="flex cursor-pointer list-none items-center gap-2 text-[15px] font-medium [&::-webkit-details-marker]:hidden">
+          <ChevronRight className="size-4 text-muted transition-transform duration-200 group-open:rotate-90" aria-hidden="true" />
+          More details <span className="font-normal text-muted">optional, you can add these later</span>
+        </summary>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {attrs.map((a) => (
             <AttributeField key={a.key} attr={a} idPrefix="new" value={props[a.key]} error={errors[`props.${a.key}`] ?? errors[a.key]}
               onChange={(v) => setProps((p) => ({ ...p, [a.key]: v }))} />
@@ -160,5 +166,14 @@ export function AddPersonForm({ kinds, relations, model, people, defaultOtherId,
         <Button type="submit" disabled={saving || (!!rel && !otherId)}>{saving ? "Adding…" : "Add person"}</Button>
       </div>
     </form>
+  );
+}
+
+function FormBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section>
+      <h2 className="mb-3 text-lg font-semibold tracking-[-0.01em]">{title}</h2>
+      {children}
+    </section>
   );
 }

@@ -1,5 +1,5 @@
 "use client";
-import { Input, Textarea } from "@/components/ui";
+import { Badge, Input, Select, Textarea } from "@/components/ui";
 import type { MetaAttribute } from "@/lib/meta/types";
 
 const PLACEHOLDER: Partial<Record<MetaAttribute["dataType"], string>> = {
@@ -26,16 +26,16 @@ export function AttributeField({ attr, value, onChange, error, disabled, idPrefi
       break;
     case "enum":
       control = (
-        <select {...common} value={str} onChange={(e) => onChange(e.target.value)} className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm">
-          <option value="">—</option>
+        <Select {...common} value={str} onChange={(e) => onChange(e.target.value)}>
+          <option value="">Not set</option>
           {attr.options.map((o) => <option key={o} value={o}>{o}</option>)}
-        </select>
+        </Select>
       );
       break;
     case "date":
       // Year-less birthdays (--MM-DD) stay editable as text.
       control = str.startsWith("--")
-        ? <Input {...common} value={str} onChange={(e) => onChange(e.target.value)} placeholder="--MM-DD" />
+        ? <Input {...common} value={str} onChange={(e) => onChange(e.target.value)} placeholder="Month and day, like --11-09" />
         : <Input {...common} type="date" value={str.slice(0, 10)} onChange={(e) => onChange(e.target.value)} />;
       break;
     case "number":
@@ -47,12 +47,12 @@ export function AttributeField({ attr, value, onChange, error, disabled, idPrefi
   }
   return (
     <div className={attr.dataType === "longtext" ? "sm:col-span-2" : undefined}>
-      <label htmlFor={id} className="mb-1 flex items-center gap-1.5 text-xs font-medium text-muted">
-        {attr.label}{attr.required && <span aria-hidden="true">*</span>}
-        {attr.sensitive && <span className="rounded bg-surface-2 px-1 py-px text-[10px] font-normal">Parents only</span>}
+      <label htmlFor={id} className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">
+        {attr.label}{attr.required && <span className="font-normal text-muted">(required)</span>}
+        {attr.sensitive && <Badge tone="warn">Parents only</Badge>}
       </label>
       {control}
-      {error && <p id={`${id}-err`} className="mt-1 text-xs text-danger">{error}</p>}
+      {error && <p id={`${id}-err`} className="mt-1.5 text-[13px] text-danger">{error}</p>}
     </div>
   );
 }

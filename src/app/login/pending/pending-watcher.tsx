@@ -25,9 +25,9 @@ export function PendingWatcher() {
     return () => { stop = true; clearTimeout(timer); };
   }, [router]);
   return (
-    <p role="status" aria-live="polite" className="flex items-center gap-2 text-muted">
-      <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent" aria-hidden="true" />
-      {state === "error" ? "Can't check right now — we'll keep trying." : "Waiting for approval…"}
+    <p role="status" aria-live="polite" className="flex items-center gap-2 font-medium text-warn">
+      <span className="size-2 rounded-full bg-warn motion-safe:animate-pulse" aria-hidden />
+      {state === "error" ? "Can't check right now. We'll keep trying." : "Waiting for a parent"}
     </p>
   );
 }

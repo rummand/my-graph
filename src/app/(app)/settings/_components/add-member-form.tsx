@@ -1,21 +1,40 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { clsx } from "clsx";
 import { Button, Input } from "@/components/ui";
 import { api, errorFields, errorMessage, type FieldErrors } from "@/lib/auth/client/api";
-import { describedBy, Field, FormError, FormNotice } from "@/lib/auth/client/field";
+import { describedBy, Field } from "@/lib/auth/client/field";
+import { ErrorNote, Notice } from "@/app/login/notes";
+import { PanelFooter, Row } from "./section";
 
 type Role = "parent" | "child" | "guest";
 
+const ROLE_NAME: Record<Role, string> = { parent: "Parent", child: "Child", guest: "Guest" };
 const ROLE_HELP: Record<Role, string> = {
   parent: "Sees everything shared with parents and can manage the family.",
   child: "Sees what's shared with the household. New devices need a parent's approval.",
-  guest: "A grandparent or babysitter: sees only what you share with them, until the date you choose.",
+  guest: "A grandparent or babysitter. Sees only what you share with them, until the date you choose.",
 };
 
 function inDays(n: number) {
   const d = new Date(Date.now() + n * 86_400_000);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/** What the parent will tell the new person: shown as they type, so the result of the form is visible. */
+function HandOff({ name, login, origin }: { name: string; login: string; origin: string }) {
+  const who = name.trim() || "them";
+  return (
+    <div className="rounded-lg bg-surface-2/70 p-4 text-sm">
+      <p className="font-medium">What to tell {who}</p>
+      <dl className="mt-2 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1">
+        <dt className="text-muted">Go to</dt><dd className="truncate">{origin ? `${origin.replace(/^https?:\/\//, "")}/login` : "this site"}</dd>
+        <dt className="text-muted">Sign in as</dt><dd className="truncate font-medium">{login.trim().toLowerCase() || <span className="font-normal text-muted">their username</span>}</dd>
+        <dt className="text-muted">Password</dt><dd>the one you choose here</dd>
+      </dl>
+    </div>
+  );
 }
 
 export function AddMemberForm({ canAddParent }: { canAddParent: boolean }) {
@@ -31,7 +50,10 @@ export function AddMemberForm({ canAddParent }: { canAddParent: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [origin, setOrigin] = useState("");
   const year = new Date().getFullYear();
+
+  useEffect(() => setOrigin(window.location.origin), []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,51 +86,55 @@ export function AddMemberForm({ canAddParent }: { canAddParent: boolean }) {
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4" noValidate>
-      <fieldset>
-        <legend className="mb-2 text-sm font-medium">They are a…</legend>
-        <div className="grid gap-2 sm:grid-cols-3">
-          {roles.map((r) => (
-            <label key={r} className={`cursor-pointer rounded-md border p-3 text-sm ${role === r ? "border-accent bg-accent-tint" : "border-line hover:bg-surface-2"}`}>
-              <span className="flex items-center gap-2 font-medium">
-                <input type="radio" name="role" value={r} checked={role === r} onChange={() => setRole(r)} className="accent-[var(--accent)]" />
-                {r === "parent" ? "Parent" : r === "child" ? "Child" : "Guest"}
-              </span>
-              <span className="mt-1 block text-xs text-muted">{ROLE_HELP[r]}</span>
-            </label>
-          ))}
+    <Row id="add" title="Add someone"
+      lead="They sign in with the username and password you set here, and can change the password afterwards."
+      aside={<HandOff name={name} login={email} origin={origin} />}>
+      <form onSubmit={submit} noValidate>
+        <fieldset>
+          <legend className="mb-1.5 text-sm font-medium">They are a</legend>
+          <div className="inline-flex rounded-md bg-surface-2 p-0.5">
+            {roles.map((r) => (
+              <label key={r} className={clsx("relative inline-flex h-8 cursor-pointer items-center rounded-[5px] px-4 text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent",
+                role === r ? "bg-surface font-medium text-fg shadow-[0_1px_2px_rgb(0_0_0/0.08)]" : "text-muted hover:text-fg")}>
+                <input type="radio" name="role" value={r} checked={role === r} onChange={() => setRole(r)} className="sr-only" />
+                {ROLE_NAME[r]}
+              </label>
+            ))}
+          </div>
+          <p className="mt-2 text-sm text-muted">{ROLE_HELP[role]}</p>
+        </fieldset>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <Field id="am-name" label="Name" error={fields.name}>
+            <Input id="am-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoComplete="off"
+              aria-invalid={!!fields.name || undefined} aria-describedby={describedBy("am-name", fields.name)} />
+          </Field>
+          <Field id="am-email" label="Email or username" error={fields.email} hint={role === "child" ? "Children can have a simple username, like “emma”." : undefined}>
+            <Input id="am-email" value={email} onChange={(e) => setEmail(e.target.value)} autoCapitalize="none" spellCheck={false} autoComplete="off"
+              aria-invalid={!!fields.email || undefined} aria-describedby={describedBy("am-email", fields.email, role === "child")} />
+          </Field>
+          <Field id="am-password" label="Starting password" error={fields.password} hint="At least 10 characters. They can change it later.">
+            <Input id="am-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password"
+              aria-invalid={!!fields.password || undefined} aria-describedby={describedBy("am-password", fields.password, true)} />
+          </Field>
+          {role === "child" && (
+            <Field id="am-birthYear" label="Birth year" error={fields.birthYear}>
+              <Input id="am-birthYear" inputMode="numeric" pattern="[0-9]*" maxLength={4} placeholder={String(year - 8)} value={birthYear}
+                onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, ""))} className="tabular-nums"
+                aria-invalid={!!fields.birthYear || undefined} aria-describedby={describedBy("am-birthYear", fields.birthYear)} />
+            </Field>
+          )}
+          {role === "guest" && (
+            <Field id="am-accessExpiresAt" label="Access until" error={fields.accessExpiresAt} hint="They can't sign in after the end of this day.">
+              <Input id="am-accessExpiresAt" type="date" min={inDays(0)} value={until} onChange={(e) => setUntil(e.target.value)}
+                aria-invalid={!!fields.accessExpiresAt || undefined} aria-describedby={describedBy("am-accessExpiresAt", fields.accessExpiresAt, true)} />
+            </Field>
+          )}
         </div>
-      </fieldset>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field id="am-name" label="Name" error={fields.name}>
-          <Input id="am-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} autoComplete="off"
-            aria-invalid={!!fields.name || undefined} aria-describedby={describedBy("am-name", fields.name)} />
-        </Field>
-        <Field id="am-email" label="Email or username" error={fields.email} hint={role === "child" ? "Children can have a simple username, like “emma”." : undefined}>
-          <Input id="am-email" value={email} onChange={(e) => setEmail(e.target.value)} autoCapitalize="none" spellCheck={false} autoComplete="off"
-            aria-invalid={!!fields.email || undefined} aria-describedby={describedBy("am-email", fields.email, role === "child")} />
-        </Field>
-        <Field id="am-password" label="Starting password" error={fields.password} hint="At least 10 characters. They can change it in Settings.">
-          <Input id="am-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password"
-            aria-invalid={!!fields.password || undefined} aria-describedby={describedBy("am-password", fields.password, true)} />
-        </Field>
-        {role === "child" && (
-          <Field id="am-birthYear" label="Birth year" error={fields.birthYear}>
-            <Input id="am-birthYear" inputMode="numeric" pattern="[0-9]*" maxLength={4} placeholder={String(year - 8)} value={birthYear}
-              onChange={(e) => setBirthYear(e.target.value.replace(/\D/g, ""))}
-              aria-invalid={!!fields.birthYear || undefined} aria-describedby={describedBy("am-birthYear", fields.birthYear)} />
-          </Field>
-        )}
-        {role === "guest" && (
-          <Field id="am-accessExpiresAt" label="Access until" error={fields.accessExpiresAt} hint="They can't sign in after the end of this day.">
-            <Input id="am-accessExpiresAt" type="date" min={inDays(0)} value={until} onChange={(e) => setUntil(e.target.value)}
-              aria-invalid={!!fields.accessExpiresAt || undefined} aria-describedby={describedBy("am-accessExpiresAt", fields.accessExpiresAt, true)} />
-          </Field>
-        )}
-      </div>
-      <FormError message={error} />
-      <FormNotice message={notice} />
-      <Button type="submit" disabled={busy}>{busy ? "Adding…" : "Add to family"}</Button>
-    </form>
+        <ErrorNote message={error} className="mt-4" />
+        <PanelFooter status={<Notice message={notice} />}>
+          <Button type="submit" disabled={busy}>{busy ? "Adding…" : `Add ${name.trim() ? name.trim().split(/\s+/)[0] : "to family"}`}</Button>
+        </PanelFooter>
+      </form>
+    </Row>
   );
 }

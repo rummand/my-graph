@@ -21,7 +21,7 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   const profile = await load((await params).id);
   if (!profile) notFound();
   return (
-    <div className="people-scope mx-auto max-w-6xl">
+    <div className="mx-auto max-w-6xl">
       <PersonProfileView initial={profile} />
     </div>
   );

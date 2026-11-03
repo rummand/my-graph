@@ -1,89 +1,94 @@
 "use client";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
 import Link from "next/link";
-import { ArrowUp, ChevronDown, Lock, MessageSquare, Plus, Square, Trash2 } from "lucide-react";
-import { clsx } from "clsx";
+import { AnimatePresence, motion } from "motion/react";
+import { Lock, PanelLeft, Pencil, SquarePen, Trash2, X } from "lucide-react";
+import { format } from "date-fns";
 import type { Citation } from "@/db/schema";
-import { Button, EmptyState } from "@/components/ui";
-import type { ConversationSummary, ConversationView, MessageView } from "@/lib/assistant/store";
+import { IconButton } from "@/components/ui";
+import type { ConversationSummary, ConversationView } from "@/lib/assistant/store";
 import type { ProposalView } from "@/lib/assistant/proposals";
 import { readSse } from "@/lib/mux/sse";
-import { CitationRef } from "./citation";
-import { Markdown } from "./markdown";
 import { MuxBanner, type MuxStatus } from "./mux-banner";
-import { ProposalCard } from "./proposal-card";
+import { ConversationList } from "./conversation-list";
+import { Composer } from "./composer";
+import { ChatEmpty } from "./empty";
+import { Answer, Question, type UiMessage } from "./message";
+import type { Starter } from "./recency";
 
-const STARTERS = [
-  "What's coming up for Emma this week?",
-  "When was Noah's last vaccination?",
-  "What do we need to prepare for school this week?",
-  "Which reminders are open right now?",
-];
+const EASE = [0.22, 1, 0.36, 1] as const;
 
-type UiMessage = MessageView & { streaming?: boolean; live?: Citation[] };
-
-const ROUTE_LABEL: Record<string, string> = {
-  fast: "Quick answer", smart: "Careful answer", agent: "Answered on a local model", auto: "Answer",
-};
-
-export function ChatApp({ conversations: initialList, conversation, mux, canFix }: {
+export function ChatApp({ conversations: initialList, conversation, mux, canFix, starters, initialQuestion }: {
   conversations: ConversationSummary[];
   conversation: ConversationView | null;
   mux: MuxStatus;
   canFix: boolean;
+  starters: Starter[];
+  /** From /chat?q=…: asked once, as a new conversation, then removed from the URL. */
+  initialQuestion?: string | null;
 }) {
   const [list, setList] = useState(initialList);
   const [conversationId, setConversationId] = useState<string | null>(conversation?.id ?? null);
   const [title, setTitle] = useState(conversation?.title ?? "New conversation");
-  const [messages, setMessages] = useState<UiMessage[]>(conversation?.messages ?? []);
+  const [startedAt, setStartedAt] = useState<string | null>(conversation?.createdAt ?? null);
+  const [messages, setMessages] = useState<UiMessage[]>(() => (conversation?.messages ?? []).map((m) => ({ ...m, uid: m.id })));
   const [sensitive, setSensitive] = useState(conversation?.sensitive ?? false);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [listOpen, setListOpen] = useState(false);
+  const [drawer, setDrawer] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const stickRef = useRef(true);
   const activeIdRef = useRef<string | null>(conversation?.id ?? null);
 
-  // Follow the answer while it streams, unless the reader scrolled up.
+  // Follow the answer while it streams, unless the reader scrolled up to read.
   useEffect(() => {
     const onScroll = () => {
-      stickRef.current = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 120;
+      stickRef.current = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160;
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
   useLayoutEffect(() => {
-    if (stickRef.current) bottomRef.current?.scrollIntoView({ block: "end" });
+    if (!stickRef.current || !messages.length) return;
+    bottomRef.current?.scrollIntoView({ block: "end" });
+    // Sources and suggestions open with a short height animation; follow them to the end.
+    const t = window.setTimeout(() => { if (stickRef.current) bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }); }, 260);
+    return () => window.clearTimeout(t);
   }, [messages]);
-
-  // Grow the composer with its content.
+  // Open an existing conversation at its latest answer.
   useLayoutEffect(() => {
-    const el = inputRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 240)}px`;
-  }, [input]);
+    if (conversation?.messages.length) window.scrollTo({ top: document.documentElement.scrollHeight });
+  }, [conversation]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // Close the drawer with Escape.
+  useEffect(() => {
+    if (!drawer) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDrawer(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawer]);
 
   const patchLast = useCallback((fn: (m: UiMessage) => UiMessage) => {
     setMessages((ms) => (ms.length ? [...ms.slice(0, -1), fn(ms[ms.length - 1])] : ms));
   }, []);
 
-  async function send(text?: string) {
+  async function send(text?: string, force = false) {
     const question = (text ?? input).trim();
-    if (!question || streaming) return;
+    if (!question || (streaming && !force)) return;
     setError(null);
-    setInput("");
+    if (!text) setInput("");
     stickRef.current = true;
     const now = new Date().toISOString();
+    const stamp = Date.now();
     setMessages((ms) => [
-      ...ms,
-      { id: `local-${Date.now()}`, role: "user", content: question, citations: [], proposals: [], model: null, route: null, createdAt: now },
-      { id: "pending", role: "assistant", content: "", citations: [], proposals: [], model: null, route: null, createdAt: now, streaming: true, live: [] },
+      ...ms.map((m) => (m.fresh ? { ...m, fresh: false } : m)),
+      { id: `local-${stamp}`, uid: `q-${stamp}`, fresh: true, role: "user", content: question, citations: [], proposals: [], model: null, route: null, createdAt: now },
+      { id: "pending", uid: `a-${stamp}`, fresh: true, role: "assistant", content: "", citations: [], proposals: [], model: null, route: null, createdAt: now, streaming: true, live: [] },
     ]);
     setStreaming(true);
     const ac = new AbortController();
@@ -93,12 +98,12 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix 
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ conversationId, question }),
+        body: JSON.stringify({ conversationId: activeIdRef.current, question }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
         const body = await res.json().catch(() => ({}));
-        throw new Error(res.status === 401 ? "You've been signed out. Sign in again to keep asking." : typeof body.error === "string" ? body.error : "The assistant couldn't answer. Please try again.");
+        throw new Error(res.status === 401 ? "You've been signed out. Sign in again to keep asking." : typeof body.error === "string" ? body.error : "The assistant couldn't answer. Try again in a moment.");
       }
       for await (const ev of readSse(res.body)) {
         let data: Record<string, unknown>;
@@ -110,6 +115,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix 
           if (data.isNew) {
             const t = String(data.title ?? "New conversation");
             setTitle(t);
+            setStartedAt(now);
             setList((l) => [{ id, title: t, createdAt: now, updatedAt: now }, ...l.filter((c) => c.id !== id)]);
             window.history.replaceState(null, "", `/chat/${id}`);
           }
@@ -136,7 +142,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix 
             setList((l) => l.map((c) => (c.id === activeIdRef.current ? { ...c, title: t } : c)));
           }
         } else if (ev.event === "error") {
-          setError(String(data.message ?? "Something went wrong."));
+          setError(String(data.message ?? "Something went wrong while answering."));
         }
       }
       if (!gotDone) patchLast((m) => ({ ...m, streaming: false, live: undefined }));
@@ -145,7 +151,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix 
         patchLast((m) => ({ ...m, streaming: false, content: `${m.content}${m.content ? "\n\n" : ""}_(Stopped.)_` }));
       } else {
         setError(e instanceof Error && e.message !== "Failed to fetch" ? e.message : "We couldn't reach My Graph. Check your connection and try again.");
-        // Drop the empty answer bubble; keep the question so it can be retried.
+        // Drop the empty answer; keep the question in the box so it can be sent again.
         setMessages((ms) => (ms.length && ms[ms.length - 1].id === "pending" && !ms[ms.length - 1].content ? ms.slice(0, -2) : ms.map((m) => (m.streaming ? { ...m, streaming: false } : m))));
         setInput((cur) => cur || question);
       }
@@ -153,48 +159,76 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix 
       setStreaming(false);
       abortRef.current = null;
       setList((l) => {
-        // Move the active conversation to the top.
         const id = activeIdRef.current;
         const hit = l.find((c) => c.id === id);
         return hit ? [{ ...hit, updatedAt: new Date().toISOString() }, ...l.filter((c) => c.id !== id)] : l;
       });
-      inputRef.current?.focus();
+      inputRef.current?.focus({ preventScroll: true });
     }
   }
 
-  function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      void send();
-    }
-  }
+  // "Ask anything" in the shell lands here with ?q=…: start a new conversation with it once, then tidy the URL.
+  // Deferred a tick so React's dev double-mount can't start (and abort) a second request.
+  const askedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!initialQuestion || conversation || askedRef.current === initialQuestion) return;
+    const t = window.setTimeout(() => {
+      if (askedRef.current === initialQuestion) return;
+      askedRef.current = initialQuestion;
+      if (activeIdRef.current || abortRef.current) reset("/chat", "replace");
+      else window.history.replaceState(null, "", "/chat");
+      void send(initialQuestion, true);
+    }, 0);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialQuestion, conversation]);
 
-  async function remove() {
-    if (!conversationId || streaming) return;
-    if (!window.confirm(`Delete "${title}"? The messages are removed. Facts, reminders and pages you approved stay.`)) return;
-    const res = await fetch(`/api/chat/${conversationId}`, { method: "DELETE" });
+  async function rename(id: string, next: string): Promise<boolean> {
+    const res = await fetch(`/api/chat/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ title: next }) });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
-      setError(typeof body.error === "string" ? body.error : "We couldn't delete the conversation.");
-      return;
+      setError(typeof body.error === "string" ? body.error : "We couldn't rename that conversation.");
+      return false;
     }
-    window.location.assign("/chat");
+    setList((l) => l.map((c) => (c.id === id ? { ...c, title: next } : c)));
+    if (id === activeIdRef.current) setTitle(next);
+    return true;
+  }
+
+  async function remove(id: string): Promise<boolean> {
+    if (id === activeIdRef.current && streaming) return false;
+    const res = await fetch(`/api/chat/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      setError(typeof body.error === "string" ? body.error : "We couldn't delete that conversation.");
+      return false;
+    }
+    setList((l) => l.filter((c) => c.id !== id));
+    if (id === activeIdRef.current) reset("/chat", "replace");
+    return true;
+  }
+
+  function reset(url: string, how: "push" | "replace") {
+    abortRef.current?.abort();
+    activeIdRef.current = null;
+    setConversationId(null);
+    setTitle("New conversation");
+    setStartedAt(null);
+    setMessages([]);
+    setSensitive(false);
+    setError(null);
+    setInput("");
+    setDrawer(false);
+    if (how === "push") window.history.pushState(null, "", url); else window.history.replaceState(null, "", url);
+    window.scrollTo({ top: 0 });
+    inputRef.current?.focus({ preventScroll: true });
   }
 
   /** Start over without a page load (the URL may have been set by replaceState, which the router doesn't track). */
   function startNew(e: MouseEvent) {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
     e.preventDefault();
-    abortRef.current?.abort();
-    activeIdRef.current = null;
-    setConversationId(null);
-    setTitle("New conversation");
-    setMessages([]);
-    setSensitive(false);
-    setError(null);
-    setListOpen(false);
-    window.history.pushState(null, "", "/chat");
-    inputRef.current?.focus();
+    reset("/chat", "push");
   }
 
   function decided(messageId: string, p: ProposalView) {
@@ -202,168 +236,145 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix 
   }
 
   const empty = messages.length === 0;
+  const listProps = { list, activeId: conversationId, onNew: startNew, onRename: rename, onDelete: remove, busy: streaming };
 
   return (
-    <div className="mx-auto grid max-w-6xl gap-6 md:grid-cols-[240px_minmax(0,1fr)]">
-      {/* Conversation list */}
-      <aside aria-label="Conversations" className="md:sticky md:top-6 md:self-start">
-        <div className="flex items-center gap-2">
-          <Button type="button" variant="secondary" className="md:hidden" aria-expanded={listOpen} aria-controls="chat-list" onClick={() => setListOpen((o) => !o)}>
-            <MessageSquare aria-hidden className="h-4 w-4" /> Conversations
-            <ChevronDown aria-hidden className={clsx("h-4 w-4 transition", listOpen && "rotate-180")} />
-          </Button>
-          <Link href="/chat" onClick={startNew} className="ml-auto inline-flex items-center gap-2 rounded-md bg-accent px-3 py-2 text-sm font-medium text-accent-fg hover:opacity-90 md:ml-0 md:w-full md:justify-center">
-            <Plus aria-hidden className="h-4 w-4" /> New conversation
-          </Link>
-        </div>
-        <nav id="chat-list" className={clsx("mt-3 max-h-[60vh] overflow-y-auto md:block md:max-h-[calc(100vh-8rem)]", listOpen ? "block" : "hidden")}>
-          {list.length === 0 ? (
-            <p className="px-2 py-3 text-sm text-muted">Your conversations will appear here.</p>
-          ) : (
-            <ul className="space-y-0.5">
-              {list.map((c) => {
-                const active = c.id === conversationId;
-                return (
-                  <li key={c.id}>
-                    <Link href={`/chat/${c.id}`} aria-current={active ? "page" : undefined}
-                      className={clsx("block truncate rounded-md px-3 py-2 text-sm", active ? "bg-accent-tint font-medium text-accent" : "text-muted hover:bg-surface-2 hover:text-fg")}>
-                      {c.title}
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </nav>
+    <div className="-mb-28 lg:-mb-16 lg:grid lg:grid-cols-[216px_minmax(0,1fr)] lg:gap-10">
+      {/* Conversations: a quiet column on desktop, a drawer on phones. */}
+      <aside className="hidden lg:sticky lg:top-0 lg:-mt-9 lg:block lg:h-dvh lg:pb-2 lg:pt-9">
+        <ConversationList {...listProps} />
       </aside>
-
-      {/* Thread */}
-      <section aria-label="Conversation" className="flex min-h-[70vh] min-w-0 flex-col">
-        <header className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h1 className="truncate text-2xl font-semibold tracking-tight">{empty ? "Ask your family brain" : title}</h1>
-            <p className="mt-1 text-sm text-muted">
-              {empty
-                ? "Answers come only from what's in your graph, with a source for every claim."
-                : sensitive
-                  ? <span className="inline-flex items-center gap-1"><Lock aria-hidden className="h-3.5 w-3.5" /> Private topic: this conversation stays on local models.</span>
-                  : "Every answer shows where it came from."}
-            </p>
-          </div>
-          {conversationId && !empty && (
-            <Button type="button" variant="ghost" onClick={remove} disabled={streaming} aria-label="Delete this conversation">
-              <Trash2 aria-hidden className="h-4 w-4" /> <span className="hidden sm:inline">Delete</span>
-            </Button>
-          )}
-        </header>
-
-        <MuxBanner initial={mux} canFix={canFix} />
-
-        <div className="flex-1 space-y-6" aria-live="polite" aria-busy={streaming}>
-          {empty && (
-            <EmptyState title="Try asking">
-              <ul className="mt-3 flex flex-wrap justify-center gap-2">
-                {STARTERS.map((q) => (
-                  <li key={q}>
-                    <button type="button" onClick={() => void send(q)}
-                      className="rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-fg hover:bg-surface-2">
-                      {q}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </EmptyState>
-          )}
-          {messages.map((m) => (
-            <Message key={m.id} m={m} conversationId={conversationId} onDecided={decided} />
-          ))}
-          <div ref={bottomRef} />
-        </div>
-
-        {error && (
-          <p role="alert" className="mt-4 rounded-md border border-line bg-surface p-3 text-sm text-danger">{error}</p>
+      <AnimatePresence>
+        {drawer && (
+          <>
+            <motion.div key="scrim" className="fixed inset-0 z-50 bg-fg/30 lg:hidden" onClick={() => setDrawer(false)}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} />
+            <motion.div key="drawer" role="dialog" aria-modal="true" aria-label="Conversations"
+              className="fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-[320px] flex-col bg-bg px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3 shadow-float lg:hidden"
+              initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ duration: 0.26, ease: [0.32, 0.72, 0, 1] }}>
+              <div className="mb-2 flex items-center justify-between pl-2.5">
+                <p className="font-semibold">Conversations</p>
+                <IconButton label="Close conversations" onClick={() => setDrawer(false)}><X className="size-4" /></IconButton>
+              </div>
+              <div className="min-h-0 flex-1"><ConversationList {...listProps} onNavigate={() => setDrawer(false)} /></div>
+            </motion.div>
+          </>
         )}
+      </AnimatePresence>
 
-        <form
-          className="sticky bottom-0 mt-4 border-t border-line bg-bg pb-4 pt-3"
-          onSubmit={(e) => { e.preventDefault(); void send(); }}
-        >
-          <label htmlFor="chat-input" className="sr-only">Your question</label>
-          <div className="flex items-end gap-2 rounded-lg border border-line bg-surface p-2 focus-within:border-accent">
-            <textarea
-              id="chat-input"
-              ref={inputRef}
-              rows={1}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              maxLength={4000}
-              placeholder="Ask about school, health, plans… (Enter to send, Shift+Enter for a new line)"
-              className="max-h-60 min-h-[2.5rem] flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted"
-            />
-            {streaming ? (
-              <Button type="button" variant="secondary" onClick={() => abortRef.current?.abort()} aria-label="Stop the answer">
-                <Square aria-hidden className="h-4 w-4" /> <span className="hidden sm:inline">Stop</span>
-              </Button>
+      {/* The thread: one reading column, the composer pinned under it. */}
+      <section aria-label="Conversation" className="flex min-h-[calc(100dvh-4.5rem)] min-w-0 flex-col pb-[calc(56px+env(safe-area-inset-bottom))] lg:min-h-[calc(100dvh-2.25rem)] lg:pb-0">
+        <div className="mx-auto flex w-full max-w-[680px] flex-1 flex-col">
+          <ThreadBar
+            title={empty ? null : title}
+            startedAt={startedAt}
+            sensitive={sensitive}
+            canEdit={!!conversationId && !empty}
+            busy={streaming}
+            onOpenList={() => setDrawer(true)}
+            onNew={startNew}
+            onRename={(t) => (conversationId ? rename(conversationId, t) : Promise.resolve(false))}
+            onDelete={() => (conversationId ? remove(conversationId) : Promise.resolve(false))}
+          />
+
+          <MuxBanner initial={mux} canFix={canFix} />
+
+          <div className="flex-1 pb-10" aria-live="polite" aria-busy={streaming}>
+            {empty ? (
+              <ChatEmpty starters={starters} onPick={(q) => void send(q)} />
             ) : (
-              <Button type="submit" disabled={!input.trim()} aria-label="Send">
-                <ArrowUp aria-hidden className="h-4 w-4" />
-              </Button>
+              messages.map((m, i) => m.role === "user"
+                ? <Question key={m.uid} m={m} first={i === 0} />
+                : <Answer key={m.uid} m={m} conversationId={conversationId} onDecided={decided} />)
             )}
+            <div ref={bottomRef} />
           </div>
-        </form>
+
+          <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-20 -mx-2 bg-bg px-2 pb-3 pt-2 lg:bottom-0 lg:pb-6">
+            <AnimatePresence>
+              {error && (
+                <motion.div key="err" role="alert" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: EASE }}
+                  className="mb-2 flex items-start gap-3 rounded-lg bg-danger-tint px-4 py-3 text-sm text-danger">
+                  <p className="min-w-0 flex-1">{error}</p>
+                  <button type="button" onClick={() => setError(null)} aria-label="Dismiss this message" className="-m-1 rounded p-1 hover:bg-surface/50"><X aria-hidden className="size-4" /></button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <Composer value={input} onChange={setInput} onSend={() => void send()} onStop={() => abortRef.current?.abort()}
+              streaming={streaming} sensitive={sensitive} empty={empty} inputRef={inputRef} />
+          </div>
+        </div>
       </section>
     </div>
   );
 }
 
-function Message({ m, conversationId, onDecided }: { m: UiMessage; conversationId: string | null; onDecided: (messageId: string, p: ProposalView) => void }) {
-  if (m.role === "user") {
-    return (
-      <div className="flex justify-end">
-        <p className="max-w-[85%] whitespace-pre-wrap break-words rounded-lg bg-accent-tint px-4 py-2 text-sm text-fg">{m.content}</p>
-      </div>
-    );
+function ThreadBar({ title, startedAt, sensitive, canEdit, busy, onOpenList, onNew, onRename, onDelete }: {
+  title: string | null; startedAt: string | null; sensitive: boolean; canEdit: boolean; busy: boolean;
+  onOpenList: () => void; onNew: (e: MouseEvent) => void;
+  onRename: (t: string) => Promise<boolean>; onDelete: () => Promise<boolean>;
+}) {
+  const [mode, setMode] = useState<"view" | "rename" | "delete">("view");
+  const [draft, setDraft] = useState(title ?? "");
+  const [saving, setSaving] = useState(false);
+  const started = startedAt ? new Date(startedAt) : null;
+
+  useEffect(() => { setMode("view"); setDraft(title ?? ""); }, [title]);
+
+  async function save() {
+    const t = draft.trim();
+    if (!t || t === title) { setMode("view"); return; }
+    setSaving(true);
+    if (await onRename(t)) setMode("view");
+    setSaving(false);
   }
-  const citations = m.streaming ? m.live ?? [] : m.citations;
+
   return (
-    <article className="text-sm">
-      {m.content ? (
-        <Markdown text={m.content} citations={citations} />
-      ) : (
-        <p className="flex items-center gap-2 text-muted" role="status">
-          <span className="inline-flex gap-1" aria-hidden>
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted" />
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted [animation-delay:150ms]" />
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted [animation-delay:300ms]" />
-          </span>
-          Looking through your family brain…
-        </p>
-      )}
-
-      {!m.streaming && m.citations.length > 0 && (
-        <div className="mt-3">
-          <p className="text-xs font-medium text-muted">Sources</p>
-          <ul className="mt-1 flex flex-wrap gap-1.5">
-            {m.citations.map((c) => <li key={c.n} className="max-w-full"><CitationRef citation={c} compact={false} /></li>)}
-          </ul>
+    <div className="mb-8 flex min-h-9 items-center gap-2 lg:mb-10">
+      <IconButton label="Show conversations" className="-ml-1.5 lg:hidden" onClick={onOpenList}><PanelLeft className="size-[18px]" /></IconButton>
+      <div className="min-w-0 flex-1">
+        {mode === "rename" ? (
+          <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void save(); }}>
+            <label htmlFor="thread-title" className="sr-only">Conversation name</label>
+            <input id="thread-title" autoFocus value={draft} maxLength={120} disabled={saving}
+              onChange={(e) => setDraft(e.target.value)} onFocus={(e) => e.currentTarget.select()}
+              onKeyDown={(e) => { if (e.key === "Escape") { setMode("view"); setDraft(title ?? ""); } }}
+              className="h-8 min-w-0 flex-1 rounded-md bg-surface px-2 text-sm font-medium outline-none ring-1 ring-inset ring-accent" />
+            <button type="submit" disabled={saving} className="h-8 rounded-md bg-fg px-3 text-sm font-medium text-bg active:scale-[0.97]">{saving ? "Saving…" : "Save"}</button>
+            <button type="button" onClick={() => { setMode("view"); setDraft(title ?? ""); }} className="h-8 rounded-md px-2 text-sm text-muted hover:bg-surface-2 hover:text-fg">Cancel</button>
+          </form>
+        ) : mode === "delete" ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm" role="group" aria-label="Delete this conversation">
+            <span className="font-medium text-danger">Delete this conversation?</span>
+            <span className="hidden text-muted sm:inline">Things you approved from it stay.</span>
+            <span className="flex gap-1.5">
+              <button type="button" autoFocus disabled={saving} onClick={async () => { setSaving(true); if (!(await onDelete())) { setSaving(false); setMode("view"); } }}
+                className="h-8 rounded-md bg-danger px-3 font-medium text-white active:scale-[0.97] disabled:opacity-60">{saving ? "Deleting…" : "Delete"}</button>
+              <button type="button" onClick={() => setMode("view")} className="h-8 rounded-md px-2.5 text-muted hover:bg-surface-2 hover:text-fg">Keep it</button>
+            </span>
+          </div>
+        ) : title ? (
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{title}</p>
+            <p className="flex items-center gap-1.5 truncate text-xs text-muted">
+              {sensitive && <><Lock aria-hidden className="size-3" /> <span>Private, local models only.</span></>}
+              {started && !Number.isNaN(started.getTime()) && <span>Started {format(started, "EEE d MMM")}</span>}
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-muted lg:hidden">New conversation</p>
+        )}
+      </div>
+      {mode === "view" && (
+        <div className="flex shrink-0 items-center">
+          {canEdit && <IconButton label="Rename this conversation" onClick={() => setMode("rename")}><Pencil className="size-4" /></IconButton>}
+          {canEdit && <IconButton label="Delete this conversation" onClick={() => setMode("delete")} disabled={busy}><Trash2 className="size-4" /></IconButton>}
+          <Link href="/chat" onClick={onNew} aria-label="New conversation" title="New conversation"
+            className="inline-flex size-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-2 hover:text-fg lg:hidden">
+            <SquarePen className="size-4" aria-hidden />
+          </Link>
         </div>
       )}
-
-      {!m.streaming && conversationId && m.proposals.length > 0 && (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {m.proposals.map((p) => (
-            <ProposalCard key={p.n} conversationId={conversationId} messageId={m.id} proposal={p} onDecided={(x) => onDecided(m.id, x)} />
-          ))}
-        </div>
-      )}
-
-      {!m.streaming && (m.route || m.model) && (
-        <p className="mt-2 flex items-center gap-1 text-xs text-muted">
-          {m.route === "agent" && <Lock aria-hidden className="h-3 w-3" />}
-          {ROUTE_LABEL[m.route ?? ""] ?? "Answer"}{m.model ? ` · ${m.model}` : ""}
-        </p>
-      )}
-    </article>
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
-import { Button, Card, CitationChip } from "@/components/ui";
+import { Loader2, RotateCw } from "lucide-react";
+import { Button, CitationChip } from "@/components/ui";
 import type { Citation } from "@/db/schema";
 import type { CachedBrief } from "@/lib/briefs";
 import { splitCitations } from "@/lib/briefs/context";
@@ -17,13 +17,13 @@ function citationHref(c: Citation): string | undefined {
 function BriefText({ brief }: { brief: CachedBrief }) {
   const byN = new Map(brief.citations.map((c) => [c.n, c]));
   return (
-    <div className="space-y-1.5 text-sm leading-relaxed">
+    <div className="max-w-[68ch] space-y-2 leading-relaxed">
       {brief.text.split("\n").filter(Boolean).map((line, i) => (
         <p key={i}>
           {splitCitations(line).map((part, j) => {
             if (part.kind === "text") return <span key={j}>{part.text}</span>;
             const c = byN.get(part.n);
-            return c ? <CitationChip key={j} n={c.n} title={c.title} confidence={c.confidence} href={citationHref(c)} /> : null;
+            return c ? <span key={j} className="mx-0.5"><CitationChip n={c.n} title={c.title} confidence={c.confidence} href={citationHref(c)} /></span> : null;
           })}
         </p>
       ))}
@@ -58,37 +58,41 @@ export function BriefCard({ initial, tz }: { initial: CachedBrief | null; tz: st
     }
   }
 
+  const when = brief ? formatTime(new Date(brief.generatedAt), tz) : null;
+
   return (
-    <Card className="min-w-0">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="flex items-center gap-2 text-base font-semibold tracking-tight">
-            <Sparkles aria-hidden className="size-4 text-accent" />Today&apos;s brief
-          </h2>
+    <section aria-labelledby="brief-title" className="min-w-0 rounded-lg bg-surface p-5">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <div className="flex min-w-0 items-baseline gap-2.5">
+          <h2 id="brief-title" className="text-lg font-semibold tracking-[-0.01em]">Today&apos;s brief</h2>
           {brief && (
-            <p className="mt-0.5 text-xs text-muted">
-              {brief.local ? "Checked" : "Written"} at {formatTime(new Date(brief.generatedAt), tz)}
-              {brief.model ? ` · ${brief.model}` : ""}
-            </p>
+            <span className="truncate text-sm text-muted">
+              {brief.local ? `Checked at ${when}` : `Written at ${when}`}{brief.model ? ` by ${brief.model}` : ""}
+            </span>
           )}
         </div>
-        <Button variant={brief ? "secondary" : "primary"} onClick={() => write(Boolean(brief))} disabled={busy} aria-busy={busy}>
-          {busy && <Loader2 aria-hidden className="size-4 animate-spin" />}
-          {busy ? "Writing…" : brief ? "Write it again" : "Write today's brief"}
-        </Button>
+        {brief ? (
+          <Button variant="ghost" size="sm" onClick={() => write(true)} disabled={busy} aria-busy={busy}>
+            {busy ? <Loader2 aria-hidden className="size-4 animate-spin" /> : <RotateCw aria-hidden className="size-3.5" />}
+            {busy ? "Writing…" : "Write it again"}
+          </Button>
+        ) : (
+          <Button onClick={() => write(false)} disabled={busy} aria-busy={busy}>
+            {busy && <Loader2 aria-hidden className="size-4 animate-spin" />}
+            {busy ? "Writing…" : "Write today's brief"}
+          </Button>
+        )}
       </div>
 
-      <div className="mt-3" aria-live="polite">
-        {error && (
-          <p role="alert" className="mb-2 rounded-md bg-surface-2 px-3 py-2 text-sm text-warn">{error}</p>
-        )}
+      <div className="mt-2.5" aria-live="polite">
+        {error && <p role="alert" className="mb-2 rounded-md bg-warn-tint px-3 py-2 text-sm text-warn">{error}</p>}
         {brief ? <BriefText brief={brief} /> : !error && (
-          <p className="text-sm text-muted">
-            A few lines on what&apos;s coming up — what to pack, sign or book — written from your calendar, reminders and documents,
-            with a link to where each point came from.
+          <p className="max-w-[60ch] text-muted">
+            A few lines on what&apos;s coming up: what to pack, sign or book, written from your calendar, reminders and
+            letters, with a link to where each point came from.
           </p>
         )}
       </div>
-    </Card>
+    </section>
   );
 }

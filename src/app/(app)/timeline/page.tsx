@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { PageHeader } from "@/components/ui";
+import { upcomingSummary } from "@/components/timeline/layout";
 import { TimelineView } from "@/components/timeline/timeline-view";
 import { requireUser } from "@/lib/auth";
 import { loadTimeline, type TimelineData } from "@/lib/timeline";
@@ -19,8 +20,8 @@ export default async function TimelinePage() {
     initialError = "We couldn't load the timeline. Please try again.";
   }
   return (
-    <div className="mx-auto max-w-7xl">
-      <PageHeader title="Timeline" lead="What happened, what was decided and what's coming — a lane for each person. Click anything to see where it came from." />
+    <div className="mx-auto max-w-[1360px]">
+      <PageHeader title="Timeline" lead={initial ? upcomingSummary(initial.items, Date.now()) : undefined} />
       <TimelineView initial={initial} initialError={initialError} />
     </div>
   );

@@ -1,34 +1,72 @@
 "use client";
-import { useId } from "react";
-import { ShieldAlert } from "lucide-react";
+import { useId, type KeyboardEvent } from "react";
+import { clsx } from "clsx";
+import { Lock, ShieldAlert, Users, UsersRound } from "lucide-react";
 import { VISIBILITY_OPTIONS, type Visibility } from "./source-meta";
 
-export function VisibilitySelect({ value, onChange, label = "Who can see this", disabled }: { value: Visibility; onChange: (v: Visibility) => void; label?: string; disabled?: boolean }) {
+const ICON: Record<Visibility, typeof Lock> = { private: Lock, parents: UsersRound, household: Users };
+
+/** Who can see a file: three choices side by side, the current one raised. A real radio group for keyboards. */
+export function VisibilitySelect({ value, onChange, label = "Who can see this", disabled, compact = false }: {
+  value: Visibility; onChange: (v: Visibility) => void; label?: string; disabled?: boolean; compact?: boolean;
+}) {
   const id = useId();
   const hint = VISIBILITY_OPTIONS.find((o) => o.value === value)?.hint;
+  const move = (e: KeyboardEvent, dir: 1 | -1) => {
+    e.preventDefault();
+    const i = VISIBILITY_OPTIONS.findIndex((o) => o.value === value);
+    const next = VISIBILITY_OPTIONS[(i + dir + VISIBILITY_OPTIONS.length) % VISIBILITY_OPTIONS.length];
+    onChange(next.value);
+    document.getElementById(`${id}-${next.value}`)?.focus();
+  };
   return (
     <div>
-      <label htmlFor={id} className="mb-1 block text-sm font-medium">{label}</label>
-      <select id={id} value={value} disabled={disabled} aria-describedby={`${id}-hint`}
-        onChange={(e) => onChange(e.target.value as Visibility)}
-        className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm disabled:opacity-60">
-        {VISIBILITY_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-      <p id={`${id}-hint`} className="mt-1 text-xs text-muted">{hint}</p>
+      <p id={`${id}-label`} className={clsx("mb-1.5 text-sm font-medium", compact && "sr-only")}>{label}</p>
+      <div role="radiogroup" aria-labelledby={`${id}-label`} aria-describedby={compact ? undefined : `${id}-hint`}
+        className={clsx("inline-flex max-w-full rounded-md bg-surface-2 p-0.5", disabled && "opacity-60")}>
+        {VISIBILITY_OPTIONS.map((o) => {
+          const on = o.value === value;
+          const Icon = ICON[o.value];
+          return (
+            <button key={o.value} id={`${id}-${o.value}`} type="button" role="radio" aria-checked={on} disabled={disabled}
+              tabIndex={on ? 0 : -1} title={o.hint}
+              onClick={() => onChange(o.value)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowRight" || e.key === "ArrowDown") move(e, 1);
+                if (e.key === "ArrowLeft" || e.key === "ArrowUp") move(e, -1);
+              }}
+              className={clsx("inline-flex h-8 min-w-0 items-center gap-1.5 rounded-[5px] px-2.5 text-sm transition-colors duration-150",
+                on ? "bg-surface font-medium text-fg shadow-[0_1px_2px_rgb(0_0_0/0.08)]" : "text-muted hover:text-fg")}>
+              <Icon aria-hidden className="size-3.5 shrink-0" />
+              <span className="truncate">{o.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      {!compact && <p id={`${id}-hint`} className="mt-1.5 text-sm text-muted">{hint}</p>}
     </div>
   );
 }
 
-export function SensitiveToggle({ checked, onChange, disabled }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
+/** An on/off switch for "sensitive": health, money and legal papers stay on local models. */
+export function SensitiveToggle({ checked, onChange, disabled, compact = false }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; compact?: boolean }) {
   const id = useId();
   return (
-    <div className="flex items-start gap-3 rounded-md border border-line p-3">
-      <input id={id} type="checkbox" role="switch" aria-checked={checked} checked={checked} disabled={disabled}
-        onChange={(e) => onChange(e.target.checked)} aria-describedby={`${id}-hint`}
-        className="mt-0.5 size-4 shrink-0 accent-[var(--accent)]" />
+    <div className="flex items-start gap-3">
+      <button id={id} type="button" role="switch" aria-checked={checked} disabled={disabled} onClick={() => onChange(!checked)}
+        aria-describedby={compact ? undefined : `${id}-hint`}
+        className={clsx("relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-150 disabled:opacity-50",
+          checked ? "bg-warn" : "bg-line")}>
+        <span aria-hidden className={clsx("absolute left-0.5 size-4 rounded-full bg-surface shadow-[0_1px_2px_rgb(0_0_0/0.2)] transition-transform duration-200 ease-[cubic-bezier(0.22,1,0.36,1)]",
+          checked && "translate-x-4")} />
+      </button>
       <div className="min-w-0">
-        <label htmlFor={id} className="flex items-center gap-1.5 text-sm font-medium"><ShieldAlert aria-hidden className="size-4 text-warn" />Sensitive</label>
-        <p id={`${id}-hint`} className="mt-0.5 text-xs text-muted">Health, money or legal papers. Only processed by local models, never sent to cloud AI, and hidden from children.</p>
+        <label htmlFor={id} className="flex cursor-pointer items-center gap-1.5 text-sm font-medium">
+          Sensitive{checked && <ShieldAlert aria-hidden className="size-3.5 text-warn" />}
+        </label>
+        {!compact && (
+          <p id={`${id}-hint`} className="mt-0.5 text-sm text-muted">Health, money or legal papers. Read only by models in the house, never sent to cloud AI, and hidden from children.</p>
+        )}
       </div>
     </div>
   );

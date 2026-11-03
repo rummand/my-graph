@@ -26,7 +26,8 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (s.status === "pending") redirect("/login/pending");
   const notice = sp.reason ? REASONS[sp.reason] ?? null : null;
   return (
-    <AuthFrame title="Sign in" lead="Your family's private brain." footer="Forgot your password? Ask a parent in your household to set a new one.">
+    <AuthFrame title="Welcome back" lead="Sign in to your family's graph."
+      footer="Forgot your password? Ask a parent in your household to set a new one for you.">
       <LoginForm next={next} notice={notice} />
     </AuthFrame>
   );

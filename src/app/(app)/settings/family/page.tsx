@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
-import { EmptyState } from "@/components/ui";
+import { Badge, EmptyState, PageHeader } from "@/components/ui";
 import { isParent, requireUser } from "@/lib/auth";
 import { familyMembers } from "@/lib/auth/settings-data";
 import { AddMemberForm } from "../_components/add-member-form";
 import { MemberList } from "../_components/member-list";
 import { PendingApprovals } from "../_components/pending-approvals";
-import { Section } from "../_components/section";
+import { Row } from "../_components/section";
+import { plural } from "../_components/format";
 
 export const metadata: Metadata = { title: "Family" };
 export const dynamic = "force-dynamic";
@@ -17,26 +18,34 @@ export default async function FamilyPage({ searchParams }: { searchParams: Promi
   }
   const sp = await searchParams;
   const members = await familyMembers(v);
-  const pending = members.flatMap((m) => m.sessions.filter((s) => !s.approved).map((s) => ({ ...s, memberName: m.name, memberRole: m.role, canManage: m.canManage })));
+  const pending = members.flatMap((m) => m.sessions.filter((s) => !s.approved).map((s) => ({
+    ...s, memberName: m.name, memberRole: m.role, memberId: m.personNodeId ?? m.id, canManage: m.canManage,
+  })));
+  const kids = members.filter((m) => m.role === "child").length;
+  const adults = members.filter((m) => m.role === "owner" || m.role === "parent").length;
+  const guests = members.filter((m) => m.role === "guest").length;
+  const summary = [plural(adults, "parent"), kids ? plural(kids, "child", "children") : null, guests ? plural(guests, "guest") : null].filter(Boolean).join(", ");
   return (
     <>
+      <PageHeader title="Family" lead={`${summary}. Each person has their own private brain; what they share is up to them.`} />
       {sp.welcome && (
-        <p role="status" className="mb-6 rounded-md bg-accent-tint px-4 py-3 text-sm text-accent">
-          Welcome to My Graph. Add the rest of your family below — each person gets their own private brain, and children&apos;s new devices wait for your approval.
-        </p>
+        <div role="status" className="mb-8 rounded-lg bg-accent-tint px-5 py-4 text-accent">
+          <p className="font-medium">Your household is ready.</p>
+          <p className="mt-0.5 text-sm">Add the rest of your family below. Everyone gets their own private brain, and children&apos;s new devices wait for your approval.</p>
+        </div>
       )}
       {pending.length > 0 && (
-        <Section id="approvals" title="Devices waiting for approval"
-          lead="Children and guests need a parent's OK the first time they sign in on a new device. Only approve devices you recognise.">
+        <Row id="approvals" tone="warn" flush
+          title={<span className="flex items-center gap-2">Waiting for your OK <Badge tone="warn">{pending.length}</Badge></span>}
+          lead="Children and guests need a parent's approval the first time they sign in on a new device. Only approve devices you recognise.">
           <PendingApprovals pending={pending} />
-        </Section>
+        </Row>
       )}
-      <Section id="members" title="Family members" lead="Everyone with an account in your household. Each person has their own brain; what they share is up to them and the visibility you set.">
+      <Row id="members" title="Members" flush
+        lead="Everyone with an account in your household. Open a person to change their details, reset their password or see their devices.">
         <MemberList members={members} viewerRole={v.role} />
-      </Section>
-      <Section id="add" title="Add a family member" lead="They'll sign in with the email or username and password you set here, and can change the password afterwards.">
-        <AddMemberForm canAddParent={v.role === "owner"} />
-      </Section>
+      </Row>
+      <AddMemberForm canAddParent={v.role === "owner"} />
     </>
   );
 }

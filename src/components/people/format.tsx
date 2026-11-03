@@ -12,8 +12,23 @@ export function ago(iso: string | null | undefined, now = new Date()): string {
   return `${formatDistanceToNowStrict(d)} ago`;
 }
 
-export function shortDate(iso: string): string {
-  return format(new Date(iso), "d MMM yyyy");
+/** "Mon 16 Nov", with the year added when it isn't this year: "Mon 16 Nov 2025". */
+export function shortDate(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  return format(d, d.getFullYear() === now.getFullYear() ? "EEE d MMM" : "EEE d MMM yyyy");
+}
+
+/** "16 Nov" / "16 Nov 2025": compact, for date columns. */
+export function compactDate(iso: string, now = new Date()): string {
+  const d = new Date(iso);
+  return format(d, d.getFullYear() === now.getFullYear() ? "d MMM" : "d MMM yyyy");
+}
+
+/** "75 days", "4 weeks", "3 months": a span of days in words. */
+export function daysWords(n: number): string {
+  if (n < 21) return `${n} day${n === 1 ? "" : "s"}`;
+  if (n < 60) return `${Math.round(n / 7)} weeks`;
+  return `${Math.round(n / 30)} months`;
 }
 
 /** "Sun 8 Nov" for a local YYYY-MM-DD. */

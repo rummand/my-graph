@@ -15,7 +15,7 @@ export default async function NewPersonPage({ searchParams }: { searchParams: Pr
   const people = overview.people.map((p) => ({ id: p.id, label: p.label, isViewer: p.isViewer, kindLabel: p.kindLabel }));
   return (
     <div className="mx-auto max-w-2xl">
-      <PageHeader title="Add a person" lead="Who are they, and how are they connected to you or someone in the family?" />
+      <PageHeader title="Add a person" lead="Who they are, how they’re connected to your family, and who can see them." />
       <AddPersonForm
         kinds={meta.kindsFor("person")}
         relations={meta.relationsBetween("person", "person")}

@@ -1,22 +1,28 @@
 "use client";
 /**
- * Desktop swimlane timeline: one lane per person (+ Family), d3-zoom for wheel/pinch/drag, React-rendered SVG.
- * Only marks inside the visible window (plus a margin) are laid out and rendered, so pan/zoom stays fast.
+ * Desktop timeline: people down a fixed left column, time across. d3-zoom drives wheel/pinch/drag; React renders SVG.
+ * Only marks in the visible window are laid out. Labels are packed so they never collide (layout.ts): points that
+ * share a day merge into a counted cluster, and a label that has no room is cut to fit or left to the tooltip.
  */
 import Link from "next/link";
-import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent, type Ref } from "react";
+import {
+  useCallback, useEffect, useId, useImperativeHandle, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type Ref,
+} from "react";
 import {
   scaleTime, select, timeDay, timeHour, timeMonday, timeMonth, timeYear, zoom, zoomIdentity, zoomTransform,
   type ZoomBehavior,
 } from "d3";
+import { format } from "date-fns";
 import { Home } from "lucide-react";
 import { clsx } from "clsx";
-import {
-  axisContext, chooseTickSpec, dataExtent, formatWhen, initials, isMajorTick, itemExtent, packLane, presetDomain,
-  tickLabel, type PackInput, type Preset, type TickSpec,
-} from "@/lib/timeline/pure";
+import { Avatar, Kbd } from "@/components/ui";
+import { chooseTickSpec, dataExtent, formatWhen, itemExtent, tickLabel, type TickSpec } from "@/lib/timeline/pure";
 import type { Lane, TimelineItem } from "@/lib/timeline/types";
-import { BellGlyph, KIND_LABEL, STATUS_LABEL, diamond, reminderColor, statusPaint } from "./marks";
+import {
+  BarMark, ClusterMark, HatchDef, KIND_LABEL, Legend, PointMark, ReminderMark, STATUS_LABEL, UploadMark, ItemGlyph, laneStyle,
+  type MarkKind,
+} from "./marks";
+import { clusterPoints, fitText, laneTitle, packMarks, rangeDomain, type LaneMark, type RangeKey } from "./layout";
 import { useMediaQuery, useNow, usePrefersReducedMotion, useWidth } from "./hooks";
 
 const HOUR = 3_600_000;
@@ -24,33 +30,35 @@ const DAY = 24 * HOUR;
 const REF_SPAN = 365 * DAY;
 const MIN_SPAN = 2 * HOUR;
 const MAX_SPAN = 200 * 365 * DAY;
-const AXIS_H = 46;
-const ROW_H = 24;
-const LANE_PAD = 12;
+const AXIS_H = 52;
+const ROW_H = 30;
+const LANE_PAD = 9;
 const MIN_LANE_H = 52;
-const MAX_ROWS = 4;
-const CHAR_W = 6.7;
-const MAX_LABEL_W = 220;
+const MAX_ROWS = 2;
+const LABEL_FONT = 12;
 
 export type SwimlaneHandle = {
-  zoomToPreset: (p: Preset) => void;
+  zoomToRange: (r: RangeKey) => void;
+  goToday: () => void;
   focusItem: (item: TimelineItem) => void;
 };
 
-type Shape = "point" | "span" | "fuzzy" | "reminder" | "source";
+type Shape = "point" | "bar" | "fuzzy" | "reminder" | "source" | "cluster";
 
 type Placed = {
   key: string;
-  item: TimelineItem;
   laneId: string;
   shape: Shape;
+  /** The item (first member for clusters). */
+  item: TimelineItem;
+  members: TimelineItem[];
   x0: number;
   x1: number;
   cx: number;
-  /** Centre y within the lane. */
   cy: number;
-  label: boolean;
-  labelInside: boolean;
+  text: string | null;
+  textW: number;
+  labelAt: "inside" | "after" | "none";
   past: boolean;
 };
 
@@ -61,25 +69,55 @@ function intervalFor(spec: TickSpec) {
   return (spec.step > 1 ? base.every(spec.step) : base) ?? base;
 }
 
+/** The bigger unit named in the axis's upper tier. */
+function upperFor(spec: TickSpec) {
+  switch (spec.unit) {
+    case "hour": return { every: timeDay, fmt: "EEEE d MMMM" };
+    case "day": case "week": return { every: timeMonth, fmt: "MMMM yyyy" };
+    case "month": return { every: timeYear, fmt: "yyyy" };
+    case "year": return null;
+  }
+}
+
 const laneSubtitle = (l: Lane) =>
   l.kind === "viewer" ? "You" : l.kind === "child" ? (l.birthYear ? `Born ${l.birthYear}` : "Child")
-    : l.kind === "member" ? "Family member" : l.kind === "family" ? "Not tied to one person" : "";
+    : l.kind === "member" ? "Family" : l.kind === "family" ? "Everyone" : null;
+
+/** Text width in px for the label font; canvas-measured, cached. */
+function useMeasure() {
+  const cache = useRef(new Map<string, number>());
+  const ctx = useRef<CanvasRenderingContext2D | null>(null);
+  return useCallback((s: string) => {
+    const hit = cache.current.get(s);
+    if (hit !== undefined) return hit;
+    if (!ctx.current && typeof document !== "undefined") {
+      ctx.current = document.createElement("canvas").getContext("2d");
+      if (ctx.current) ctx.current.font = `500 ${LABEL_FONT}px ${getComputedStyle(document.body).fontFamily}`;
+    }
+    const w = ctx.current ? Math.ceil(ctx.current.measureText(s).width) : s.length * 6.6;
+    cache.current.set(s, w);
+    return w;
+  }, []);
+}
 
 export function Swimlanes({
-  lanes, items, peopleById, selectedId, onSelect, initialPreset, ref,
+  lanes, items, peopleById, selectedId, onSelect, initialRange, onViewChange, ref,
 }: {
   lanes: Lane[];
   items: TimelineItem[];
   peopleById: Map<string, string>;
   selectedId: string | null;
   onSelect: (item: TimelineItem) => void;
-  initialPreset: Preset;
+  initialRange: RangeKey;
+  onViewChange?: (view: [number, number]) => void;
   ref?: Ref<SwimlaneHandle>;
 }) {
   const now = useNow();
   const reduceMotion = usePrefersReducedMotion();
-  const wide = useMediaQuery("(min-width: 900px)", true);
-  const labelW = wide ? 184 : 136;
+  const wide = useMediaQuery("(min-width: 1024px)", true);
+  const labelW = wide ? 196 : 152;
+  const measure = useMeasure();
+  const hatchId = `tl-hatch-${useId().replace(/:/g, "")}`;
 
   const [plotEl, setPlotEl] = useState<HTMLDivElement | null>(null);
   const width = useWidth(plotEl);
@@ -91,10 +129,13 @@ export function Swimlanes({
   const rafRef = useRef(0);
   const [hover, setHover] = useState<Placed | null>(null);
   const [focusKey, setFocusKey] = useState<string | null>(null);
+  const [openCluster, setOpenCluster] = useState<Placed | null>(null);
 
   const extent = useMemo(() => dataExtent(items), [items]);
   const extentRef = useRef(extent);
   extentRef.current = extent;
+
+  useEffect(() => { if (view) onViewChange?.(view); }, [view, onViewChange]);
 
   const baseScale = useCallback(
     (w: number) => scaleTime().domain([new Date(ref0[0]), new Date(ref0[1])]).range([0, Math.max(1, w)]),
@@ -109,7 +150,7 @@ export function Swimlanes({
     const k = w / (b(new Date(d1)) - b(new Date(d0)));
     const t = zoomIdentity.translate(-b(new Date(d0)) * k, 0).scale(k);
     const sel = select(el);
-    if (animate && !reduceMotion) sel.transition().duration(450).call(z.transform, t);
+    if (animate && !reduceMotion) sel.transition().duration(320).call(z.transform, t);
     else sel.call(z.transform, t);
   }, [plotEl, baseScale, reduceMotion]);
 
@@ -148,23 +189,29 @@ export function Swimlanes({
     };
   }, [plotEl, baseScale]);
 
-  // First layout: open on the initial preset. On resize: keep the same window of time.
+  // First layout: open on the initial range. On resize: keep the same window of time.
   useEffect(() => {
     if (width <= 0) return;
     widthRef.current = width;
     const v = viewRef.current;
     if (v) zoomToDomain(v[0], v[1], false);
     else {
-      const [a, b] = presetDomain(initialPreset, new Date(), extentRef.current);
-      zoomToDomain(a.getTime(), b.getTime(), false);
+      const [a, b] = rangeDomain(initialRange, Date.now(), extentRef.current);
+      zoomToDomain(a, b, false);
     }
-  }, [width, zoomToDomain, initialPreset]);
+  }, [width, zoomToDomain, initialRange]);
+
+  const goToday = useCallback(() => {
+    const v = viewRef.current; const span = v ? v[1] - v[0] : 30 * DAY; const n = Date.now();
+    zoomToDomain(n - span * 0.25, n + span * 0.75, true);
+  }, [zoomToDomain]);
 
   useImperativeHandle(ref, () => ({
-    zoomToPreset: (p) => {
-      const [a, b] = presetDomain(p, new Date(), extentRef.current);
-      zoomToDomain(a.getTime(), b.getTime(), true);
+    zoomToRange: (r) => {
+      const [a, b] = rangeDomain(r, Date.now(), extentRef.current);
+      zoomToDomain(a, b, true);
     },
+    goToday,
     focusItem: (item) => {
       const v = viewRef.current;
       const { t0, t1 } = itemExtent(item);
@@ -173,16 +220,16 @@ export function Swimlanes({
         const pad = (t1 - t0) * 0.1;
         zoomToDomain(t0 - pad, t1 + pad, true);
       } else {
-        // Land a little left of centre: the details drawer opens over the right-hand side.
+        // Land left of centre: the details drawer opens over the right-hand side.
         const mid = (t0 + t1) / 2;
-        zoomToDomain(mid - span * 0.35, mid + span * 0.65, true);
+        zoomToDomain(mid - span * 0.3, mid + span * 0.7, true);
       }
       const laneId = item.laneIds[0];
       requestAnimationFrame(() => {
         document.querySelector(`[data-lane="${CSS.escape(laneId)}"]`)?.scrollIntoView({ block: "nearest", behavior: reduceMotion ? "auto" : "smooth" });
       });
     },
-  }), [zoomToDomain, reduceMotion]);
+  }), [zoomToDomain, goToday, reduceMotion]);
 
   // ── Layout (memoised on the view; only visible items).
   const itemsByLane = useMemo(() => {
@@ -199,69 +246,123 @@ export function Swimlanes({
   const layout = useMemo(() => {
     if (!x || !view) return null;
     const pxPerMs = width / (view[1] - view[0]);
-    const winLo = view[0] - 260 / pxPerMs, winHi = view[1] + 20 / pxPerMs;
+    const winLo = view[0] - 300 / pxPerMs, winHi = view[1] + 20 / pxPerMs;
+    const kinds = new Set<MarkKind>();
     let y = 0;
     const out: LaneLayout[] = [];
     for (const lane of lanes) {
-      const all = itemsByLane.get(lane.id) ?? [];
-      const vis = all.filter((e) => e.t1 >= winLo && e.t0 <= winHi);
-      const dense = vis.length > 400;
-      const geo = new Map<string, Omit<Placed, "cy" | "label" | "laneId" | "key">>();
-      const pack: PackInput[] = [];
+      const vis = (itemsByLane.get(lane.id) ?? []).filter((e) => e.t1 >= winLo && e.t0 <= winHi);
+      const dense = vis.length > 300;
+      const geo = new Map<string, { item: TimelineItem; shape: Shape; x0: number; x1: number; cx: number; text: string; past: boolean }>();
+      const input: LaneMark[] = [];
       for (const e of vis) {
         const it = e.item;
-        let shape: Shape;
-        let x0: number, x1: number, cx: number;
+        let shape: Shape, x0: number, x1: number, cx: number;
+        const a = x(new Date(e.t0)), b = x(new Date(e.t1));
         if (it.kind === "reminder" || it.kind === "source") {
-          shape = it.kind; cx = x(new Date(e.t0)); x0 = cx - 7; x1 = cx + 7;
+          shape = it.kind; cx = a; x0 = cx - 8; x1 = cx + 8;
+        } else if (e.fuzzy ? b - a >= 28 : it.end && b - a >= 8) {
+          shape = e.fuzzy ? "fuzzy" : "bar"; x0 = a; x1 = b; cx = a;
         } else {
-          const a = x(new Date(e.t0)), b = x(new Date(e.t1));
-          if (e.fuzzy ? b - a >= 16 : it.end && b - a >= 3) {
-            shape = e.fuzzy ? "fuzzy" : "span"; x0 = a; x1 = Math.max(b, a + 10); cx = a;
-          } else {
-            shape = "point"; cx = e.fuzzy ? (a + b) / 2 : a; x0 = cx - 7; x1 = cx + 7;
-          }
+          shape = "point"; cx = e.fuzzy ? (a + b) / 2 : a; x0 = cx - 8; x1 = cx + 8;
         }
-        const lw = Math.min(MAX_LABEL_W, it.title.length * CHAR_W + 4);
-        const inside = (shape === "span" || shape === "fuzzy") && x1 - x0 >= lw + 16;
-        geo.set(it.id, { item: it, shape, x0, x1, cx, labelInside: inside, past: e.t1 < now });
-        pack.push({ id: it.id, x0, x1Bare: x1, x1Label: dense ? x1 : inside ? x1 : x1 + 6 + lw });
+        const text = laneTitle(it.title, lane.label);
+        kinds.add(shape === "fuzzy" ? "fuzzy" : shape === "bar" ? (it.status === "confirmed" ? "span" : it.status)
+          : shape === "reminder" ? (it.overdue ? "overdue" : "reminder") : shape === "source" ? "upload" : it.status);
+        geo.set(it.id, { item: it, shape, x0, x1, cx, text, past: e.t1 < now });
+        input.push({ id: it.id, x0, x1, bar: shape === "bar" || shape === "fuzzy", labelW: dense ? 0 : measure(text) });
       }
-      const res = packLane(pack, { gap: 6, maxRows: MAX_ROWS });
-      const h = Math.max(MIN_LANE_H, res.rowCount * ROW_H + 2 * LANE_PAD);
+      const { marks: merged, clusters } = clusterPoints(input, 14);
+      const clusterText = new Map<string, string>();
+      for (const c of clusters) {
+        const titles = [...new Set(c.memberIds.map((id) => geo.get(id)!.text))];
+        const t = titles.length === 1 ? titles[0] : `${titles[0]} and ${titles.length - 1} more`;
+        clusterText.set(c.id, t);
+        const m = merged.find((x) => x.id === c.id);
+        if (m && !dense) m.labelW = measure(t);
+      }
+      const { placed, rows } = packMarks(merged, MAX_ROWS);
+      const h = Math.max(MIN_LANE_H, rows * ROW_H + 2 * LANE_PAD);
+      const top = (h - rows * ROW_H) / 2;
       const marks: Placed[] = [];
-      for (const p of pack) {
-        const g = geo.get(p.id)!;
-        const pl = res.placed.get(p.id)!;
-        marks.push({ ...g, key: `${lane.id}|${p.id}`, laneId: lane.id, cy: LANE_PAD + pl.row * ROW_H + ROW_H / 2, label: pl.label && !dense });
+      for (const m of merged) {
+        const p = placed.get(m.id)!;
+        const cy = top + p.row * ROW_H + ROW_H / 2;
+        const cluster = clusters.find((c) => c.id === m.id);
+        if (cluster) {
+          const members = cluster.memberIds.map((id) => geo.get(id)!.item);
+          const cx = (cluster.x0 + cluster.x1) / 2;
+          const text = p.label.at !== "none" ? fitText(clusterText.get(m.id)!, Math.min(p.label.room, width - (m.x1 + 6) - 4), measure) : null;
+          marks.push({ key: `${lane.id}|${m.id}`, laneId: lane.id, shape: "cluster", item: members[0], members, x0: cx - 11, x1: cx + 11, cx, cy, text, textW: text ? measure(text) : 0, labelAt: text ? "after" : "none", past: members.every((it) => geo.get(it.id)!.past) });
+          continue;
+        }
+        const g = geo.get(m.id)!;
+        let text: string | null = null;
+        let room = p.label.room;
+        if (p.label.at === "inside") room = Math.min(room, Math.min(g.x1, width) - Math.max(g.x0, 0) - 16);
+        // Cut a label at the plot's right edge rather than letting the edge clip it mid-letter.
+        else if (p.label.at === "after" && g.x1 < width) room = Math.min(room, width - (g.x1 + 6) - 4);
+        if (p.label.at !== "none" && room > 0) text = fitText(g.text, room, measure);
+        marks.push({ key: `${lane.id}|${m.id}`, laneId: lane.id, shape: g.shape, item: g.item, members: [g.item], x0: g.x0, x1: g.x1, cx: g.cx, cy, text, textW: text ? measure(text) : 0, labelAt: text ? p.label.at : "none", past: g.past });
       }
-      // Spans first so points draw on top.
-      marks.sort((a, b) => Number(a.shape === "point" || a.shape === "reminder") - Number(b.shape === "point" || b.shape === "reminder"));
+      // Bars first so points draw on top.
+      marks.sort((a, b) => Number(a.shape !== "bar" && a.shape !== "fuzzy") - Number(b.shape !== "bar" && b.shape !== "fuzzy"));
       out.push({ lane, y, h, marks });
       y += h;
     }
 
-    // Connectors between lanes for events involving several people.
+    // Connectors between lanes for an event that involves several people.
     const byItem = new Map<string, { x: number; ys: number[] }>();
     for (const l of out) for (const m of l.marks) {
-      if (m.item.laneIds.length < 2) continue;
-      const e = byItem.get(m.item.id) ?? { x: m.shape === "point" ? m.cx : m.x0 + 5, ys: [] };
+      if (m.shape === "cluster" || m.item.laneIds.length < 2) continue;
+      const e = byItem.get(m.item.id) ?? { x: m.shape === "bar" || m.shape === "fuzzy" ? m.x0 + 1.5 : m.cx, ys: [] };
       e.ys.push(l.y + m.cy);
       byItem.set(m.item.id, e);
     }
     const connectors = [...byItem.entries()].filter(([, e]) => e.ys.length > 1)
       .map(([id, e]) => ({ id, x: e.x, y0: Math.min(...e.ys), y1: Math.max(...e.ys) }));
 
-    const spec = chooseTickSpec(view[1] - view[0], width, 84);
+    const spec = chooseTickSpec(view[1] - view[0], width, 64);
     const ticks = intervalFor(spec).range(new Date(view[0] - 1), new Date(view[1] + 1))
-      .map((d) => ({ d, x: x(d), major: isMajorTick(d, spec), label: tickLabel(d, spec) }));
-    return { lanes: out, height: y, connectors, spec, ticks, visibleCount: out.reduce((n, l) => n + l.marks.length, 0) };
-  }, [x, view, width, lanes, itemsByLane, now]);
+      .map((d) => ({ d, x: x(d), label: spec.unit === "month" ? format(d, "MMM") : tickLabel(d, spec) }));
+
+    // Upper tier: months (or years, or days), each label pinned to the left edge while its period is on screen.
+    const up = upperFor(spec);
+    const uppers: { key: number; x: number; label: string; boundary: boolean }[] = [];
+    if (up) {
+      const starts = up.every.range(up.every.floor(new Date(view[0])), new Date(view[1] + 1));
+      starts.forEach((d, i) => {
+        const sx = x(d);
+        const next = starts[i + 1] ? x(starts[i + 1]) : Infinity;
+        const label = format(d, up.fmt);
+        const lw = measure(label) + 16;
+        uppers.push({ key: d.getTime(), x: Math.min(Math.max(sx, 0), next - lw, width - lw), label, boundary: sx > 0 });
+      });
+    }
+
+    // Weekends, once a day is wide enough to see.
+    const pxPerDay = DAY * pxPerMs;
+    const weekends = pxPerDay >= 5
+      ? timeDay.range(timeDay.floor(new Date(view[0])), new Date(view[1] + DAY))
+        .filter((d) => d.getDay() === 6)
+        .map((d) => ({ key: d.getTime(), x0: x(d), x1: x(timeDay.offset(d, 2)) }))
+      : [];
+    const dayLines = pxPerDay >= 12 && spec.unit !== "day" && spec.unit !== "hour"
+      ? timeDay.range(new Date(view[0]), new Date(view[1] + 1)).map((d) => ({ key: d.getTime(), x: x(d) }))
+      : [];
+
+    return { lanes: out, height: y, connectors, ticks, uppers, weekends, dayLines, kinds, visibleCount: out.reduce((n, l) => n + l.marks.length, 0) };
+  }, [x, view, width, lanes, itemsByLane, now, measure]);
 
   const nowX = x ? x(new Date(now)) : null;
   const showNow = nowX !== null && nowX >= -2 && nowX <= width + 2;
+  const todayLabel = `Today ${format(now, "EEE d MMM")}`;
+  const todayW = measure(todayLabel) + 12;
 
-  // ── Keyboard: ←/→ pan, +/− zoom, T today.
+  // Close the cluster list when the view moves.
+  useEffect(() => { setOpenCluster(null); }, [view]);
+
+  // ── Keyboard: ←/→ pan, +/− zoom, T today. No animation for repeated keys.
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     const tag = (e.target as HTMLElement).tagName;
@@ -274,12 +375,10 @@ export function Swimlanes({
     switch (e.key) {
       case "ArrowLeft": return step(() => z.translateBy(sel, (width * 0.2) / k, 0));
       case "ArrowRight": return step(() => z.translateBy(sel, -(width * 0.2) / k, 0));
-      case "+": case "=": return step(() => z.scaleBy(reduceMotion ? sel : sel.transition().duration(200) as never, 1.6, [width / 2, 0]));
-      case "-": case "_": return step(() => z.scaleBy(reduceMotion ? sel : sel.transition().duration(200) as never, 1 / 1.6, [width / 2, 0]));
-      case "t": case "T": return step(() => {
-        const v = viewRef.current; const span = v ? v[1] - v[0] : 30 * DAY; const n = Date.now();
-        zoomToDomain(n - span / 2, n + span / 2, true);
-      });
+      case "+": case "=": return step(() => z.scaleBy(sel, 1.6, [width / 2, 0]));
+      case "-": case "_": return step(() => z.scaleBy(sel, 1 / 1.6, [width / 2, 0]));
+      case "t": case "T": return step(goToday);
+      case "Escape": if (openCluster) return step(() => setOpenCluster(null)); return;
     }
   };
 
@@ -291,180 +390,240 @@ export function Swimlanes({
     return best;
   }, [view, layout, items]);
 
-  const hoverPeople = hover ? hover.item.personIds.map((p) => peopleById.get(p)).filter(Boolean).join(", ") : "";
+  const rangeText = view ? formatRange(view[0], view[1]) : "";
 
   return (
-    <div
-      className="relative rounded-lg border border-line bg-surface outline-none"
-      tabIndex={0}
-      onKeyDown={onKeyDown}
-      role="group"
-      aria-roledescription="timeline"
-      aria-label="Timeline. Left and right arrows move in time, plus and minus zoom, T jumps to today. Tab to reach events."
-    >
-      <div className="grid" style={{ gridTemplateColumns: `${labelW}px minmax(0, 1fr)` }}>
-        {/* Corner + lane labels */}
-        <div className="border-r border-line">
-          <div className="sticky top-0 z-20 flex items-end border-b border-line bg-surface px-3 pb-2 text-xs font-medium text-muted" style={{ height: AXIS_H }}>
-            <span className="truncate">{layout && view ? axisContext(new Date(view[0] + (view[1] - view[0]) * 0.02), layout.spec) : ""}</span>
-          </div>
-          {(layout?.lanes ?? lanes.map((lane) => ({ lane, h: MIN_LANE_H }))).map(({ lane, h }, i) => (
-            <div key={lane.id} data-lane={lane.id} style={{ height: h }}
-              className={clsx("flex items-center gap-2 border-b border-line/60 px-3", i % 2 === 1 && "bg-surface-2/40")}>
-              <span aria-hidden="true" className={clsx("grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-semibold",
-                lane.kind === "family" ? "bg-surface-2 text-muted" : "bg-accent-tint text-accent")}>
-                {lane.kind === "family" ? <Home size={14} /> : initials(lane.label)}
-              </span>
-              <span className="min-w-0">
+    <div className="space-y-4">
+      <div
+        className="relative rounded-lg bg-surface outline-none focus-visible:outline-2 focus-visible:outline-accent"
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        role="group"
+        aria-roledescription="timeline"
+        aria-label="Timeline. Left and right arrows move in time, plus and minus zoom, T jumps to today. Tab to reach events."
+      >
+        <div className="grid" style={{ gridTemplateColumns: `${labelW}px minmax(0, 1fr)` }}>
+          {/* People column */}
+          <div>
+            <div className="flex items-end px-4 pb-2.5 text-sm text-muted" style={{ height: AXIS_H }}>
+              <span className="truncate" aria-live="polite">{rangeText}</span>
+            </div>
+            {(layout?.lanes ?? lanes.map((lane) => ({ lane, h: MIN_LANE_H }))).map(({ lane, h }) => (
+              <div key={lane.id} data-lane={lane.id} style={{ height: h }} className="flex items-center gap-2.5 border-t border-line/70 px-4">
                 {lane.kind === "family"
-                  ? <span className="block truncate text-sm font-medium">{lane.label}</span>
-                  : <Link href={`/people/${lane.id}`} className="block truncate text-sm font-medium hover:underline">{lane.label}</Link>}
-                {laneSubtitle(lane) && <span className="block truncate text-[11px] text-muted">{laneSubtitle(lane)}</span>}
-              </span>
-            </div>
-          ))}
-        </div>
-
-        {/* Plot: axis + lanes. d3-zoom is attached here. */}
-        <div ref={setPlotEl} className="relative min-w-0 cursor-grab touch-none select-none active:cursor-grabbing">
-          <svg className="sticky top-0 z-10 block bg-surface" width={width || "100%"} height={AXIS_H} aria-hidden="true">
-            <line x1={0} x2={width} y1={AXIS_H - 0.5} y2={AXIS_H - 0.5} stroke="var(--line)" />
-            {layout?.ticks.map((t) => (
-              <g key={t.d.getTime()} transform={`translate(${t.x},0)`}>
-                <line y1={AXIS_H - (t.major ? 12 : 7)} y2={AXIS_H} stroke={t.major ? "var(--muted)" : "var(--line)"} />
-                <text x={4} y={AXIS_H - 16} fontSize={11} fill={t.major ? "var(--fg)" : "var(--muted)"} fontWeight={t.major ? 600 : 400}>{t.label}</text>
-              </g>
-            ))}
-            {showNow && (
-              <g transform={`translate(${nowX},0)`}>
-                <rect x={-22} y={4} width={44} height={17} rx={8.5} fill="var(--accent)" />
-                <text x={0} y={16} textAnchor="middle" fontSize={11} fontWeight={600} fill="var(--accent-fg)">Today</text>
-                <line y1={21} y2={AXIS_H} stroke="var(--accent)" strokeWidth={2} />
-              </g>
-            )}
-          </svg>
-
-          {layout && (
-            <svg className="block" width={width} height={Math.max(layout.height, MIN_LANE_H)} role="presentation">
-              {/* Past is tinted very slightly. */}
-              {nowX !== null && nowX > 0 && <rect x={0} y={0} width={Math.min(nowX, width)} height={layout.height} fill="var(--surface-2)" opacity={0.35} />}
-              {layout.lanes.map((l, i) => (
-                <g key={l.lane.id}>
-                  {i % 2 === 1 && <rect x={0} y={l.y} width={width} height={l.h} fill="var(--surface-2)" opacity={0.25} />}
-                  <line x1={0} x2={width} y1={l.y + l.h - 0.5} y2={l.y + l.h - 0.5} stroke="var(--line)" opacity={0.6} />
-                </g>
-              ))}
-              {layout.ticks.map((t) => (
-                <line key={t.d.getTime()} x1={t.x} x2={t.x} y1={0} y2={layout.height} stroke="var(--line)" opacity={t.major ? 0.9 : 0.45} />
-              ))}
-              {showNow && <line x1={nowX!} x2={nowX!} y1={0} y2={layout.height} stroke="var(--accent)" strokeWidth={2} />}
-
-              {layout.connectors.map((c) => (
-                <line key={c.id} x1={c.x} x2={c.x} y1={c.y0} y2={c.y1} stroke="var(--muted)" strokeOpacity={0.35} strokeWidth={1.5} strokeDasharray="1 3" strokeLinecap="round" />
-              ))}
-
-              {layout.lanes.map((l) => (
-                <g key={l.lane.id} transform={`translate(0,${l.y})`}>
-                  {l.marks.map((m) => (
-                    <Mark key={m.key} m={m} width={width}
-                      selected={selectedId === m.item.id}
-                      focused={focusKey === m.key || hover?.key === m.key}
-                      onSelect={onSelect}
-                      onHover={(on) => setHover(on ? { ...m, cy: m.cy + l.y } : null)}
-                      onFocusChange={(on) => { setFocusKey(on ? m.key : null); setHover(on ? { ...m, cy: m.cy + l.y } : null); }} />
-                  ))}
-                </g>
-              ))}
-            </svg>
-          )}
-
-          {hover && (
-            <div role="tooltip" className="pointer-events-none absolute z-30 max-w-[280px] rounded-md border border-line bg-surface px-3 py-2 text-xs shadow-lg"
-              style={{
-                left: Math.min(Math.max(hover.cx + 14, 4), Math.max(4, width - 284)),
-                top: AXIS_H + hover.cy + 14,
-              }}>
-              <p className="font-medium text-fg">{hover.item.title}</p>
-              <p className="mt-0.5 text-muted">{formatWhen(hover.item.start, hover.item.end, hover.item.precision)}</p>
-              {hoverPeople && <p className="mt-0.5 text-muted">{hoverPeople}</p>}
-              <p className="mt-1 text-muted">{hover.item.kind === "event" ? STATUS_LABEL[hover.item.status] : KIND_LABEL[hover.item.kind]}{hover.item.overdue ? " · overdue" : ""}</p>
-            </div>
-          )}
-
-          {nearest && (
-            <div className="pointer-events-none absolute inset-x-0 flex justify-center" style={{ top: AXIS_H + 8 }}>
-              <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-xs shadow-sm">
-                <span className="text-muted">Nothing in this stretch of time.</span>
-                <button type="button" className="font-medium text-accent hover:underline"
-                  onClick={() => { const { t0, t1 } = itemExtent(nearest); const v = viewRef.current!; const span = v[1] - v[0]; const mid = (t0 + t1) / 2; zoomToDomain(mid - span / 2, mid + span / 2, true); }}>
-                  Go to nearest
-                </button>
+                  ? <span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-full bg-surface-2 text-muted"><Home size={14} /></span>
+                  : <Avatar id={lane.id} name={lane.label} size={28} />}
+                <span className="min-w-0 leading-tight">
+                  {lane.kind === "family"
+                    ? <span className="block truncate text-sm font-medium">{lane.label}</span>
+                    : <Link href={`/people/${lane.id}`} className="block truncate text-sm font-medium hover:underline">{lane.label}</Link>}
+                  {laneSubtitle(lane) && <span className="mt-0.5 block truncate text-xs text-muted">{laneSubtitle(lane)}</span>}
+                </span>
               </div>
-            </div>
-          )}
+            ))}
+          </div>
+
+          {/* Plot: axis + lanes. d3-zoom is attached here. */}
+          <div ref={setPlotEl} className="relative min-w-0 cursor-grab touch-none select-none overflow-hidden rounded-r-lg active:cursor-grabbing">
+            <svg className="block" width={width || "100%"} height={AXIS_H} aria-hidden="true" style={{ fontVariantNumeric: "tabular-nums" }}>
+              {layout?.uppers.map((u) => (
+                <g key={u.key}>
+                  {u.boundary && <line x1={x!(new Date(u.key))} x2={x!(new Date(u.key))} y1={10} y2={AXIS_H} stroke="var(--line)" />}
+                  <text x={u.x + 6} y={22} fontSize={13} fontWeight={600} fill="var(--fg)">{u.label}</text>
+                </g>
+              ))}
+              {layout?.ticks.map((t) => {
+                const hidden = showNow && t.x + 40 > nowX! - 4 && t.x < nowX! + todayW + 2;
+                return hidden ? null : <text key={t.d.getTime()} x={t.x + 6} y={AXIS_H - 12} fontSize={11.5} fill="var(--muted)">{t.label}</text>;
+              })}
+              {showNow && (
+                <g transform={`translate(${nowX},0)`}>
+                  <rect x={0} y={AXIS_H - 26} width={todayW} height={20} fill="var(--surface)" />
+                  <text x={6} y={AXIS_H - 12} fontSize={12} fill="var(--fg)"><tspan fontWeight={600}>Today</tspan><tspan dx={4}>{format(now, "EEE d MMM")}</tspan></text>
+                  <line x1={0.5} x2={0.5} y1={AXIS_H - 26} y2={AXIS_H} stroke="var(--accent)" />
+                </g>
+              )}
+            </svg>
+
+            {layout && (
+              <svg className="block" width={width} height={Math.max(layout.height, MIN_LANE_H)} role="presentation" style={{ fontVariantNumeric: "tabular-nums" }}>
+                <defs><HatchDef id={hatchId} /></defs>
+                {layout.weekends.map((w) => (
+                  <rect key={w.key} x={w.x0} y={0} width={Math.max(0, w.x1 - w.x0)} height={layout.height} fill="var(--surface-2)" opacity={0.45} />
+                ))}
+                {layout.dayLines.map((d) => <line key={d.key} x1={d.x} x2={d.x} y1={0} y2={layout.height} stroke="var(--line)" strokeOpacity={0.4} />)}
+                {layout.ticks.map((t) => <line key={t.d.getTime()} x1={t.x} x2={t.x} y1={0} y2={layout.height} stroke="var(--line)" />)}
+                {layout.uppers.filter((u) => u.boundary).map((u) => {
+                  const ux = x!(new Date(u.key));
+                  return <line key={u.key} x1={ux} x2={ux} y1={0} y2={layout.height} stroke="var(--muted)" strokeOpacity={0.35} />;
+                })}
+                {layout.lanes.map((l) => <line key={l.lane.id} x1={0} x2={width} y1={l.y + 0.5} y2={l.y + 0.5} stroke="var(--line)" strokeOpacity={0.7} />)}
+                {showNow && <line x1={nowX! + 0.5} x2={nowX! + 0.5} y1={0} y2={layout.height} stroke="var(--accent)" />}
+
+                {layout.connectors.map((c) => (
+                  <line key={c.id} x1={c.x} x2={c.x} y1={c.y0 + 9} y2={c.y1 - 9} stroke="var(--muted)" strokeOpacity={0.45} strokeWidth={1.25} strokeDasharray="0.1 3.5" strokeLinecap="round" />
+                ))}
+
+                {layout.lanes.map((l) => (
+                  <g key={l.lane.id} transform={`translate(0,${l.y})`} style={laneStyle(l.lane.id)}>
+                    {l.marks.map((m) => (
+                      <Mark key={m.key} m={m} width={width} hatchId={hatchId}
+                        selected={m.members.some((it) => it.id === selectedId)}
+                        focused={focusKey === m.key}
+                        hovered={hover?.key === m.key}
+                        onActivate={() => (m.shape === "cluster" ? setOpenCluster((o) => (o?.key === m.key ? null : { ...m, cy: m.cy + l.y })) : onSelect(m.item))}
+                        onHover={(on) => setHover(on ? { ...m, cy: m.cy + l.y } : null)}
+                        onFocusChange={(on) => { setFocusKey(on ? m.key : null); setHover(on ? { ...m, cy: m.cy + l.y } : null); }} />
+                    ))}
+                  </g>
+                ))}
+              </svg>
+            )}
+
+            {hover && !openCluster && <Tooltip m={hover} width={width} peopleById={peopleById} />}
+
+            {openCluster && (
+              <ClusterList m={openCluster} width={width} selectedId={selectedId}
+                onPick={(it) => { setOpenCluster(null); onSelect(it); }} onClose={() => setOpenCluster(null)} />
+            )}
+
+            {nearest && (
+              <div className="pointer-events-none absolute inset-x-0 flex justify-center" style={{ top: AXIS_H + 12 }}>
+                <div className="pointer-events-auto flex items-center gap-3 rounded-full bg-surface py-1.5 pl-4 pr-1.5 text-sm shadow-float">
+                  <span className="text-muted">Nothing in this stretch of time.</span>
+                  <button type="button" className="rounded-full bg-surface-2 px-3 py-1 font-medium hover:bg-line"
+                    onClick={() => { const { t0, t1 } = itemExtent(nearest); const v = viewRef.current!; const span = v[1] - v[0]; const mid = (t0 + t1) / 2; zoomToDomain(mid - span / 2, mid + span / 2, true); }}>
+                    Go to the nearest
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
+        {layout && <Legend kinds={layout.kinds} />}
+        <p className="flex flex-wrap items-center gap-1.5 text-sm text-muted">
+          Drag or <Kbd>←</Kbd><Kbd>→</Kbd> to move, scroll or <Kbd>+</Kbd><Kbd>−</Kbd> to zoom, <Kbd>T</Kbd> for today
+        </p>
       </div>
     </div>
   );
 }
 
-function Mark({ m, width, selected, focused, onSelect, onHover, onFocusChange }: {
-  m: Placed; width: number; selected: boolean; focused: boolean;
-  onSelect: (it: TimelineItem) => void; onHover: (on: boolean) => void; onFocusChange: (on: boolean) => void;
+function formatRange(a: number, b: number): string {
+  const da = new Date(a), db = new Date(b);
+  if (b - a > 120 * DAY) return da.getFullYear() === db.getFullYear() ? `${format(da, "MMM")} – ${format(db, "MMM yyyy")}` : `${format(da, "MMM yyyy")} – ${format(db, "MMM yyyy")}`;
+  if (da.getFullYear() !== db.getFullYear()) return `${format(da, "d MMM yyyy")} – ${format(db, "d MMM yyyy")}`;
+  return `${format(da, "d MMM")} – ${format(db, "d MMM")}`;
+}
+
+function Mark({ m, width, hatchId, selected, focused, hovered, onActivate, onHover, onFocusChange }: {
+  m: Placed; width: number; hatchId: string; selected: boolean; focused: boolean; hovered: boolean;
+  onActivate: () => void; onHover: (on: boolean) => void; onFocusChange: (on: boolean) => void;
 }) {
   const it = m.item;
-  const p = statusPaint(it.status);
-  const when = formatWhen(it.start, it.end, it.precision);
-  const aria = `${it.title}, ${when}. ${it.kind === "event" ? STATUS_LABEL[it.status] : KIND_LABEL[it.kind]}${it.overdue ? ", overdue" : ""}.`;
-  const isBar = m.shape === "span" || m.shape === "fuzzy";
-  // Keep labels of bars that start off-screen readable.
-  const labelX = m.labelInside ? Math.max(m.x0, 0) + 8 : m.x1 + 6;
-  const ring = selected ? "var(--accent)" : focused ? "var(--muted)" : null;
+  const isBar = m.shape === "bar" || m.shape === "fuzzy";
+  const aria = m.shape === "cluster"
+    ? `${m.members.length} things around ${format(new Date(it.start), "d MMMM")}. Press Enter to list them.`
+    : `${it.title}, ${formatWhen(it.start, it.end, it.precision)}. ${it.kind === "event" ? STATUS_LABEL[it.status] : KIND_LABEL[it.kind]}${it.overdue ? ", overdue" : ""}.`;
+  const labelX = m.labelAt === "inside" ? Math.max(m.x0, 0) + 9 : m.x1 + 6;
+  const ring = focused ? "var(--accent)" : selected ? "var(--fg)" : null;
+  const dim = m.past && !selected && !hovered;
 
   return (
     <g
-      data-mark=""
       role="button"
       tabIndex={m.x1 >= 0 && m.x0 <= width ? 0 : -1}
       aria-label={aria}
-      aria-pressed={selected}
+      aria-pressed={m.shape === "cluster" ? undefined : selected}
+      aria-haspopup={m.shape === "cluster" ? "listbox" : undefined}
       className="cursor-pointer outline-none"
-      opacity={m.past && !selected ? 0.72 : 1}
-      onClick={(e) => { e.stopPropagation(); onSelect(it); }}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onSelect(it); } }}
+      onClick={(e) => { e.stopPropagation(); onActivate(); }}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); onActivate(); } }}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
       onFocus={() => onFocusChange(true)}
       onBlur={() => onFocusChange(false)}
     >
-      {/* Generous invisible hit area. */}
-      <rect x={m.x0 - 4} y={m.cy - 11} width={Math.max(m.x1 - m.x0 + 8, 22)} height={22} fill="transparent" />
-      {isBar && ring && <rect x={m.x0 - 3} y={m.cy - 9} width={m.x1 - m.x0 + 6} height={18} rx={9} fill="none" stroke={ring} strokeWidth={2} />}
-      {!isBar && ring && <circle cx={m.cx} cy={m.cy} r={11} fill="none" stroke={ring} strokeWidth={2} />}
+      {/* Generous invisible hit area, covering the label too. */}
+      <rect x={m.x0 - 4} y={m.cy - 13} width={Math.max((m.labelAt === "after" && m.text ? labelX + 4 + m.textW : m.x1) - m.x0 + 8, 24)} height={26} fill="transparent" />
+      {ring && (isBar
+        ? <rect x={m.x0 - 3} y={m.cy - 13} width={m.x1 - m.x0 + 6} height={26} rx={6} fill="none" stroke={ring} strokeWidth={1.5} />
+        : <circle cx={m.cx} cy={m.cy} r={m.shape === "cluster" ? 14 : 12} fill="none" stroke={ring} strokeWidth={1.5} />)}
 
-      {m.shape === "span" && (
-        <rect x={m.x0} y={m.cy - 6} width={m.x1 - m.x0} height={12} rx={6}
-          fill={p.fill} fillOpacity={it.status === "confirmed" ? 0.85 : 1} stroke={p.stroke} strokeWidth={p.strokeWidth} strokeDasharray={p.dash} />
-      )}
-      {m.shape === "fuzzy" && (
-        <>
-          <rect x={m.x0} y={m.cy - 6} width={m.x1 - m.x0} height={12} rx={6}
-            fill={it.status === "inferred" ? "var(--inferred)" : "var(--t-event)"} fillOpacity={0.16}
-            stroke={p.stroke} strokeOpacity={0.5} strokeDasharray={it.status === "confirmed" ? undefined : "2.5 2"} />
-          <path d={diamond(m.x0 + 8, m.cy, 4.5)} fill={p.fill} stroke={p.stroke} strokeWidth={1.25} strokeDasharray={p.dash} />
-        </>
-      )}
-      {m.shape === "point" && <path d={diamond(m.cx, m.cy, 6.5)} fill={p.fill} stroke={p.stroke} strokeWidth={p.strokeWidth} strokeDasharray={p.dash} />}
-      {m.shape === "reminder" && <BellGlyph x={m.cx - 7} y={m.cy - 7} size={14} color={reminderColor(it)} />}
-      {m.shape === "source" && <rect x={m.cx - 4.5} y={m.cy - 4.5} width={9} height={9} rx={2} fill="var(--t-document)" />}
+      <g opacity={dim ? 0.55 : 1}>
+        {isBar && <BarMark x0={m.x0} x1={m.x1} cy={m.cy} status={it.status} fuzzy={m.shape === "fuzzy"} hatchId={hatchId} />}
+        {m.shape === "point" && <PointMark cx={m.cx} cy={m.cy} status={it.status} r={hovered || selected ? 7 : 6} />}
+        {m.shape === "reminder" && <ReminderMark cx={m.cx} cy={m.cy} overdue={it.overdue} />}
+        {m.shape === "source" && <UploadMark cx={m.cx} cy={m.cy} />}
+        {m.shape === "cluster" && <ClusterMark cx={m.cx} cy={m.cy} count={m.members.length} />}
+      </g>
 
-      {m.label && labelX >= 0 && (
-        <text x={labelX} y={m.cy + 4} fontSize={12}
-          fill={m.labelInside && it.status === "confirmed" && m.shape === "span" ? "var(--accent-fg)" : "var(--fg)"}
-          fontWeight={selected ? 600 : 500}>
-          {it.title.length * CHAR_W + 4 > MAX_LABEL_W ? `${it.title.slice(0, Math.floor((MAX_LABEL_W - 12) / CHAR_W))}…` : it.title}
+      {m.text && labelX >= -40 && (
+        <text x={labelX} y={m.cy + 4} fontSize={LABEL_FONT} fontWeight={selected ? 600 : 500}
+          fill={m.past && m.labelAt !== "inside" ? "var(--muted)" : "var(--fg)"}>
+          {m.text}
         </text>
       )}
     </g>
+  );
+}
+
+function Tooltip({ m, width, peopleById }: { m: Placed; width: number; peopleById: Map<string, string> }) {
+  const it = m.item;
+  const people = it.personIds.map((p) => peopleById.get(p)).filter(Boolean).join(", ");
+  const left = Math.min(Math.max(m.cx - 12, 8), Math.max(8, width - 296));
+  return (
+    <div role="tooltip" className="pointer-events-none absolute z-30 w-max max-w-[288px] rounded-lg bg-surface px-3 py-2.5 text-sm shadow-float"
+      style={{ left, top: AXIS_H + m.cy + 18 }}>
+      {m.shape === "cluster" ? (
+        <>
+          <p className="font-medium">{m.members.length} things close together</p>
+          <p className="mt-0.5 text-muted">Click to see them all, or zoom in.</p>
+        </>
+      ) : (
+        <>
+          <p className="font-medium leading-snug">{it.title}</p>
+          <p className="mt-0.5 text-muted">{it.kind === "reminder" ? "Due " : it.kind === "source" ? "Added " : ""}{formatWhen(it.start, it.end, it.precision)}</p>
+          {people && <p className="mt-0.5 text-muted">{people}</p>}
+          {(it.kind !== "event" || it.status !== "confirmed" || it.overdue) && (
+            <p className={clsx("mt-1 text-xs font-medium", it.overdue ? "text-danger" : it.status === "inferred" ? "text-inferred" : it.kind === "event" ? "text-warn" : "text-muted")}>
+              {it.overdue ? "Overdue" : it.kind === "event" ? STATUS_LABEL[it.status] : KIND_LABEL[it.kind]}
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ClusterList({ m, width, selectedId, onPick, onClose }: {
+  m: Placed; width: number; selectedId: string | null; onPick: (it: TimelineItem) => void; onClose: () => void;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    box.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+    const onDown = (e: PointerEvent) => { if (box.current && !box.current.contains(e.target as Node)) onClose(); };
+    window.addEventListener("pointerdown", onDown, true);
+    return () => window.removeEventListener("pointerdown", onDown, true);
+  }, [onClose]);
+  const sorted = [...m.members].sort((a, b) => a.start.localeCompare(b.start));
+  const left = Math.min(Math.max(m.cx - 16, 8), Math.max(8, width - 328));
+  return (
+    <div ref={box} role="listbox" aria-label="Things close together" style={{ left, top: AXIS_H + m.cy + 18, ...(laneStyle(m.laneId) as CSSProperties) }}
+      onKeyDown={(e) => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}
+      className="absolute z-40 w-80 rounded-lg bg-surface p-1.5 shadow-float" onPointerDown={(e) => e.stopPropagation()}>
+      {sorted.map((it) => (
+        <button key={it.id} type="button" role="option" aria-selected={it.id === selectedId} onClick={() => onPick(it)}
+          className={clsx("flex w-full items-start gap-2.5 rounded-md px-2.5 py-2 text-left text-sm hover:bg-surface-2 focus-visible:bg-surface-2", it.id === selectedId && "bg-surface-2")}>
+          <span className="mt-0.5"><ItemGlyph item={it} personId={m.laneId} size={15} /></span>
+          <span className="min-w-0">
+            <span className="block font-medium leading-snug">{it.title}</span>
+            <span className="block text-muted">{formatWhen(it.start, it.end, it.precision)}</span>
+          </span>
+        </button>
+      ))}
+    </div>
   );
 }

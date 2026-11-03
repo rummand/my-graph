@@ -1,20 +1,33 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Monitor } from "lucide-react";
-import { Button, EmptyState } from "@/components/ui";
+import { AnimatePresence, motion } from "motion/react";
+import { Laptop, Smartphone, Tablet } from "lucide-react";
+import { Badge, Button } from "@/components/ui";
 import { api, errorMessage } from "@/lib/auth/client/api";
-import { FormError, FormNotice } from "@/lib/auth/client/field";
 import type { SessionView } from "@/lib/auth/settings-data";
-import { fmtAgo, fmtDate } from "./format";
-import { Badge } from "./section";
+import { ErrorNote, Notice } from "@/app/login/notes";
+import { fmtAgo, fmtWhen } from "./format";
+import { PanelFooter } from "./section";
 
-export function SessionList({ sessions, allowSignOutOthers = true }: { sessions: SessionView[]; allowSignOutOthers?: boolean }) {
+function DeviceIcon({ device }: { device: string }) {
+  const d = device.toLowerCase();
+  const Icon = /ipad|tablet/.test(d) ? Tablet : /iphone|android|phone|mobile/.test(d) ? Smartphone : Laptop;
+  return <Icon size={16} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden />;
+}
+
+/** Signed-in devices. `inset` drops the panel padding when the list sits inside another panel. */
+export function SessionList({ sessions, allowSignOutOthers = true, inset }: { sessions: SessionView[]; allowSignOutOthers?: boolean; inset?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const others = sessions.filter((s) => !s.current).length;
+  const sorted = [...sessions].sort((a, b) => Number(b.current) - Number(a.current) || b.lastSeenAt.localeCompare(a.lastSeenAt));
+  const pad = inset ? "" : "px-5 py-1";
+  const LIMIT = 6;
+  const visible = showAll ? sorted : sorted.slice(0, LIMIT);
 
   async function run(key: string, fn: () => Promise<{ signedOutHere?: boolean; signedOut?: number }>) {
     setBusy(key); setError(null); setNotice(null);
@@ -30,38 +43,56 @@ export function SessionList({ sessions, allowSignOutOthers = true }: { sessions:
     }
   }
 
-  if (!sessions.length) return <EmptyState title="Not signed in anywhere">Sessions show up here after signing in.</EmptyState>;
+  if (!sessions.length) return <p className={`${inset ? "" : "p-5"} text-sm text-muted`}>Not signed in anywhere right now.</p>;
 
   return (
-    <div className="space-y-4">
-      <ul className="divide-y divide-line rounded-md border border-line">
-        {sessions.map((s) => (
-          <li key={s.id} className="flex flex-wrap items-center gap-3 px-3 py-3">
-            <Monitor size={16} className="shrink-0 text-muted" aria-hidden="true" />
-            <div className="min-w-0 flex-1">
-              <p className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                {s.device}
-                {s.current && <Badge tone="accent">This device</Badge>}
-                {!s.approved && <Badge tone="warn">Waiting for approval</Badge>}
-              </p>
-              <p className="text-xs text-muted">Signed in {fmtDate(s.createdAt)} · last active {fmtAgo(s.lastSeenAt)}</p>
-            </div>
-            {!s.current && (
-              <Button variant="ghost" disabled={busy !== null} onClick={() => run(s.id, () => api(`/api/auth/sessions/${s.id}`, { method: "DELETE" }))}
-                aria-label={`Sign out ${s.device}`}>
-                Sign out
+    <div>
+      <ul className={`divide-y divide-line ${pad}`}>
+        <AnimatePresence initial={false}>
+          {visible.map((s) => (
+            <motion.li key={s.id} layout exit={{ opacity: 0, height: 0 }} className="flex min-h-14 items-center gap-3 py-2.5">
+              <DeviceIcon device={s.device} />
+              <div className="min-w-0 flex-1">
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="font-medium">{s.device}</span>
+                  {s.current && <Badge tone="accent">This device</Badge>}
+                  {!s.approved && <Badge tone="warn">Waiting for approval</Badge>}
+                </p>
+                <p className="text-sm text-muted">
+                  {s.current ? `Signed in ${fmtWhen(s.createdAt)}` : `Last used ${fmtAgo(s.lastSeenAt)}, signed in ${fmtWhen(s.createdAt)}`}
+                </p>
+              </div>
+              {!s.current && (
+                <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => run(s.id, () => api(`/api/auth/sessions/${s.id}`, { method: "DELETE" }))}
+                  aria-label={`Sign out ${s.device}`}>
+                  {busy === s.id ? "Signing out…" : "Sign out"}
+                </Button>
+              )}
+            </motion.li>
+          ))}
+        </AnimatePresence>
+      </ul>
+      {sorted.length > LIMIT && (
+        <div className={inset ? "pt-1" : "px-5"}>
+          <button type="button" onClick={() => setShowAll(!showAll)} className="flex h-10 w-full items-center text-sm font-medium text-accent hover:underline underline-offset-2">
+            {showAll ? "Show fewer" : `Show all ${sorted.length} devices`}
+          </button>
+        </div>
+      )}
+      {(error || notice || (allowSignOutOthers && others > 0)) && (
+        <div className={inset ? "" : "px-5 pb-5"}>
+          <ErrorNote message={error} className="mt-4" />
+          <PanelFooter className="mt-3" status={<Notice message={notice} />}>
+            {allowSignOutOthers && others > 0 && (
+              <Button variant="secondary" disabled={busy !== null} onClick={() => run("others", () => api("/api/auth/sessions", { method: "DELETE" }))}>
+                {busy === "others" ? "Signing out…" : `Sign out the other ${plural(others)}`}
               </Button>
             )}
-          </li>
-        ))}
-      </ul>
-      <FormError message={error} />
-      <FormNotice message={notice} />
-      {allowSignOutOthers && others > 0 && (
-        <Button variant="secondary" disabled={busy !== null} onClick={() => run("others", () => api("/api/auth/sessions", { method: "DELETE" }))}>
-          {busy === "others" ? "Signing out…" : "Sign out all other devices"}
-        </Button>
+          </PanelFooter>
+        </div>
       )}
     </div>
   );
 }
+
+const plural = (n: number) => (n === 1 ? "device" : `${n} devices`);

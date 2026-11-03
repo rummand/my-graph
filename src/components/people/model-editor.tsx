@@ -2,14 +2,14 @@
 import { useMemo, useState } from "react";
 import { EyeOff, Pencil, Plus, RotateCcw, Trash2, Eye } from "lucide-react";
 import { clsx } from "clsx";
-import { Button, Card, Input, NodeChip } from "@/components/ui";
+import { AnimatePresence, motion } from "motion/react";
+import { Avatar, Badge, Button, IconButton, Input, NodeChip, Select, Tabs } from "@/components/ui";
 import { attributesFor } from "@/lib/meta/model";
 import {
   ATTR_TYPES, CATEGORY_LABELS, CIRCLE_LABELS, CIRCLES, RELATION_CATEGORIES,
   type Circle, type MetaAttribute, type MetaKind, type MetaModel, type MetaRelation,
 } from "@/lib/meta/types";
-import { CIRCLE_VAR, normaliseCircle } from "@/lib/people/circles";
-import { Avatar } from "./avatar";
+import { normaliseCircle } from "@/lib/people/circles";
 import { api, fieldErrors, type FieldErrors } from "./format";
 
 type Tab = "kinds" | "relations" | "attributes";
@@ -21,12 +21,16 @@ const slug = (s: string) => s.toLowerCase().replace(/æ/g, "ae").replace(/ø/g, 
   .replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").replace(/^(\d)/, "x$1").slice(0, 48);
 
 function OriginBadge({ row }: { row: { origin: string; hidden: boolean } }) {
-  const [text, cls] = row.hidden ? ["Hidden", "bg-surface-2 text-muted"]
-    : row.origin === "builtin" ? ["Built-in", "bg-surface-2 text-muted"]
-    : row.origin === "override" ? ["Changed by you", "bg-accent-tint text-accent"]
-    : ["Added by you", "bg-accent-tint text-accent"];
-  return <span className={clsx("whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium", cls)}>{text}</span>;
+  if (row.hidden) return <Badge>Hidden</Badge>;
+  if (row.origin === "builtin") return null;
+  return <Badge tone="accent">{row.origin === "override" ? "Changed by you" : "Added by you"}</Badge>;
 }
+
+const SECTIONS: { key: Tab; label: string; hint: string }[] = [
+  { key: "kinds", label: "Kinds", hint: "Grandparent, teacher, doctor: what someone or something is." },
+  { key: "relations", label: "Relations", hint: "How two things are connected, read both ways." },
+  { key: "attributes", label: "Details", hint: "The fields a profile keeps, like birthday or shoe size." },
+];
 
 export function ModelEditor({ initial, canEdit }: { initial: MetaModel; canEdit: boolean }) {
   const [model, setModel] = useState(initial);
@@ -40,32 +44,50 @@ export function ModelEditor({ initial, canEdit }: { initial: MetaModel; canEdit:
     try { await fn(); await reload(); if (ok) setNotice(ok); } catch (e) { setError((e as Error).message); throw e; }
   }
 
-  const tabs: { key: Tab; label: string }[] = [{ key: "kinds", label: "Kinds" }, { key: "relations", label: "Relations" }, { key: "attributes", label: "Details" }];
+  const counts: Record<Tab, number> = {
+    kinds: model.kinds.filter((k) => !k.hidden).length,
+    relations: model.relations.filter((r) => !r.hidden).length,
+    attributes: model.attributes.filter((a) => !a.hidden).length,
+  };
   return (
-    <div className="people-scope space-y-4">
-      {!canEdit && <p className="rounded-md border border-line bg-surface px-3 py-2 text-sm text-muted">You can look around here. Only parents can change kinds, relations and details.</p>}
-      <div role="tablist" aria-label="Meta model" className="flex gap-1 border-b border-line">
-        {tabs.map((t) => (
-          <button key={t.key} role="tab" id={`tab-${t.key}`} aria-selected={tab === t.key} aria-controls={`panel-${t.key}`} tabIndex={tab === t.key ? 0 : -1}
-            onClick={() => setTab(t.key)}
-            onKeyDown={(e) => {
-              const i = tabs.findIndex((x) => x.key === tab);
-              if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-                const next = tabs[(i + (e.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length].key;
-                setTab(next); document.getElementById(`tab-${next}`)?.focus();
-              }
-            }}
-            className={clsx("-mb-px border-b-2 px-3 py-2 text-sm", tab === t.key ? "border-accent font-medium text-accent" : "border-transparent text-muted hover:text-fg")}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-      {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-      {notice && <p role="status" className="text-sm text-accent">{notice}</p>}
-      <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
-        {tab === "kinds" && <KindsTab model={model} canEdit={canEdit} run={run} />}
-        {tab === "relations" && <RelationsTab model={model} canEdit={canEdit} run={run} />}
-        {tab === "attributes" && <AttributesTab model={model} canEdit={canEdit} run={run} />}
+    <div className="grid gap-x-10 gap-y-6 md:grid-cols-[200px_minmax(0,1fr)]">
+      <nav aria-label="Model sections" className="md:sticky md:top-6 md:self-start">
+        <ul role="tablist" aria-orientation="vertical" className="flex gap-1 overflow-x-auto md:flex-col">
+          {SECTIONS.map((t, i) => (
+            <li key={t.key} className="shrink-0">
+              <button role="tab" id={`tab-${t.key}`} aria-selected={tab === t.key} aria-controls={`panel-${t.key}`} tabIndex={tab === t.key ? 0 : -1}
+                onClick={() => setTab(t.key)}
+                onKeyDown={(e) => {
+                  const dir = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : e.key === "ArrowUp" || e.key === "ArrowLeft" ? -1 : 0;
+                  if (!dir) return;
+                  e.preventDefault();
+                  const next = SECTIONS[(i + dir + SECTIONS.length) % SECTIONS.length].key;
+                  setTab(next); document.getElementById(`tab-${next}`)?.focus();
+                }}
+                className={clsx("flex w-full items-center justify-between gap-4 rounded-md px-3 py-2 text-left text-sm transition-colors",
+                  tab === t.key ? "bg-surface font-medium text-fg" : "text-muted hover:bg-surface-2/70 hover:text-fg")}>
+                {t.label}<span className="tabular-nums text-muted">{counts[t.key]}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        {!canEdit && <p className="mt-4 hidden text-[13px] text-muted md:block">You can look around. Only parents can change these.</p>}
+      </nav>
+      <div className="min-w-0">
+        <div className="mb-5">
+          <h2 className="text-lg font-semibold tracking-[-0.01em]">{SECTIONS.find((x) => x.key === tab)!.label}</h2>
+          <p className="mt-0.5 text-sm text-muted">{SECTIONS.find((x) => x.key === tab)!.hint}</p>
+        </div>
+        {!canEdit && <p className="mb-4 text-sm text-muted md:hidden">You can look around. Only parents can change these.</p>}
+        <div aria-live="polite">
+          {error && <p role="alert" className="mb-4 rounded-md bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>}
+          {notice && <p role="status" className="mb-4 rounded-md bg-surface px-3 py-2 text-sm">{notice}</p>}
+        </div>
+        <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`}>
+          {tab === "kinds" && <KindsTab model={model} canEdit={canEdit} run={run} />}
+          {tab === "relations" && <RelationsTab model={model} canEdit={canEdit} run={run} />}
+          {tab === "attributes" && <AttributesTab model={model} canEdit={canEdit} run={run} />}
+        </div>
       </div>
     </div>
   );
@@ -87,7 +109,7 @@ function RowActions({ row, table, canEdit, run, onEdit, hidePayload }: {
     }, ok).catch(() => {});
   };
   return (
-    <div className="flex shrink-0 gap-0.5">
+    <div className="flex shrink-0 gap-0.5 opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
       {!row.hidden && <IconBtn label={`Edit ${row.label}`} onClick={onEdit}><Pencil className="h-3.5 w-3.5" /></IconBtn>}
       {row.origin === "builtin" && !row.hidden && (
         <IconBtn label={`Hide ${row.label} for your household`} onClick={() => run(() => api(`/api/meta/${table}`, { method: "POST", json: { hidden: true, ...hidePayload } }), `“${row.label}” is hidden. Existing entries keep it.`).catch(() => {})}>
@@ -110,21 +132,20 @@ function RowActions({ row, table, canEdit, run, onEdit, hidePayload }: {
 }
 
 function IconBtn({ label, onClick, children }: { label: string; onClick: () => void; children: React.ReactNode }) {
-  return <button type="button" onClick={onClick} aria-label={label} title={label} className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-fg">{children}</button>;
+  return <IconButton type="button" label={label} onClick={onClick}>{children}</IconButton>;
 }
 
 function Field({ label, htmlFor, error, children, hint }: { label: string; htmlFor: string; error?: string; children: React.ReactNode; hint?: string }) {
   return (
     <div>
-      <label htmlFor={htmlFor} className="mb-1 block text-xs font-medium text-muted">{label}</label>
+      <label htmlFor={htmlFor} className="mb-1.5 block text-sm font-medium">{label}</label>
       {children}
-      {hint && !error && <p className="mt-1 text-[11px] text-muted">{hint}</p>}
-      {error && <p className="mt-1 text-xs text-danger">{error}</p>}
+      {hint && !error && <p className="mt-1.5 text-[13px] text-muted">{hint}</p>}
+      {error && <p className="mt-1.5 text-[13px] text-danger">{error}</p>}
     </div>
   );
 }
 
-const selectCls = "w-full rounded-md border border-line bg-surface px-3 py-2 text-sm";
 
 /* ── Kinds ────────────────────────────────────────────────────────────────────────────────────────────── */
 
@@ -133,54 +154,77 @@ function KindsTab({ model, canEdit, run }: { model: MetaModel; canEdit: boolean;
   const [editing, setEditing] = useState<Partial<MetaKind> | null>(null);
   const [preview, setPreview] = useState("child");
   const rows = model.kinds.filter((k) => k.nodeType === type);
+  const groups = type === "person"
+    ? CIRCLES.map((c) => ({ key: c, label: CIRCLE_LABELS[c], rows: rows.filter((k) => normaliseCircle(k.circle) === c) })).filter((g) => g.rows.length)
+    : [{ key: "all", label: null as string | null, rows }];
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-      <div className="space-y-3">
+    <div className="grid gap-x-8 gap-y-8 xl:grid-cols-[minmax(0,1fr)_280px]">
+      <div className="min-w-0 space-y-5">
         <div className="flex flex-wrap items-center gap-2">
-          <TypeSwitch value={type} onChange={setType} />
-          {canEdit && <Button className="ml-auto" onClick={() => setEditing({ nodeType: type as MetaKind["nodeType"], circle: type === "person" ? "other" : null })}><Plus className="h-4 w-4" aria-hidden="true" />New kind</Button>}
+          <TypeSwitch value={type} onChange={(t) => { setType(t); setEditing(null); }} />
+          {canEdit && <Button className="ml-auto" onClick={() => setEditing({ nodeType: type as MetaKind["nodeType"], circle: type === "person" ? "other" : null })}><Plus className="size-4" aria-hidden="true" />New kind</Button>}
         </div>
-        {editing && !editing.key && <KindForm draft={editing} model={model} onCancel={() => setEditing(null)} run={run} onDone={() => setEditing(null)} />}
-        <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
-          {rows.map((k) => (
-            <li key={k.id} className={clsx("p-3", k.hidden && "opacity-60")}>
-              {editing?.key === k.key ? (
-                <KindForm draft={k} model={model} onCancel={() => setEditing(null)} run={run} onDone={() => setEditing(null)} />
-              ) : (
-                <div className="flex items-start gap-3">
-                  {type === "person" && <span aria-hidden="true" className="mt-1.5 inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: CIRCLE_VAR[normaliseCircle(k.circle)] }} />}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{k.label}</span>
-                      <code className="text-[11px] text-muted">{k.key}</code>
-                      <OriginBadge row={k} />
-                      {type === "person" && k.circle && <span className="text-xs text-muted">{CIRCLE_LABELS[k.circle as Circle] ?? k.circle}</span>}
+        <Reveal show={!!editing && !editing.key}>
+          {editing && !editing.key && <KindForm draft={editing} model={model} onCancel={() => setEditing(null)} run={run} onDone={() => setEditing(null)} />}
+        </Reveal>
+        {groups.map((g) => (
+          <section key={g.key} aria-label={g.label ?? TYPE_LABEL[type]}>
+            {g.label && <h3 className="mb-1.5 text-[13px] text-muted">{g.label}</h3>}
+            <Rows>
+              {g.rows.map((k) => (
+                <li key={k.id} className={clsx("group px-4 py-3", k.hidden && "text-muted")}>
+                  {editing?.key === k.key ? (
+                    <KindForm draft={k} model={model} onCancel={() => setEditing(null)} run={run} onDone={() => setEditing(null)} />
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className={clsx("font-medium", k.hidden && "line-through decoration-line")}>{k.label}</span>
+                          <OriginBadge row={k} />
+                        </div>
+                        {k.description && <p className="mt-0.5 truncate text-sm text-muted">{k.description}</p>}
+                      </div>
+                      {type === "person" && !k.hidden && (
+                        <button type="button" onClick={() => setPreview(k.key)} aria-pressed={preview === k.key}
+                          className={clsx("hidden h-8 shrink-0 rounded-md px-2.5 text-sm transition-colors xl:inline-flex xl:items-center", preview === k.key ? "bg-surface-2 font-medium text-fg" : "text-muted hover:bg-surface-2 hover:text-fg")}>Preview</button>
+                      )}
+                      <RowActions row={k} table="kinds" canEdit={canEdit} run={run} onEdit={() => setEditing(k)} hidePayload={{ nodeType: k.nodeType, key: k.key }} />
                     </div>
-                    {k.description && <p className="mt-0.5 text-sm text-muted">{k.description}</p>}
-                  </div>
-                  {type === "person" && !k.hidden && <button type="button" onClick={() => setPreview(k.key)} className={clsx("shrink-0 rounded px-2 py-1 text-xs", preview === k.key ? "bg-accent-tint text-accent" : "text-muted hover:bg-surface-2")} aria-pressed={preview === k.key}>Preview</button>}
-                  <RowActions row={k} table="kinds" canEdit={canEdit} run={run} onEdit={() => setEditing(k)} hidePayload={{ nodeType: k.nodeType, key: k.key }} />
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+                  )}
+                </li>
+              ))}
+            </Rows>
+          </section>
+        ))}
+        {rows.length === 0 && <p className="text-sm text-muted">No kinds of {TYPE_LABEL[type].toLowerCase()} yet.</p>}
       </div>
       {type === "person" && <ProfilePreview model={model} kindKey={preview} />}
     </div>
   );
 }
 
-function TypeSwitch({ value, onChange }: { value: string; onChange: (t: string) => void }) {
+/** A list of settings rows on one surface, separated by rules. */
+function Rows({ children }: { children: React.ReactNode }) {
+  return <ul className="divide-y divide-line rounded-lg bg-surface">{children}</ul>;
+}
+
+/** Height-and-opacity reveal for an inline form. */
+function Reveal({ show, children }: { show: boolean; children: React.ReactNode }) {
   return (
-    <div role="group" aria-label="Type" className="inline-flex rounded-md border border-line bg-surface p-0.5">
-      {TYPES.map((t) => (
-        <button key={t} type="button" aria-pressed={value === t} onClick={() => onChange(t)}
-          className={clsx("rounded px-2.5 py-1 text-sm", value === t ? "bg-accent-tint font-medium text-accent" : "text-muted hover:text-fg")}>{TYPE_LABEL[t]}</button>
-      ))}
-    </div>
+    <AnimatePresence initial={false}>
+      {show && (
+        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+          transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
+          {children}
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
+}
+
+function TypeSwitch({ value, onChange }: { value: string; onChange: (t: string) => void }) {
+  return <Tabs value={value} onSelect={onChange} items={TYPES.map((t) => ({ value: t as string, label: TYPE_LABEL[t] }))} />;
 }
 
 function KindForm({ draft, model, onCancel, onDone, run }: { draft: Partial<MetaKind>; model: MetaModel; onCancel: () => void; onDone: () => void; run: Run }) {
@@ -207,26 +251,26 @@ function KindForm({ draft, model, onCancel, onDone, run }: { draft: Partial<Meta
   }
 
   return (
-    <form onSubmit={save} className="grid gap-3 rounded-lg border border-line bg-surface p-3 sm:grid-cols-2" aria-label={isNew ? "New kind" : `Edit ${draft.label}`}>
+    <form onSubmit={save} className="grid gap-4 rounded-lg bg-surface p-4 sm:grid-cols-2" aria-label={isNew ? "New kind" : `Edit ${draft.label}`}>
       <Field label="Name" htmlFor="k-label" error={errors.label}>
         <Input id="k-label" value={v.label} required onChange={(e) => setV({ ...v, label: e.target.value, key: isNew && !keyTouched ? slug(e.target.value) : v.key })} />
       </Field>
       <Field label="Key" htmlFor="k-key" error={errors.key} hint={isNew ? "Used in the data. Can't change later." : "Can't be changed."}>
-        <Input id="k-key" value={v.key} disabled={!isNew} required onChange={(e) => { setKeyTouched(true); setV({ ...v, key: e.target.value }); }} className="font-mono" />
+        <Input id="k-key" value={v.key} disabled={!isNew} required onChange={(e) => { setKeyTouched(true); setV({ ...v, key: e.target.value }); }} />
       </Field>
       <Field label="Plural" htmlFor="k-plural"><Input id="k-plural" value={v.pluralLabel} onChange={(e) => setV({ ...v, pluralLabel: e.target.value })} /></Field>
       {nodeType === "person" && (
         <Field label="Circle" htmlFor="k-circle" error={errors.circle}>
-          <select id="k-circle" value={v.circle || "other"} onChange={(e) => setV({ ...v, circle: e.target.value })} className={selectCls}>
+          <Select id="k-circle" value={v.circle || "other"} onChange={(e) => setV({ ...v, circle: e.target.value })} >
             {CIRCLES.map((c) => <option key={c} value={c}>{CIRCLE_LABELS[c]}</option>)}
-          </select>
+          </Select>
         </Field>
       )}
       <Field label="A kind of (inherits its details)" htmlFor="k-parent">
-        <select id="k-parent" value={v.parentKey} onChange={(e) => setV({ ...v, parentKey: e.target.value })} className={selectCls}>
+        <Select id="k-parent" value={v.parentKey} onChange={(e) => setV({ ...v, parentKey: e.target.value })} >
           <option value="">—</option>
           {parents.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
-        </select>
+        </Select>
       </Field>
       <div className="sm:col-span-2">
         <Field label="Description" htmlFor="k-desc"><Input id="k-desc" value={v.description} onChange={(e) => setV({ ...v, description: e.target.value })} placeholder="What people recognise it by" /></Field>
@@ -246,33 +290,28 @@ function ProfilePreview({ model, kindKey }: { model: MetaModel; kindKey: string 
   if (!kind) return null;
   const circle = normaliseCircle(kind.circle);
   return (
-    <aside aria-label={`Preview of a ${kind.label} profile`} className="lg:sticky lg:top-4 lg:self-start">
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted">Preview</p>
-      <Card>
+    <aside aria-label={`Preview of a ${kind.label} profile`} className="hidden xl:sticky xl:top-6 xl:block xl:self-start">
+      <h3 className="mb-1.5 text-[13px] text-muted">What a {kind.label.toLowerCase()}’s page keeps</h3>
+      <div className="rounded-lg bg-surface p-4">
         <div className="flex items-center gap-3">
-          <Avatar label={`${kind.label} Example`} circle={circle} score={4} size={48} />
-          <div>
-            <div className="font-semibold">A {kind.label.toLowerCase()}</div>
-            <div className="mt-0.5 flex items-center gap-2 text-xs">
-              <NodeChip type="person" label={kind.label} />
-              <span className="text-muted">{CIRCLE_LABELS[circle]}</span>
+          <Avatar id={`preview-${kind.key}`} name={kind.label} size={44} />
+          <div className="min-w-0">
+            <div className="truncate font-semibold">A {kind.label.toLowerCase()}</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[13px] text-muted">
+              <NodeChip type="person" label={kind.label} />{CIRCLE_LABELS[circle]}
             </div>
           </div>
         </div>
-        <dl className="mt-4 space-y-1.5 text-sm">
+        <dl className="mt-4 divide-y divide-line text-sm">
           {attrs.map((a) => (
-            <div key={a.key} className="flex items-baseline justify-between gap-3 border-b border-dashed border-line pb-1">
-              <dt className="text-muted">{a.label}{a.required && " *"}</dt>
-              <dd className="flex items-center gap-1.5 text-xs text-muted">
-                {ATTR_TYPE_LABEL[a.dataType]}
-                {a.sensitive && <span className="rounded bg-surface-2 px-1">Parents only</span>}
-                {a.kindKey && <span className="rounded bg-accent-tint px-1 text-accent">{a.kindKey === kindKey ? kind.label : model.kinds.find((k) => k.key === a.kindKey)?.label}</span>}
-              </dd>
+            <div key={a.key} className="flex items-baseline justify-between gap-3 py-1.5">
+              <dt>{a.label}{a.required && <span className="text-muted"> (required)</span>}</dt>
+              <dd className="shrink-0 text-[13px] text-muted">{a.sensitive ? "Parents only" : ATTR_TYPE_LABEL[a.dataType]}</dd>
             </div>
           ))}
         </dl>
-        <p className="mt-3 text-xs text-muted">Plus: how are they (check-ins), keeping in touch, relationships, milestones and activity.</p>
-      </Card>
+        <p className="mt-3 text-[13px] text-muted">Every page also has check-ins, keeping in touch, relationships, milestones and a timeline.</p>
+      </div>
     </aside>
   );
 }
@@ -286,50 +325,54 @@ function RelationsTab({ model, canEdit, run }: { model: MetaModel; canEdit: bool
   if (other.length) groups.push({ c: "other", rows: [...(groups.find((g) => g.c === "other")?.rows ?? []), ...other] });
 
   return (
-    <div className="space-y-4">
-      {canEdit && <div className="flex justify-end"><Button onClick={() => setEditing({ fromTypes: ["person"], toTypes: ["person"], category: "social" })}><Plus className="h-4 w-4" aria-hidden="true" />New relation</Button></div>}
-      {editing && !editing.key && <RelationForm draft={editing} run={run} onDone={() => setEditing(null)} />}
+    <div className="space-y-5">
+      {canEdit && <div className="flex justify-end"><Button onClick={() => setEditing({ fromTypes: ["person"], toTypes: ["person"], category: "social" })}><Plus className="size-4" aria-hidden="true" />New relation</Button></div>}
+      <Reveal show={!!editing && !editing.key}>
+        {editing && !editing.key && <RelationForm draft={editing} run={run} onDone={() => setEditing(null)} />}
+      </Reveal>
       {groups.map(({ c, rows }) => (
         <section key={c} aria-label={CATEGORY_LABELS[c] ?? c}>
-          <h2 className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted">{CATEGORY_LABELS[c] ?? c}</h2>
-          <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
+          <h3 className="mb-1.5 text-[13px] text-muted">{CATEGORY_LABELS[c] ?? c}</h3>
+          <Rows>
             {rows.map((r) => (
-              <li key={r.id} className={clsx("p-3", r.hidden && "opacity-60")}>
+              <li key={r.id} className={clsx("group px-4 py-3", r.hidden && "text-muted")}>
                 {editing?.key === r.key ? <RelationForm draft={r} run={run} onDone={() => setEditing(null)} /> : (
-                  <div className="flex items-start gap-3">
-                    <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-3">
+                    <div className="grid min-w-0 flex-1 gap-x-6 gap-y-0.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">{r.label}</span>
-                        {!r.symmetric && <span className="text-sm text-muted">↔ {r.inverseLabel}</span>}
-                        {r.symmetric && <span className="text-xs text-muted">(both ways)</span>}
-                        <code className="text-[11px] text-muted">{r.key}</code>
+                        <span className={clsx("font-medium", r.hidden && "line-through decoration-line")}>{cap(r.label)}</span>
                         <OriginBadge row={r} />
                       </div>
-                      <p className="mt-0.5 text-xs text-muted">{types(r.fromTypes)} → {types(r.toTypes)}</p>
+                      <p className="text-sm text-muted">{r.symmetric ? "Same both ways" : <>The other way: <span className="text-fg">{r.inverseLabel}</span></>}</p>
+                      <p className="text-[13px] text-muted sm:col-span-2">Between {types(r.fromTypes)} and {types(r.toTypes)}</p>
                     </div>
                     <RowActions row={r} table="relations" canEdit={canEdit} run={run} onEdit={() => setEditing(r)} hidePayload={{ key: r.key }} />
                   </div>
                 )}
               </li>
             ))}
-          </ul>
+          </Rows>
         </section>
       ))}
     </div>
   );
 }
 
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 const types = (ts: string[]) => (ts.length ? ts.map((t) => TYPE_LABEL[t]?.toLowerCase() ?? t).join(", ") : "anything");
 
 function TypeChecks({ id, value, onChange }: { id: string; value: string[]; onChange: (v: string[]) => void }) {
   return (
-    <div id={id} className="flex flex-wrap gap-2 text-sm">
-      {["person", "place", "event", "topic", "document"].map((t) => (
-        <label key={t} className="inline-flex items-center gap-1">
-          <input type="checkbox" checked={value.includes(t)} onChange={(e) => onChange(e.target.checked ? [...value, t] : value.filter((x) => x !== t))} className="accent-[var(--accent)]" />
-          {TYPE_LABEL[t]}
-        </label>
-      ))}
+    <div id={id} role="group" className="flex flex-wrap gap-1.5 text-sm">
+      {["person", "place", "event", "topic", "document"].map((t) => {
+        const on = value.includes(t);
+        return (
+          <button key={t} type="button" aria-pressed={on} onClick={() => onChange(on ? value.filter((x) => x !== t) : [...value, t])}
+            className={clsx("h-8 rounded-full px-3 transition-colors active:scale-[0.97]", on ? "bg-fg text-bg" : "bg-surface-2 text-muted hover:text-fg")}>
+            {TYPE_LABEL[t]}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -351,12 +394,12 @@ function RelationForm({ draft, run, onDone }: { draft: Partial<MetaRelation>; ru
     } catch (err) { setErrors(fieldErrors(err)); }
   }
   return (
-    <form onSubmit={save} className="grid gap-3 rounded-lg border border-line bg-surface p-3 sm:grid-cols-2" aria-label={isNew ? "New relation" : `Edit ${draft.label}`}>
+    <form onSubmit={save} className="grid gap-4 rounded-lg bg-surface p-4 sm:grid-cols-2" aria-label={isNew ? "New relation" : `Edit ${draft.label}`}>
       <Field label="Label (A is … B)" htmlFor="r-label" error={errors.label}>
         <Input id="r-label" value={v.label} required placeholder="e.g. coach of" onChange={(e) => setV({ ...v, label: e.target.value, key: isNew && !keyTouched ? slug(e.target.value) : v.key })} />
       </Field>
       <Field label="Key" htmlFor="r-key" error={errors.key} hint={isNew ? "Used on edges. Can't change later." : undefined}>
-        <Input id="r-key" value={v.key} disabled={!isNew} className="font-mono" onChange={(e) => { setKeyTouched(true); setV({ ...v, key: e.target.value }); }} />
+        <Input id="r-key" value={v.key} disabled={!isNew} onChange={(e) => { setKeyTouched(true); setV({ ...v, key: e.target.value }); }} />
       </Field>
       <div className="flex items-center gap-2 text-sm sm:col-span-2">
         <input id="r-sym" type="checkbox" checked={v.symmetric} onChange={(e) => setV({ ...v, symmetric: e.target.checked })} className="accent-[var(--accent)]" />
@@ -368,9 +411,9 @@ function RelationForm({ draft, run, onDone }: { draft: Partial<MetaRelation>; ru
         </Field>
       )}
       <Field label="Group" htmlFor="r-cat">
-        <select id="r-cat" value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })} className={selectCls}>
+        <Select id="r-cat" value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })} >
           {RELATION_CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c]}</option>)}
-        </select>
+        </Select>
       </Field>
       <Field label="From (A can be)" htmlFor="r-from"><TypeChecks id="r-from" value={v.fromTypes} onChange={(fromTypes) => setV({ ...v, fromTypes })} /></Field>
       <Field label="To (B can be)" htmlFor="r-to"><TypeChecks id="r-to" value={v.toTypes} onChange={(toTypes) => setV({ ...v, toTypes })} /></Field>
@@ -389,37 +432,39 @@ function AttributesTab({ model, canEdit, run }: { model: MetaModel; canEdit: boo
   const [editing, setEditing] = useState<Partial<MetaAttribute> | null>(null);
   const kinds = model.kinds.filter((k) => k.nodeType === type);
   const rows = model.attributes.filter((a) => a.nodeType === type);
-  const groups = [{ key: null as string | null, label: `Every ${type}` }, ...kinds.filter((k) => rows.some((a) => a.kindKey === k.key)).map((k) => ({ key: k.key as string | null, label: k.label }))];
+  const groups = [{ key: null as string | null, label: `Every ${TYPE_SINGULAR[type] ?? type}` }, ...kinds.filter((k) => rows.some((a) => a.kindKey === k.key)).map((k) => ({ key: k.key as string | null, label: `${k.label} only` }))];
   const isEditing = (a: MetaAttribute) => editing?.id === a.id;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-2">
-        <TypeSwitch value={type} onChange={setType} />
-        {canEdit && <Button className="ml-auto" onClick={() => setEditing({ nodeType: type as MetaAttribute["nodeType"], kindKey: null, dataType: "text" })}><Plus className="h-4 w-4" aria-hidden="true" />New detail</Button>}
+        <TypeSwitch value={type} onChange={(t) => { setType(t); setEditing(null); }} />
+        {canEdit && <Button className="ml-auto" onClick={() => setEditing({ nodeType: type as MetaAttribute["nodeType"], kindKey: null, dataType: "text" })}><Plus className="size-4" aria-hidden="true" />New detail</Button>}
       </div>
-      {editing && !editing.id && <AttributeForm draft={editing} kinds={kinds} run={run} onDone={() => setEditing(null)} />}
-      {rows.length === 0 && !editing && <p className="text-sm text-muted">No details defined for {TYPE_LABEL[type].toLowerCase()} yet.</p>}
+      <Reveal show={!!editing && !editing.id}>
+        {editing && !editing.id && <AttributeForm draft={editing} kinds={kinds} run={run} onDone={() => setEditing(null)} />}
+      </Reveal>
+      {rows.length === 0 && !editing && <p className="text-sm text-muted">No details kept for {TYPE_LABEL[type].toLowerCase()} yet.</p>}
       {groups.map((g) => {
         const list = rows.filter((a) => a.kindKey === g.key);
         if (!list.length) return null;
         return (
           <section key={g.key ?? "*"} aria-label={g.label}>
-            <h2 className="mb-1.5 text-xs font-medium uppercase tracking-wide text-muted">{g.label}</h2>
-            <ul className="divide-y divide-line rounded-lg border border-line bg-surface">
+            <h3 className="mb-1.5 text-[13px] text-muted">{g.label}</h3>
+            <Rows>
               {list.map((a) => (
-                <li key={a.id} className={clsx("p-3", a.hidden && "opacity-60")}>
+                <li key={a.id} className={clsx("group px-4 py-3", a.hidden && "text-muted")}>
                   {isEditing(a) ? <AttributeForm draft={a} kinds={kinds} run={run} onDone={() => setEditing(null)} /> : (
-                    <div className="flex items-start gap-3">
-                      <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-3">
+                      <div className="grid min-w-0 flex-1 gap-x-6 gap-y-0.5 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">{a.label}</span>
-                          <code className="text-[11px] text-muted">{a.key}</code>
+                          <span className={clsx("font-medium", a.hidden && "line-through decoration-line")}>{a.label}</span>
+                          {a.required && <Badge>Required</Badge>}
+                          {a.sensitive && <Badge tone="warn">Parents only</Badge>}
                           <OriginBadge row={a} />
                         </div>
-                        <p className="mt-0.5 text-xs text-muted">
+                        <p className="truncate text-sm text-muted">
                           {ATTR_TYPE_LABEL[a.dataType]}{a.dataType === "enum" && a.options.length ? `: ${a.options.join(", ")}` : ""}
-                          {a.required && " · required"}{a.sensitive && " · parents only, kept on local models"}
                         </p>
                       </div>
                       <RowActions row={a} table="attributes" canEdit={canEdit} run={run} onEdit={() => setEditing(a)} hidePayload={{ nodeType: a.nodeType, kindKey: a.kindKey, key: a.key }} />
@@ -427,13 +472,15 @@ function AttributesTab({ model, canEdit, run }: { model: MetaModel; canEdit: boo
                   )}
                 </li>
               ))}
-            </ul>
+            </Rows>
           </section>
         );
       })}
     </div>
   );
 }
+
+const TYPE_SINGULAR: Record<string, string> = { person: "person", place: "place", event: "event", topic: "topic" };
 
 function AttributeForm({ draft, kinds, run, onDone }: { draft: Partial<MetaAttribute>; kinds: MetaKind[]; run: Run; onDone: () => void }) {
   const isNew = !draft.id;
@@ -455,23 +502,23 @@ function AttributeForm({ draft, kinds, run, onDone }: { draft: Partial<MetaAttri
     } catch (err) { setErrors(fieldErrors(err)); }
   }
   return (
-    <form onSubmit={save} className="grid gap-3 rounded-lg border border-line bg-surface p-3 sm:grid-cols-2" aria-label={isNew ? "New detail" : `Edit ${draft.label}`}>
+    <form onSubmit={save} className="grid gap-4 rounded-lg bg-surface p-4 sm:grid-cols-2" aria-label={isNew ? "New detail" : `Edit ${draft.label}`}>
       <Field label="Name" htmlFor="a-label" error={errors.label}>
         <Input id="a-label" value={v.label} required placeholder="e.g. Shirt size" onChange={(e) => setV({ ...v, label: e.target.value, key: isNew && !keyTouched ? slug(e.target.value) : v.key })} />
       </Field>
       <Field label="Key" htmlFor="a-key" error={errors.key} hint={isNew ? "Where the value is stored. Can't change later." : undefined}>
-        <Input id="a-key" value={v.key} disabled={!isNew} className="font-mono" onChange={(e) => { setKeyTouched(true); setV({ ...v, key: e.target.value }); }} />
+        <Input id="a-key" value={v.key} disabled={!isNew} onChange={(e) => { setKeyTouched(true); setV({ ...v, key: e.target.value }); }} />
       </Field>
       <Field label="Applies to" htmlFor="a-kind">
-        <select id="a-kind" value={v.kindKey} disabled={!isNew} onChange={(e) => setV({ ...v, kindKey: e.target.value })} className={selectCls}>
+        <Select id="a-kind" value={v.kindKey} disabled={!isNew} onChange={(e) => setV({ ...v, kindKey: e.target.value })} >
           <option value="">Every {draft.nodeType}</option>
           {kinds.filter((k) => !k.hidden).map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
-        </select>
+        </Select>
       </Field>
       <Field label="Type" htmlFor="a-type">
-        <select id="a-type" value={v.dataType} onChange={(e) => setV({ ...v, dataType: e.target.value as MetaAttribute["dataType"] })} className={selectCls}>
+        <Select id="a-type" value={v.dataType} onChange={(e) => setV({ ...v, dataType: e.target.value as MetaAttribute["dataType"] })} >
           {ATTR_TYPES.map((t) => <option key={t} value={t}>{ATTR_TYPE_LABEL[t]}</option>)}
-        </select>
+        </Select>
       </Field>
       {v.dataType === "enum" && (
         <div className="sm:col-span-2">
@@ -480,9 +527,9 @@ function AttributeForm({ draft, kinds, run, onDone }: { draft: Partial<MetaAttri
           </Field>
         </div>
       )}
-      <div className="flex flex-wrap gap-4 text-sm sm:col-span-2">
+      <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm sm:col-span-2">
         <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={v.required} onChange={(e) => setV({ ...v, required: e.target.checked })} className="accent-[var(--accent)]" />Required</label>
-        <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={v.sensitive} onChange={(e) => setV({ ...v, sensitive: e.target.checked })} className="accent-[var(--accent)]" />Sensitive (parents only, local models)</label>
+        <label className="inline-flex items-center gap-1.5"><input type="checkbox" checked={v.sensitive} onChange={(e) => setV({ ...v, sensitive: e.target.checked })} className="accent-[var(--accent)]" />Sensitive: parents only, and only sent to the household’s own models</label>
       </div>
       <div className="flex justify-end gap-2 sm:col-span-2">
         <Button type="button" variant="ghost" onClick={onDone}>Cancel</Button>

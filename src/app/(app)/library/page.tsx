@@ -21,8 +21,8 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   const initial = await listSources(v, { category: f.type, status: f.status, q: f.q });
   const filters: LibraryFilters = { type: f.type ?? "", status: f.status ?? "", q: f.q ?? "" };
   return (
-    <div className="mx-auto max-w-6xl">
-      <PageHeader title="Library" lead="Letters, scans, photos, recordings and emails. Each file is kept exactly as you uploaded it, read for text, and linked to the people, places and events it mentions." />
+    <div>
+      <PageHeader title="Library" lead="Every letter, scan, photo and recording the family has added, each one read for the people and dates in it." />
       <LibraryView initial={initial} initialFilters={filters} />
     </div>
   );

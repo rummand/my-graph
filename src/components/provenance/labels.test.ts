@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activityLabel, agentLabel, confidenceLabel, formatWhen, locatorLabel } from "./labels";
+import { activityLabel, agentLabel, confidenceLabel, formatWhen, locatorLabel, percentSure, provenanceByline, sentenceCase } from "./labels";
 
 describe("provenance labels", () => {
   it("activity", () => {
@@ -27,5 +27,17 @@ describe("provenance labels", () => {
     expect(formatWhen("2026-08-10T12:00:00Z", null, "month")).toBe("August 2026");
     expect(formatWhen("2026-08-10T12:00:00Z", "2026-08-12T12:00:00Z", "day")).toBe("10 August 2026 – 12 August 2026");
     expect(formatWhen(null, null, null)).toBe("");
+    expect(formatWhen(new Date(2026, 10, 26, 8, 30), new Date(2026, 10, 26, 14, 0), "minute")).toBe("26 November 2026, 08:30–14:00");
+  });
+  it("byline", () => {
+    expect(provenanceByline("upload", "user", "u1", { u1: "Anna" })).toBe("Uploaded by Anna");
+    expect(provenanceByline("manual_edit", "user", "u1", { u1: "Anna" })).toBe("Entered by Anna");
+    expect(provenanceByline("llm_extraction", "model", "mux:qwen3-local")).toBe("Picked out by the assistant (qwen3-local)");
+    expect(provenanceByline("ocr", "model", "mux:")).toBe("Read from a scan (OCR) by the assistant");
+    expect(provenanceByline("inference", "rule", "birthday_rule")).toBe("Guessed by the assistant, rule: birthday rule");
+  });
+  it("small words", () => {
+    expect(sentenceCase("parent of")).toBe("Parent of");
+    expect(percentSure(0.917)).toBe("92% sure");
   });
 });

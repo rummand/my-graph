@@ -1,24 +1,37 @@
-import { CIRCLE_VAR, initials, normaliseCircle, WELLBEING_VAR, wellbeingBand, WELLBEING_WORDS } from "@/lib/people/circles";
+import { clsx } from "clsx";
+import { Avatar } from "@/components/ui";
+import { WELLBEING_VAR, wellbeingBand, WELLBEING_WORDS } from "@/lib/people/circles";
 
-/** Small round avatar: initials on the circle colour, with a wellbeing ring. Used in lists and headers. */
-export function Avatar({ label, circle, score, size = 36 }: { label: string; circle: string; score?: number | null; size?: number }) {
+/**
+ * A person's own-colour avatar (from the UI kit) with their latest check-in as a small status dot, and an optional
+ * dashed amber ring when you haven't been in touch for longer than usual.
+ */
+export function PersonAvatar({ id, label, size = 32, score, overdue, className }: {
+  id: string; label: string; size?: number; score?: number | null; overdue?: boolean; className?: string;
+}) {
   const band = wellbeingBand(score);
-  const r = size / 2;
+  const dot = Math.min(14, Math.max(8, Math.round(size * 0.26)));
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden="true" className="shrink-0">
-      <circle cx={r} cy={r} r={r - 2} fill="none" stroke={WELLBEING_VAR[band]} strokeWidth={2.5} strokeDasharray={band === "none" ? "3 3" : undefined} />
-      <circle cx={r} cy={r} r={r - 5} fill={CIRCLE_VAR[normaliseCircle(circle)]} />
-      <text x={r} y={r} dy="0.35em" textAnchor="middle" fontSize={size * 0.32} fontWeight={600} fill="#fff">{initials(label)}</text>
-    </svg>
+    <span className={clsx("relative inline-flex shrink-0", className)} style={{ width: size, height: size }}>
+      <Avatar id={id} name={label} size={size} />
+      {overdue && (
+        <span aria-hidden="true" className="pointer-events-none absolute -inset-[4px] rounded-full border-[1.5px] border-dashed border-warn" />
+      )}
+      {band !== "none" && (
+        <span aria-hidden="true" className="absolute bottom-0 right-0 rounded-full ring-2 ring-[var(--ring-bg,var(--surface))]"
+          style={{ width: dot, height: dot, background: WELLBEING_VAR[band], transform: `translate(${size > 48 ? -3 : 1}px, ${size > 48 ? -3 : 1}px)` }} />
+      )}
+    </span>
   );
 }
 
-export function WellbeingWord({ score }: { score: number | null | undefined }) {
-  if (score == null) return <span className="text-muted">No check-in yet</span>;
+/** "Good" with its status dot; "No check-in yet" in grey. */
+export function WellbeingWord({ score, className }: { score: number | null | undefined; className?: string }) {
+  if (score == null) return <span className={clsx("text-muted", className)}>No check-in yet</span>;
   const band = wellbeingBand(score);
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span aria-hidden="true" className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: WELLBEING_VAR[band] }} />
+    <span className={clsx("inline-flex items-center gap-1.5", band === "warn" && "text-danger", className)}>
+      <span aria-hidden="true" className="inline-block size-2 rounded-full" style={{ background: WELLBEING_VAR[band] }} />
       {WELLBEING_WORDS[score]}
     </span>
   );

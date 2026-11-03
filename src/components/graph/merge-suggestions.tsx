@@ -1,11 +1,12 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button, NodeChip } from "@/components/ui";
+import { Button } from "@/components/ui";
+import { NodePill } from "./node-mark";
 
 export type MergeSuggestionView = { other: { id: string; type: string; label: string; summary: string | null }; reason: string; score: number };
 
-/** "Could these be the same?" — merge the other item into this one, or say they're different. */
+/** "Could these be the same?": merge the other item into this one, or say they're different. */
 export function MergeSuggestions({ nodeId, nodeLabel, suggestions }: { nodeId: string; nodeLabel: string; suggestions: MergeSuggestionView[] }) {
   const router = useRouter();
   const [gone, setGone] = useState<Set<string>>(() => new Set());
@@ -34,29 +35,29 @@ export function MergeSuggestions({ nodeId, nodeLabel, suggestions }: { nodeId: s
   }
 
   return (
-    <section aria-labelledby="merge-h" className="rounded-lg border border-line bg-surface p-4">
-      <h2 id="merge-h" className="text-sm font-semibold">Could these be the same?</h2>
-      <p className="mt-1 text-xs text-muted">Merging keeps every fact and source, and remembers the other name.</p>
-      <ul className="mt-3 space-y-3">
+    <section aria-labelledby="merge-h" className="rounded-lg bg-warn-tint/50 p-4">
+      <h2 id="merge-h" className="font-semibold">Could these be the same?</h2>
+      <p className="mt-1 text-sm text-muted">Merging keeps every fact and source, and remembers the other name.</p>
+      <ul className="mt-4 space-y-4">
         {list.map((s) => (
           <li key={s.other.id} className="text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <NodeChip type={s.other.type} label={s.other.label} href={`/node/${s.other.id}`} />
-              <span className="text-xs text-muted">{Math.round(s.score * 100)}% alike</span>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <NodePill id={s.other.id} type={s.other.type} label={s.other.label} href={`/node/${s.other.id}`} />
+              <span className="text-xs tabular-nums text-muted">{Math.round(s.score * 100)}% alike</span>
             </div>
-            <p className="mt-1 text-xs text-muted">{s.reason}</p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button variant="secondary" className="px-2 py-1 text-xs" disabled={!!busy} onClick={() => run(s.other.id, "merge")}>
-                {busy === `merge:${s.other.id}` ? "Merging…" : "Same — merge here"}
+            <p className="mt-1.5 text-muted">{s.reason}</p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              <Button variant="secondary" size="sm" disabled={!!busy} onClick={() => run(s.other.id, "merge")}>
+                {busy === `merge:${s.other.id}` ? "Merging…" : "Same, merge here"}
               </Button>
-              <Button variant="ghost" className="px-2 py-1 text-xs" disabled={!!busy} onClick={() => run(s.other.id, "dismiss")}>
+              <Button variant="ghost" size="sm" disabled={!!busy} onClick={() => run(s.other.id, "dismiss")}>
                 {busy === `dismiss:${s.other.id}` ? "Saving…" : "Not the same"}
               </Button>
             </div>
           </li>
         ))}
       </ul>
-      <p aria-live="polite" className="mt-2 text-xs text-danger empty:hidden">{error}</p>
+      <p aria-live="polite" className="mt-2 text-sm text-danger empty:hidden">{error}</p>
     </section>
   );
 }
