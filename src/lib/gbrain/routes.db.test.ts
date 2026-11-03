@@ -1,0 +1,70 @@
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+const viewer: any = {};
+vi.mock("@/lib/auth", () => ({ requireUser: async () => { if (!viewer.id) throw new Response(null, { status: 401 }); return viewer; }, isParent: () => true }));
+import { db, sql } from "@/db";
+import { households, users } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import * as graphRoute from "@/app/api/graph/route";
+import * as nodesRoute from "@/app/api/nodes/route";
+import * as nodeRoute from "@/app/api/nodes/[id]/route";
+import * as mergeRoute from "@/app/api/nodes/[id]/merge/route";
+import * as suggRoute from "@/app/api/nodes/merge-suggestions/route";
+import * as edgeRoute from "@/app/api/graph/edges/[id]/route";
+import { addEdge } from "@/lib/gbrain";
+
+/** Route handlers against the real database with auth mocked. Opt-in: GBRAIN_DB_TESTS=1 npx vitest run src/lib/gbrain/routes.db.test.ts */
+const enabled = !!process.env.GBRAIN_DB_TESTS;
+let hh: string;
+const req = (url: string, method = "GET", body?: unknown) => new Request(`http://x${url}`, { method, body: body === undefined ? undefined : JSON.stringify(body) });
+const p = (id: string) => ({ params: Promise.resolve({ id }) });
+describe.skipIf(!enabled)("routes (database)", () => {
+beforeAll(async () => {
+  const [h] = await db.insert(households).values({ name: "route-check" }).returning(); hh = h.id;
+  const [u] = await db.insert(users).values({ householdId: hh, email: `r${Date.now()}@x.test`, name: "Rita", role: "owner" }).returning();
+  Object.assign(viewer, { id: u.id, householdId: hh, name: "Rita", email: u.email, role: "owner", personNodeId: null });
+});
+afterAll(async () => { await db.delete(households).where(eq(households.id, hh)); await sql.end(); });
+
+  it("full flow", async () => {
+    let r = await nodesRoute.POST(req("/api/nodes", "POST", { type: "person", label: "Katrine" }));
+    expect(r.status).toBe(201); const ida = (await r.json()).node;
+    r = await nodesRoute.POST(req("/api/nodes", "POST", { type: "person", label: "KATRINE" }));
+    expect(r.status).toBe(200);
+    r = await nodesRoute.POST(req("/api/nodes", "POST", { type: "nope", label: "" }));
+    expect(r.status).toBe(400); expect((await r.json()).error).toMatch(/type/);
+    r = await nodesRoute.POST(new Request("http://x/api/nodes", { method: "POST", body: "{bad" }));
+    expect(r.status).toBe(400);
+    const ida2 = (await (await nodesRoute.POST(req("/api/nodes", "POST", { type: "person", label: "Katrina" }))).json()).node;
+    const school = (await (await nodesRoute.POST(req("/api/nodes", "POST", { type: "place", label: "Skolen" }))).json()).node;
+    const e = await addEdge(viewer, { fromId: ida.id, toId: school.id, relation: "attends" }, { activity: "inference", agentType: "model", agentId: "mux:x", confidence: 0.4 });
+    r = await nodesRoute.GET(req("/api/nodes?q=katri&type=person"));
+    expect((await r.json()).nodes.length).toBe(2);
+    r = await graphRoute.GET(req(`/api/graph?limit=10`)); const g = await r.json();
+    expect(g.nodes.length).toBe(3); expect(g.edges.length).toBe(1);
+    expect((await graphRoute.GET(req(`/api/graph?center=bad`))).status).toBe(400);
+    r = await nodeRoute.GET(req(""), p(ida.id)); const d = await r.json();
+    expect(d.edges[0].status).toBe("inferred"); expect(d.provenance.edges[e.id].length).toBe(1); expect(d.provenance.node.length).toBe(2);
+    expect(d.mergeSuggestions[0].other.id).toBe(ida2.id); expect(d.agents[viewer.id]).toBe("Rita (you)");
+    expect((await nodeRoute.GET(req(""), p("x"))).status).toBe(400);
+    expect((await nodeRoute.GET(req(""), p("00000000-0000-0000-0000-000000000000"))).status).toBe(404);
+    r = await nodeRoute.PATCH(req("", "PATCH", { summary: "Our daughter" }), p(ida.id));
+    expect((await r.json()).node.summary).toBe("Our daughter");
+    expect((await nodeRoute.PATCH(req("", "PATCH", {}), p(ida.id))).status).toBe(400);
+    r = await edgeRoute.PATCH(req("", "PATCH", { action: "confirm" }), p(e.id));
+    expect((await r.json()).edge.status).toBe("confirmed");
+    r = await edgeRoute.PATCH(req("", "PATCH", { action: "correct" }), p(e.id));
+    expect(r.status).toBe(400);
+    r = await edgeRoute.PATCH(req("", "PATCH", { action: "correct", relation: "works_at" }), p(e.id));
+    expect((await r.json()).edge.relation).toBe("works_at");
+    r = await suggRoute.GET(req(`/api/nodes/merge-suggestions`));
+    expect((await r.json()).suggestions.length).toBe(1);
+    r = await mergeRoute.POST(req("", "POST", { dropId: school.id }), p(ida.id));
+    expect(r.status).toBe(400);
+    r = await mergeRoute.POST(req("", "POST", { dropId: ida2.id }), p(ida.id));
+    expect((await r.json()).node.aliases).toContain("Katrina");
+    r = await suggRoute.GET(req(`/api/nodes/merge-suggestions?nodeId=${ida.id}`));
+    expect((await r.json()).suggestions.length).toBe(0);
+    viewer.id = undefined;
+    expect((await graphRoute.GET(req("/api/graph"))).status).toBe(401);
+  });
+});

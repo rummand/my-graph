@@ -100,6 +100,8 @@ export const nodes = pgTable("nodes", {
   householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
   ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   type: nodeTypeEnum("type").notNull(),
+  /** Meta-model kind within the type (meta_kinds.key), e.g. person → "teacher", place → "school". */
+  kind: text("kind"),
   label: text("label").notNull(),
   aliases: text("aliases").array().notNull().default([]),
   summary: text("summary"),
@@ -284,3 +286,83 @@ export const reminders = pgTable("reminders", {
   createdByKind: authorKindEnum("created_by_kind").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("reminders_owner_due_idx").on(t.ownerId, t.dueAt)]);
+
+/* ── Meta model: the household's own ontology on top of the graph ─────────────────────────────────────── */
+
+export const attrTypeEnum = pgEnum("attr_type", ["text", "longtext", "date", "number", "boolean", "enum", "email", "phone", "url"]);
+
+/** Kinds within a node type (person → family, friend, teacher, doctor …). householdId null = built-in default. */
+export const metaKinds = pgTable("meta_kinds", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id").references(() => households.id, { onDelete: "cascade" }),
+  nodeType: nodeTypeEnum("node_type").notNull(),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  pluralLabel: text("plural_label"),
+  description: text("description"),
+  /** Circle on the people overview: family · close · social · school · care · work · other */
+  circle: text("circle"),
+  parentKey: text("parent_key"),
+  icon: text("icon"),
+  color: text("color"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  builtin: boolean("builtin").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("meta_kinds_key_idx").on(t.householdId, t.nodeType, t.key)]);
+
+/** Relation types: the allowed edge.relation values, with labels both ways. */
+export const metaRelations = pgTable("meta_relations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id").references(() => households.id, { onDelete: "cascade" }),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  inverseLabel: text("inverse_label").notNull(),
+  /** family · social · care · school · work · place · time · document · other */
+  category: text("category").notNull().default("other"),
+  fromTypes: text("from_types").array().notNull().default([]),
+  toTypes: text("to_types").array().notNull().default([]),
+  symmetric: boolean("symmetric").notNull().default(false),
+  builtin: boolean("builtin").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("meta_relations_key_idx").on(t.householdId, t.key)]);
+
+/** Attributes a node type or kind carries (stored in nodes.props[key]). kindKey null = every node of nodeType. */
+export const metaAttributes = pgTable("meta_attributes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id").references(() => households.id, { onDelete: "cascade" }),
+  nodeType: nodeTypeEnum("node_type").notNull(),
+  kindKey: text("kind_key"),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  dataType: attrTypeEnum("data_type").notNull().default("text"),
+  options: text("options").array().notNull().default([]),
+  required: boolean("required").notNull().default(false),
+  /** Sensitive attributes are parents-only and stay on local models. */
+  sensitive: boolean("sensitive").notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
+  builtin: boolean("builtin").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("meta_attributes_key_idx").on(t.householdId, t.nodeType, t.kindKey, t.key)]);
+
+/* ── People: how they are, over time ──────────────────────────────────────────────────────────────────── */
+
+export const observationKindEnum = pgEnum("observation_kind", ["wellbeing", "health", "milestone", "contact", "note"]);
+
+/** A dated check-in about a person: how they are, a milestone, a contact moment. */
+export const observations = pgTable("observations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id").notNull(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  personNodeId: uuid("person_node_id").notNull().references(() => nodes.id, { onDelete: "cascade" }),
+  kind: observationKindEnum("kind").notNull(),
+  /** Wellbeing 1 (struggling) … 5 (thriving); null for other kinds. */
+  score: integer("score"),
+  note: text("note"),
+  tags: text("tags").array().notNull().default([]),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  sourceId: uuid("source_id").references(() => sources.id, { onDelete: "set null" }),
+  authorKind: authorKindEnum("author_kind").notNull().default("user"),
+  visibility: visibilityEnum("visibility").notNull().default("private"),
+  sensitive: boolean("sensitive").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("observations_person_at_idx").on(t.personNodeId, t.at)]);

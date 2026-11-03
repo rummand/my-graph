@@ -47,6 +47,12 @@ index files.
 | wiki | `src/lib/wiki/**`, `src/app/api/wiki/**`, `src/app/(app)/wiki/**`, `src/components/wiki/**` |
 | timeline | `src/lib/timeline/**`, `src/app/api/timeline/**`, `src/app/(app)/timeline/**`, `src/components/timeline/**` |
 | today | `src/lib/briefs/**`, `src/app/api/reminders/**`, `src/app/(app)/page.tsx`, `src/components/today/**` |
+| people & meta model | `src/lib/meta/**`, `src/lib/people/**`, `src/app/api/meta/**`, `src/app/api/people/**`, `src/app/(app)/people/**`, `src/components/people/**` |
+
+The **meta model** (`meta_kinds`, `meta_relations`, `meta_attributes` + `nodes.kind`) is the household's ontology:
+kinds of people/places/events/topics, the relation types allowed on edges (with inverse labels), and the attributes
+each kind carries (stored in `nodes.props`). Built-ins have `householdId = null`; households add their own.
+`src/lib/meta` is its API — read relation labels and kinds from there instead of hard-coding them.
 
 Shared files (`src/db/**`, `src/components/ui/**`, `src/components/shell.tsx`, `src/app/layout.tsx`, `globals.css`,
 `package.json`) — do not edit during the parallel build; note needed changes in your report instead.
