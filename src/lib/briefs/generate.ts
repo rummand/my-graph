@@ -5,6 +5,7 @@
 import type { Citation } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import * as mux from "@/lib/mux";
+import { peopleContext } from "@/lib/people";
 import { getCachedBrief, setCachedBrief, type CachedBrief } from "./cache";
 import { buildBriefContext, buildBriefMessages, pickCitations } from "./context";
 import { appTimeZone, dayKey } from "./dates";
@@ -39,9 +40,16 @@ export async function generateBrief(v: Viewer, opts: { refresh?: boolean; now?: 
 
   const core = await loadTodayCore(v, now);
   const input = toBriefInput(v, core);
+  try {
+    input.people = await peopleContext(v, [], { now });
+  } catch (err) {
+    console.error("[briefs] peopleContext failed:", err);
+  }
   const ctx = buildBriefContext(input);
 
   let brief: CachedBrief;
+  // People who need attention (low wellbeing, a birthday, no contact for a while) are worth a brief on their own.
+  if (ctx.empty && /^Needs attention:/m.test(input.people ?? "")) ctx.empty = false;
   if (ctx.empty) {
     brief = { text: NOTHING_TO_BRIEF, citations: [], generatedAt: now.toISOString(), day, model: null, local: true };
   } else {

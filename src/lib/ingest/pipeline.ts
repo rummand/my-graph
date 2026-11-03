@@ -12,6 +12,7 @@ import type { Locator } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import * as gbrain from "@/lib/gbrain";
 import * as mux from "@/lib/mux";
+import { getMeta, type Meta as MetaHelpers, type MetaNodeType } from "@/lib/meta";
 import { readStored } from "@/lib/storage";
 import { chunkSegments, groupChunks, type TextSegment } from "./chunk";
 import { extractText } from "./extract-text";
@@ -239,6 +240,16 @@ const norm = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s+/g, " 
 
 async function extractFacts(v: Viewer, src: SourceCtx, stored: StoredChunk[], meta: mux.MuxCallMeta) {
   const known = await knownPeople(v);
+  // The household's meta model, loaded once: used to give extracted nodes a kind (teacher, school, …).
+  let meta_: MetaHelpers | null = null;
+  try { meta_ = await getMeta(v); } catch (e) { console.warn("[ingest] meta model unavailable", errText(e)); }
+  const kindFor = (type: string, label: string, text: string, relations: string[]): string | null => {
+    if (!meta_) return null;
+    try {
+      const s = meta_.suggestKind(label, { type: type as MetaNodeType, text, relations });
+      return s && s.type === type ? s.kind : null;
+    } catch { return null; }
+  };
   const labelToId = new Map<string, string>();
   const nodeType = new Map<string, string>(); // id → type
   for (const p of known) {
@@ -282,8 +293,14 @@ async function extractFacts(v: Viewer, src: SourceCtx, stored: StoredChunk[], me
         id ??= labelToId.get(norm(ent.label));
         const chunk = chunkMentioning(ent.label);
         if (!id) {
+          const key = norm(ent.label);
+          const relations = ex.facts.filter((f) => norm(f.from) === key || norm(f.to) === key).map((f) => f.relation);
+          // Context: the label, plus the entity's own summary for people (a role like "class teacher"). Not the whole
+          // chunk — a letter naming a school would make every place a "school" — and not event summaries, which name
+          // the event a deadline belongs to ("deadline … for the field trip" is not a trip).
+          const kind = kindFor(ent.type, ent.label, ent.type === "person" ? ent.summary ?? "" : "", relations);
           const { node } = await gbrain.upsertNode(v, {
-            type: ent.type, label: ent.label, aliases: ent.aliases, summary: ent.summary,
+            type: ent.type, kind, label: ent.label, aliases: ent.aliases, summary: ent.summary,
             startAt: ent.startAt ?? null, endAt: ent.endAt ?? null,
             timePrecision: ent.startAt ? ent.precision ?? "day" : null,
             visibility: src.visibility, sensitive: src.sensitive,

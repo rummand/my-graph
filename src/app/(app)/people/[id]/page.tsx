@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PersonProfileView } from "@/components/people/person-profile";
-import { PeopleTokens } from "@/components/people/tokens";
 import { requireUser } from "@/lib/auth";
 import { personProfile } from "@/lib/people";
 
@@ -23,7 +22,6 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
   if (!profile) notFound();
   return (
     <div className="people-scope mx-auto max-w-6xl">
-      <PeopleTokens />
       <PersonProfileView initial={profile} />
     </div>
   );

@@ -9,7 +9,7 @@ const LINKS = [
   { href: "/people", label: "People" },
   { href: "/timeline", label: "Timeline" },
   { href: "/library", label: "Library" },
-  { href: "/wiki", label: "Wiki" },
+  { href: "/wiki", label: "Wiki", hideFor: ["guest"] },
   { href: "/graph", label: "Graph" },
   { href: "/settings", label: "Family & settings" },
 ];
@@ -18,10 +18,10 @@ export function NavLinks({ role }: { role: string }) {
   const path = usePathname();
   return (
     <nav className="flex gap-1 overflow-x-auto px-2 pb-2 md:flex-col md:pb-4">
-      {LINKS.map((l) => {
+      {LINKS.filter((l) => !("hideFor" in l) || !l.hideFor?.includes(role)).map((l) => {
         const active = l.href === "/" ? path === "/" : path.startsWith(l.href);
         return (
-          <Link key={l.href} href={l.href}
+          <Link key={l.href} href={l.href} aria-current={active ? "page" : undefined}
             className={clsx("whitespace-nowrap rounded-md px-3 py-2 text-sm", active ? "bg-accent-tint font-medium text-accent" : "text-muted hover:bg-surface-2 hover:text-fg")}>
             {l.label}
           </Link>

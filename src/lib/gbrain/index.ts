@@ -37,7 +37,7 @@ export type ProvenanceInput = {
 };
 
 export type GNode = {
-  id: string; ownerId: string; type: NodeType; label: string; aliases: string[]; summary: string | null;
+  id: string; ownerId: string; type: NodeType; kind?: string | null; label: string; aliases: string[]; summary: string | null;
   props: Record<string, unknown>; startAt: Date | null; endAt: Date | null; timePrecision: "minute" | "day" | "month" | "year" | null;
   visibility: Visibility; sensitive: boolean; createdAt: Date; updatedAt: Date;
 };
@@ -53,7 +53,7 @@ export type GProvenance = {
 };
 
 export type NodeInput = {
-  type: NodeType; label: string; aliases?: string[]; summary?: string; props?: Record<string, unknown>;
+  type: NodeType; kind?: string | null; label: string; aliases?: string[]; summary?: string; props?: Record<string, unknown>;
   startAt?: Date | null; endAt?: Date | null; timePrecision?: GNode["timePrecision"];
   visibility?: Visibility; sensitive?: boolean;
 };
@@ -89,7 +89,7 @@ const INACTIVE: EdgeStatus[] = ["rejected", "superseded"];
 const NOT_SAME_KEY = "gbrainNotSame";
 
 const nodeCols = {
-  id: nodes.id, ownerId: nodes.ownerId, householdId: nodes.householdId, type: nodes.type, label: nodes.label,
+  id: nodes.id, ownerId: nodes.ownerId, householdId: nodes.householdId, type: nodes.type, kind: nodes.kind, label: nodes.label,
   aliases: nodes.aliases, summary: nodes.summary, props: nodes.props, startAt: nodes.startAt, endAt: nodes.endAt,
   timePrecision: nodes.timePrecision, visibility: nodes.visibility, sensitive: nodes.sensitive, mergedInto: nodes.mergedInto,
   createdAt: nodes.createdAt, updatedAt: nodes.updatedAt,
@@ -106,7 +106,7 @@ type EdgeRow = Pick<typeof edges.$inferSelect, keyof typeof edgeCols>;
 
 function toNode(r: NodeRow): GNode {
   return {
-    id: r.id, ownerId: r.ownerId, type: r.type, label: r.label, aliases: r.aliases ?? [], summary: r.summary,
+    id: r.id, ownerId: r.ownerId, type: r.type, kind: r.kind ?? null, label: r.label, aliases: r.aliases ?? [], summary: r.summary,
     props: r.props ?? {}, startAt: r.startAt, endAt: r.endAt, timePrecision: r.timePrecision, visibility: r.visibility,
     sensitive: r.sensitive, createdAt: r.createdAt, updatedAt: r.updatedAt,
   };
@@ -240,6 +240,7 @@ export async function upsertNode(v: Viewer, input: NodeInput, prov: ProvenanceIn
         patch.startAt = input.startAt; patch.endAt = input.endAt ?? null; patch.timePrecision = input.timePrecision ?? null;
       }
       if (input.sensitive && !cur.sensitive) patch.sensitive = true;
+      if (input.kind && !cur.kind) patch.kind = input.kind;
       const newProps = Object.fromEntries(Object.entries(input.props ?? {}).filter(([k]) => !(k in cur.props)));
       if (Object.keys(newProps).length) patch.props = { ...cur.props, ...newProps };
       let row = cur;
@@ -252,7 +253,7 @@ export async function upsertNode(v: Viewer, input: NodeInput, prov: ProvenanceIn
 
     const sensitive = !!input.sensitive;
     const [row] = await tx.insert(nodes).values({
-      householdId: v.householdId, ownerId: v.id, type: input.type, label,
+      householdId: v.householdId, ownerId: v.id, type: input.type, kind: input.kind ?? null, label,
       aliases: mergeAliases(label, input.aliases), summary: input.summary?.trim() || null, props: input.props ?? {},
       startAt: input.startAt ?? null, endAt: input.endAt ?? null, timePrecision: input.timePrecision ?? null,
       // Sensitive items default to parents-only; everything else to private.
@@ -299,6 +300,7 @@ export async function updateNode(v: Viewer, id: string, patch: Partial<NodeInput
     }
     if (patch.summary !== undefined) set.summary = patch.summary.trim() || null;
     if (patch.type !== undefined) set.type = patch.type;
+    if (patch.kind !== undefined) set.kind = patch.kind;
     if (patch.props !== undefined) set.props = { ...cur.props, ...patch.props };
     if (patch.startAt !== undefined) set.startAt = patch.startAt;
     if (patch.endAt !== undefined) set.endAt = patch.endAt;

@@ -11,6 +11,7 @@ const props = z.record(z.string(), z.unknown()).refine((p) => JSON.stringify(p).
 
 export const nodeCreateSchema = z.object({
   type: z.enum(nodeTypes),
+  kind: z.string().trim().max(80).nullable().optional(),
   label,
   aliases: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
   summary: z.string().trim().max(5000).optional(),
@@ -25,6 +26,7 @@ export const nodeCreateSchema = z.object({
 
 export const nodePatchSchema = z.object({
   type: z.enum(nodeTypes).optional(),
+  kind: z.string().trim().max(80).nullable().optional(),
   label: label.optional(),
   aliases: z.array(z.string().trim().min(1).max(200)).max(50).optional(),
   summary: z.string().trim().max(5000).optional(),

@@ -21,12 +21,17 @@
   --t-topic: #7a5aa6;
   --t-document: #5a6574;
   --t-source: #8a8f96;
+  /* People: circle identity (categorical, fixed order) and wellbeing status (always paired with a word). */
+  --c-family: #2a78d6; --c-close: #eb6834; --c-school: #1baf7a; --c-care: #eda100; --c-social: #e87ba4; --c-work: #008300; --c-other: #8a8f96;
+  --wb-good: #0ca30c; --wb-neutral: #8a8f96; --wb-warn: #d03b3b; --wb-none: var(--line);
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #11161c; --surface: #18202a; --surface-2: #202a35; --fg: #e4e9ee; --muted: #9aa6b2; --line: #33404d;
     --accent: #7cc4ad; --accent-fg: #0d1a16; --accent-tint: #1d3530; --warn: #e0a55a; --danger: #ef7a6f; --inferred: #ad9ee0;
     --t-person: #7cc4ad; --t-place: #7fb0e3; --t-event: #e4a35e; --t-topic: #b59be0; --t-document: #9aa6b2; --t-source: #8a8f96;
+    --c-family: #3987e5; --c-close: #d95926; --c-school: #199e70; --c-care: #c98500; --c-social: #d55181; --c-work: #008300; --c-other: #8a8f96;
+    --wb-neutral: #9aa6b2;
     color-scheme: dark;
   }
 }

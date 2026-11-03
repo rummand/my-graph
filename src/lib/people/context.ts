@@ -19,7 +19,10 @@ export function personLine(p: PersonSummary): string {
   if (last) {
     const trend = p.wellbeing.length >= 2 ? p.wellbeing[p.wellbeing.length - 2].score : null;
     const dir = trend === null ? "" : last.score > trend ? ", up" : last.score < trend ? ", down" : ", steady";
-    parts.push(`Wellbeing: ${WELLBEING_WORDS[last.score] ?? last.score} (${last.score}/5, ${fmt(last.at)}${dir})${last.note ? `: "${last.note.slice(0, 160)}"` : ""}`);
+    // A note on a check-in marked sensitive stays out: this text goes to the assistant and the brief, which only
+    // switch to local models for items flagged sensitive.
+    const note = last.note && !last.sensitive ? `: "${last.note.slice(0, 160)}"` : "";
+    parts.push(`Wellbeing: ${WELLBEING_WORDS[last.score] ?? last.score} (${last.score}/5, ${fmt(last.at)}${dir})${note}`);
   }
   if (p.lastContactAt) parts.push(`Last in touch: ${fmt(p.lastContactAt)}`);
   if (p.nextBirthday && p.nextBirthday.daysUntil <= 60) {

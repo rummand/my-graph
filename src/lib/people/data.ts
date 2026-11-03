@@ -93,6 +93,7 @@ async function buildPeople(v: Viewer, opts: { centerId?: string | null; now?: Da
     (async () => {
       const ranked = db.select({
         personNodeId: observations.personNodeId, score: observations.score, at: observations.at, note: observations.note,
+        sensitive: observations.sensitive,
         rn: sql<number>`row_number() over (partition by ${observations.personNodeId} order by ${observations.at} desc)`.as("rn"),
       }).from(observations).where(and(inArray(observations.personNodeId, ids), eq(observations.kind, "wellbeing"),
         sql`${observations.score} is not null`, visibleWhere(v, observations))).as("ranked");
@@ -120,10 +121,10 @@ async function buildPeople(v: Viewer, opts: { centerId?: string | null; now?: Da
   const relToViewer = viewerNodeId && viewerNodeId !== centerId && nodesById.has(viewerNodeId)
     ? relationsToCenter(meta.model, viewerNodeId, pathNodes, liveEdges, { centerIsViewer: true }) : rel;
 
-  const wb = new Map<string, { score: number; at: string; note: string | null }[]>();
+  const wb = new Map<string, { score: number; at: string; note: string | null; sensitive: boolean }[]>();
   for (const r of wbRows) {
     const list = wb.get(r.personNodeId) ?? wb.set(r.personNodeId, []).get(r.personNodeId)!;
-    list.push({ score: r.score!, at: new Date(r.at).toISOString(), note: r.note });
+    list.push({ score: r.score!, at: new Date(r.at).toISOString(), note: r.note, sensitive: r.sensitive });
   }
   const contacts = new Map(contactRows.map((c) => [c.personNodeId, c]));
   const lastEvent = new Map<string, Date>();

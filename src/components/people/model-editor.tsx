@@ -11,7 +11,6 @@ import {
 import { CIRCLE_VAR, normaliseCircle } from "@/lib/people/circles";
 import { Avatar } from "./avatar";
 import { api, fieldErrors, type FieldErrors } from "./format";
-import { PeopleTokens } from "./tokens";
 
 type Tab = "kinds" | "relations" | "attributes";
 const TYPES = ["person", "place", "event", "topic"] as const;
@@ -44,7 +43,6 @@ export function ModelEditor({ initial, canEdit }: { initial: MetaModel; canEdit:
   const tabs: { key: Tab; label: string }[] = [{ key: "kinds", label: "Kinds" }, { key: "relations", label: "Relations" }, { key: "attributes", label: "Details" }];
   return (
     <div className="people-scope space-y-4">
-      <PeopleTokens />
       {!canEdit && <p className="rounded-md border border-line bg-surface px-3 py-2 text-sm text-muted">You can look around here. Only parents can change kinds, relations and details.</p>}
       <div role="tablist" aria-label="Meta model" className="flex gap-1 border-b border-line">
         {tabs.map((t) => (

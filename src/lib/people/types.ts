@@ -7,7 +7,7 @@ export type { AttentionItem } from "./attention";
 export type Visibility = "private" | "parents" | "household";
 export type ObservationKind = "wellbeing" | "health" | "milestone" | "contact" | "note";
 
-export type WellbeingPoint = { score: number; at: string; note: string | null };
+export type WellbeingPoint = { score: number; at: string; note: string | null; sensitive?: boolean };
 
 export type PersonSummary = {
   id: string;

@@ -19,6 +19,7 @@
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.3",
     "@tiptap/extension-link": "^3.32.2",
+    "@tiptap/extension-list": "^3.32.2",
     "@tiptap/extension-mention": "^3.32.2",
     "@tiptap/extension-placeholder": "^3.32.2",
     "@tiptap/pm": "^3.32.2",
