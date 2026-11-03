@@ -14,6 +14,7 @@ const securityHeaders = [
 const config: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  devIndicators: false,
   serverExternalPackages: ["tesseract.js", "unpdf", "mammoth", "postgres"],
   experimental: { serverActions: { bodySizeLimit: "50mb" }, webpackMemoryOptimizations: true },
   async headers() {

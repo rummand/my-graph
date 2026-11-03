@@ -1,37 +1,47 @@
 @import "tailwindcss";
 
-/* Design tokens. Use these via the Tailwind theme names below (bg-surface, text-muted, border-line, text-accent …). */
+/* Design tokens: see DESIGN.md. Use the Tailwind names (bg-surface, text-muted, border-line, text-accent …). */
 :root {
-  --bg: #f6f7f9;
+  --bg: #f1f3ef;
   --surface: #ffffff;
-  --surface-2: #eef1f4;
-  --fg: #16202c;
-  --muted: #5a6574;
-  --line: #d5dbe2;
-  --accent: #2f6f5e;
+  --surface-2: #e7eae5;
+  --fg: #17201c;
+  --muted: #5b6660;
+  --line: #dce0da;
+  --accent: #2f4bb0;
   --accent-fg: #ffffff;
-  --accent-tint: #e3efeb;
-  --warn: #9a5b12;
-  --danger: #b4352b;
-  --inferred: #6b5aa6;
+  --accent-tint: #e6eafa;
+  --warn: #9a5a00;
+  --warn-tint: #fbefd9;
+  --danger: #b03a2e;
+  --danger-tint: #f9e3df;
+  --inferred: #7a4fa0;
+  --inferred-tint: #f1e8f8;
+  --float-shadow: 0 1px 2px rgb(23 32 28 / 0.06), 0 12px 32px -8px rgb(23 32 28 / 0.18);
   /* One colour per node type, used across graph, timeline and chips. */
-  --t-person: #2f6f5e;
-  --t-place: #3a6ea5;
-  --t-event: #b46a1c;
-  --t-topic: #7a5aa6;
-  --t-document: #5a6574;
-  --t-source: #8a8f96;
+  --t-person: #2f7a63;
+  --t-place: #2f6fa8;
+  --t-event: #b0631a;
+  --t-topic: #7a4fa0;
+  --t-document: #5b6660;
+  --t-source: #858d88;
   /* People: circle identity (categorical, fixed order) and wellbeing status (always paired with a word). */
-  --c-family: #2a78d6; --c-close: #eb6834; --c-school: #1baf7a; --c-care: #eda100; --c-social: #e87ba4; --c-work: #008300; --c-other: #8a8f96;
-  --wb-good: #0ca30c; --wb-neutral: #8a8f96; --wb-warn: #d03b3b; --wb-none: var(--line);
+  --c-family: #2a78d6; --c-close: #e0622e; --c-school: #1a9e70; --c-care: #d59200; --c-social: #d8689a; --c-work: #3f7d1e; --c-other: #858d88;
+  --wb-good: #2a8a3e; --wb-neutral: #858d88; --wb-warn: #c23b3b; --wb-none: var(--line);
+  /* Person tints are computed from these: hsl(var(--h) var(--person-s) var(--person-l)). */
+  --person-s: 62%; --person-l: 42%; --person-tint-s: 70%; --person-tint-l: 92%;
+  color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #11161c; --surface: #18202a; --surface-2: #202a35; --fg: #e4e9ee; --muted: #9aa6b2; --line: #33404d;
-    --accent: #7cc4ad; --accent-fg: #0d1a16; --accent-tint: #1d3530; --warn: #e0a55a; --danger: #ef7a6f; --inferred: #ad9ee0;
-    --t-person: #7cc4ad; --t-place: #7fb0e3; --t-event: #e4a35e; --t-topic: #b59be0; --t-document: #9aa6b2; --t-source: #8a8f96;
-    --c-family: #3987e5; --c-close: #d95926; --c-school: #199e70; --c-care: #c98500; --c-social: #d55181; --c-work: #008300; --c-other: #8a8f96;
-    --wb-neutral: #9aa6b2;
+    --bg: #121513; --surface: #1a1e1b; --surface-2: #232824; --fg: #e8ece9; --muted: #99a39d; --line: #2c322e;
+    --accent: #8fa3f0; --accent-fg: #101523; --accent-tint: #1f2742;
+    --warn: #e2a64f; --warn-tint: #33280f; --danger: #ee8073; --danger-tint: #3a1f1b; --inferred: #c4a2e6; --inferred-tint: #2c2238;
+    --float-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 16px 40px -8px rgb(0 0 0 / 0.6);
+    --t-person: #74c7a8; --t-place: #84b4e6; --t-event: #e3a45f; --t-topic: #c4a2e6; --t-document: #99a39d; --t-source: #858d88;
+    --c-family: #4f95e8; --c-close: #e5784a; --c-school: #36b487; --c-care: #dca52d; --c-social: #e086ad; --c-work: #6aa846; --c-other: #858d88;
+    --wb-good: #5cbf6e; --wb-neutral: #99a39d; --wb-warn: #ee7a73;
+    --person-s: 60%; --person-l: 68%; --person-tint-s: 30%; --person-tint-l: 22%;
     color-scheme: dark;
   }
 }
@@ -47,12 +57,24 @@
   --color-accent-fg: var(--accent-fg);
   --color-accent-tint: var(--accent-tint);
   --color-warn: var(--warn);
+  --color-warn-tint: var(--warn-tint);
   --color-danger: var(--danger);
+  --color-danger-tint: var(--danger-tint);
   --color-inferred: var(--inferred);
-  --font-sans: "Inter Tight", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --color-inferred-tint: var(--inferred-tint);
+  --font-sans: var(--font-schibsted), ui-sans-serif, system-ui, sans-serif;
+  --font-read: var(--font-literata), Georgia, serif;
+  --font-mono: ui-monospace, Menlo, monospace;
+  --shadow-float: var(--float-shadow);
 }
 
 html, body { height: 100%; }
-body { background: var(--bg); color: var(--fg); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-sans); font-size: 15px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; font-feature-settings: "ss01";
+}
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+::selection { background: var(--accent-tint); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
