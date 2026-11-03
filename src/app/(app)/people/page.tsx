@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GraphWelcome } from "@/components/graphs/graph-welcome";
 import { PeopleOverview } from "@/components/people/people-overview";
 import { isParent, requireUser } from "@/lib/auth";
 import { peopleOverview } from "@/lib/people";
@@ -13,6 +14,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
   const data = await peopleOverview(v, { centerId: valid });
   return (
     <div className="mx-auto max-w-6xl">
+      <GraphWelcome viewer={v} />
       <PeopleOverview initial={data} canManageModel={isParent(v)} />
     </div>
   );

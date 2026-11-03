@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { z } from "zod";
+import { GraphWelcome } from "@/components/graphs/graph-welcome";
 import { PageHeader } from "@/components/ui";
 import { LibraryView, type LibraryFilters } from "@/components/library/library-view";
 import { requireUser } from "@/lib/auth";
@@ -23,6 +24,7 @@ export default async function LibraryPage({ searchParams }: { searchParams: Prom
   return (
     <div>
       <PageHeader title="Library" lead="Every letter, scan, photo and recording the family has added, each one read for the people and dates in it." />
+      <GraphWelcome viewer={v} />
       <LibraryView initial={initial} initialFilters={filters} />
     </div>
   );

@@ -1,47 +1,23 @@
 import Link from "next/link";
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { households } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import { Avatar } from "@/components/ui";
 import { NavLinks, MobileNav } from "./nav-links";
 import { AskBox } from "./ask-box";
 import { MotionRoot } from "./motion-root";
-import { GraphSwitcher, type SwitcherGraph } from "./graph-switcher";
-import { listGraphs } from "@/lib/graphs";
+import { Mark } from "./mark";
+import { GraphSwitcher } from "./graphs/graph-switcher";
+import { loadGraphViews } from "./graphs/data";
 
-/** The My Graph mark: three people joined, drawn once here. */
-export function Mark({ size = 28 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 28 28" aria-hidden className="shrink-0">
-      <rect width="28" height="28" rx="8" className="fill-fg" />
-      <path d="M9 18.5 14 9l5 9.5" fill="none" className="stroke-bg" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="14" cy="9" r="2.6" className="fill-accent stroke-fg" strokeWidth="1.2" />
-      <circle cx="9" cy="18.5" r="2.6" className="fill-bg" />
-      <circle cx="19" cy="18.5" r="2.6" className="fill-bg" />
-    </svg>
-  );
-}
+export { Mark };
 
 export async function Shell({ viewer, children }: { viewer: Viewer; children: React.ReactNode }) {
-  const [home] = await db.select({ name: households.name }).from(households).where(eq(households.id, viewer.householdId)).limit(1);
-  const household = home?.name ?? "Our family";
-  const graphs: SwitcherGraph[] = (await listGraphs(viewer).catch(() => [])).map((g) => ({
-    id: g.id, name: g.name, kind: g.kind, color: g.color, myRole: g.myRole, memberCount: g.memberCount, isFamily: g.isFamily,
-  }));
+  const graphs = await loadGraphViews(viewer).catch((e) => { console.error("[shell] graphs", e); return []; });
   return (
     <MotionRoot>
       <div className="min-h-full lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
-        <aside className="hidden lg:sticky lg:top-0 lg:flex lg:h-screen lg:flex-col lg:px-3 lg:py-4">
-          <Link href="/" className="flex items-center gap-2.5 rounded-md px-2 py-1.5">
-            <Mark />
-            <span className="min-w-0 leading-tight">
-              <span className="block font-semibold">My Graph</span>
-              <span className="block truncate text-xs text-muted">{household}</span>
-            </span>
-          </Link>
-          <div className="mt-3 px-1"><GraphSwitcher graphs={graphs} currentId={viewer.graphId} /></div>
-          <div className="mt-3 px-1"><AskBox /></div>
+        <aside className="hidden lg:sticky lg:top-0 lg:z-40 lg:flex lg:h-screen lg:flex-col lg:px-3 lg:py-4">
+          <GraphSwitcher graphs={graphs} youId={viewer.id} />
+          <div className="mt-4 px-1"><AskBox /></div>
           <div className="mt-4 flex-1 overflow-y-auto"><NavLinks role={viewer.role} /></div>
           <div className="flex items-center gap-2.5 rounded-md px-2 py-2">
             <Avatar id={viewer.personNodeId ?? viewer.id} name={viewer.name} size={30} />
@@ -58,7 +34,7 @@ export async function Shell({ viewer, children }: { viewer: Viewer; children: Re
         <header className="sticky top-0 z-30 flex items-center gap-3 bg-bg/90 px-4 py-2.5 backdrop-blur lg:hidden">
           <Link href="/" aria-label="Today"><Mark size={26} /></Link>
           <div className="min-w-0 flex-1"><AskBox compact /></div>
-          <div className="w-[132px] shrink-0"><GraphSwitcher graphs={graphs} currentId={viewer.graphId} compact /></div>
+          <div className="shrink-0"><GraphSwitcher graphs={graphs} youId={viewer.id} compact /></div>
           <Avatar id={viewer.personNodeId ?? viewer.id} name={viewer.name} size={28} />
         </header>
 

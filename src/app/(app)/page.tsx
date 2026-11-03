@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
 import { cachedBriefFor, loadToday } from "@/lib/briefs";
 import { ageLabel, formatLongDate, greetingFor } from "@/lib/briefs/dates";
+import { GraphWelcome } from "@/components/graphs/graph-welcome";
 import { NeedsAttention } from "@/components/today/attention";
 import { TodayBoard } from "@/components/today/board";
 import { BriefCard } from "@/components/today/brief-card";
@@ -43,6 +44,8 @@ export default async function TodayPage() {
         </div>
         <QuickActions />
       </header>
+
+      <GraphWelcome viewer={viewer} full />
 
       <TodayBoard
         tz={tz}
