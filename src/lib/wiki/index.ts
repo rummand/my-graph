@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { edges, nodes, provenance, sources, users, wikiPages, wikiRevisions } from "@/db/schema";
 import { audit, type Viewer } from "@/lib/auth";
 import { readableNodeIds } from "@/lib/gbrain";
+import { scopeOf } from "@/lib/graphs/pure";
 import {
   canChangeVisibility, canDeletePage, canEditPage, canReadPage, pagePermissions, pageReadSql,
   type PagePermissions, type Visibility,
@@ -65,7 +66,7 @@ function safeAudit(v: Viewer, action: string, target: { type: string; id: string
 const likeEscape = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 const pageCols = {
-  id: wikiPages.id, householdId: wikiPages.householdId, ownerId: wikiPages.ownerId, slug: wikiPages.slug, title: wikiPages.title,
+  id: wikiPages.id, householdId: wikiPages.householdId, graphId: wikiPages.graphId, ownerId: wikiPages.ownerId, slug: wikiPages.slug, title: wikiPages.title,
   content: wikiPages.content, contentText: wikiPages.contentText, nodeId: wikiPages.nodeId, sourceId: wikiPages.sourceId,
   visibility: wikiPages.visibility, version: wikiPages.version, createdAt: wikiPages.createdAt, updatedAt: wikiPages.updatedAt,
   ownerName: owner.name, updatedByName: editor.name,
@@ -82,17 +83,18 @@ function toPage(v: Viewer, r: Row): WikiPage {
   };
 }
 
-async function loadRow(householdId: string, slug: string) {
+/** Slugs are unique per graph: a page is looked up in the viewer's current graph only. */
+async function loadRow(graphId: string, slug: string) {
   const [r] = await db.select(pageCols).from(wikiPages)
     .leftJoin(owner, eq(owner.id, wikiPages.ownerId))
     .leftJoin(editor, eq(editor.id, wikiPages.updatedBy))
-    .where(and(eq(wikiPages.householdId, householdId), eq(wikiPages.slug, slug))).limit(1);
+    .where(and(eq(wikiPages.graphId, graphId), eq(wikiPages.slug, slug))).limit(1);
   return r ?? null;
 }
 
 /** The page if the viewer may read it; a 404 otherwise (we don't reveal that a hidden page exists). */
 async function readablePage(v: Viewer, slug: string) {
-  const r = await loadRow(v.householdId, slug);
+  const r = await loadRow(v.graphId, slug);
   if (!r || !canReadPage(v, r)) throw new WikiError(404, "This page doesn't exist, or it hasn't been shared with you.");
   return r;
 }
@@ -140,7 +142,7 @@ function snippet(text: string, q?: string): string {
 }
 
 export async function getPage(v: Viewer, slug: string): Promise<WikiPage | null> {
-  const r = await loadRow(v.householdId, slug);
+  const r = await loadRow(v.graphId, slug);
   if (!r || !canReadPage(v, r)) return null;
   return toPage(v, r);
 }
@@ -220,7 +222,8 @@ export async function pagesByPerson(v: Viewer, opts: { people?: number; perPerso
 /* ── Writes ────────────────────────────────────────────────────────────────────────────────────────────── */
 
 export async function createPage(v: Viewer, input: { title: string; visibility?: Visibility; content?: unknown }): Promise<WikiPage> {
-  if (v.role === "guest") throw new WikiError(403, "Guests can't create wiki pages.");
+  if (v.role === "guest" && scopeOf(v).family) throw new WikiError(403, "Guests can't create wiki pages.");
+  if (!scopeOf(v).canWrite) throw new WikiError(403, "You can look at this graph but not add pages to it.");
   const title = cleanTitle(input.title);
   const content = input.content === undefined ? EMPTY_DOC : sanitizeDoc(input.content);
   const contentText = docToText(content);
@@ -229,12 +232,12 @@ export async function createPage(v: Viewer, input: { title: string; visibility?:
   let created: { id: string; slug: string } | null = null;
   for (let attempt = 0; attempt < 4 && !created; attempt++) {
     const taken = await db.select({ slug: wikiPages.slug }).from(wikiPages)
-      .where(and(eq(wikiPages.householdId, v.householdId), or(eq(wikiPages.slug, base), like(wikiPages.slug, `${likeEscape(base)}-%`))));
+      .where(and(eq(wikiPages.graphId, v.graphId), or(eq(wikiPages.slug, base), like(wikiPages.slug, `${likeEscape(base)}-%`))));
     const slug = uniqueSlug(base, taken.map((t) => t.slug));
     try {
       created = await db.transaction(async (tx) => {
         const [p] = await tx.insert(wikiPages).values({
-          householdId: v.householdId, ownerId: v.id, slug, title, content, contentText,
+          householdId: v.graphHouseholdId, graphId: v.graphId, ownerId: v.id, slug, title, content, contentText,
           visibility: input.visibility ?? "private", version: 1, updatedBy: v.id,
         }).returning({ id: wikiPages.id, slug: wikiPages.slug });
         await tx.insert(wikiRevisions).values({
@@ -243,7 +246,7 @@ export async function createPage(v: Viewer, input: { title: string; visibility?:
         return p;
       });
     } catch (e) {
-      if ((e as { code?: string })?.code === "23505" || /wiki_owner_slug_idx/.test(String((e as Error)?.message))) continue; // slug race
+      if ((e as { code?: string })?.code === "23505" || /wiki_graph_slug_idx/.test(String((e as Error)?.message))) continue; // slug race
       throw e;
     }
   }

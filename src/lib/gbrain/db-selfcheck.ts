@@ -4,6 +4,7 @@ import { db, sql } from "@/db";
 import { households, users, nodes, shares, sources, chunks } from "@/db/schema";
 import * as g from "@/lib/gbrain";
 import type { Viewer } from "@/lib/auth";
+import { viewerFor } from "@/lib/graphs/store";
 import { eq } from "drizzle-orm";
 
 const assert = (c: unknown, m: string) => { if (!c) { console.error("FAIL", m); process.exitCode = 1; } else console.log("ok  ", m); };
@@ -11,7 +12,7 @@ const [hh] = await db.insert(households).values({ name: "gbrain-selfcheck" }).re
 const [hh2] = await db.insert(households).values({ name: "gbrain-selfcheck-2" }).returning();
 const mk = async (role: any, name: string, h = hh.id, exp: Date | null = null) => {
   const [u] = await db.insert(users).values({ householdId: h, email: `${name}-${Date.now()}@x.test`, name, role, accessExpiresAt: exp }).returning();
-  return { id: u.id, householdId: h, name, email: u.email, role, personNodeId: null } as Viewer;
+  return (await viewerFor({ id: u.id, householdId: h, name, email: u.email, role, personNodeId: null })) as Viewer;
 };
 try {
   const owner = await mk("owner", "Olivia"), parent = await mk("parent", "Peter"), child = await mk("child", "Carl");
@@ -92,13 +93,14 @@ try {
   assert((await g.explain(owner, { type: "edge", id: fa.id })).length >= 4, "provenance copied to folded fact");
 
   // search
-  const [src] = await db.insert(sources).values({ householdId: hh.id, ownerId: owner.id, kind: "manual", title: "Note", visibility: "household" }).returning();
-  await db.insert(chunks).values({ sourceId: src.id, ownerId: owner.id, idx: 0, text: "Farfar kommer på besøg i skolen på fredag" });
+  const [src] = await db.insert(sources).values({ householdId: hh.id, graphId: owner.graphId, ownerId: owner.id, kind: "manual", title: "Note", visibility: "household" }).returning();
+  await db.insert(chunks).values({ sourceId: src.id, graphId: owner.graphId, ownerId: owner.id, idx: 0, text: "Farfar kommer på besøg i skolen på fredag" });
   const hits = await g.search(owner, "farf");
   assert(hits.some((h) => h.kind === "node" && h.node?.id === a.node.id) && hits.some((h) => h.kind === "chunk"), "search finds node by alias prefix and chunk");
   const hitsBes = await g.search(child, "besøg");
   assert(hitsBes.some((h) => h.kind === "chunk"), "danish word search in chunks for child (household source)");
-  assert((await g.search(guest, "besøg")).length === 0, "guest gets no chunks");
+  const guestHits = await g.search(guest, "besøg");
+  assert(!guestHits.some((h) => h.kind === "chunk"), "guest gets no chunks");
   assert((await g.search(owner, "skolen fredag zzzz")).length > 0, "OR fallback");
 
   // timeline

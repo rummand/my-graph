@@ -10,6 +10,7 @@ import { db } from "@/db";
 import { nodes, reminders, sources, wikiPages, wikiRevisions } from "@/db/schema";
 import { audit, type Viewer } from "@/lib/auth";
 import * as gbrain from "@/lib/gbrain";
+import { scopeOf } from "@/lib/graphs/pure";
 import { describeProposal, parseProposals, type Proposal } from "./proposals";
 import { decisionKey, foldState } from "./state";
 import { addState, conversationRows, ownConversation } from "./store";
@@ -40,7 +41,7 @@ async function findProposal(v: Viewer, conversationId: string, messageId: string
 /** The chat message as a source row, so facts written from it carry provenance. */
 async function chatSource(v: Viewer, f: Awaited<ReturnType<typeof findProposal>>): Promise<string> {
   const [row] = await db.insert(sources).values({
-    householdId: v.householdId, ownerId: v.id, kind: "chat", title: `Chat: ${f.conv.title}`.slice(0, 250), mime: "text/plain",
+    householdId: v.graphHouseholdId, graphId: v.graphId, ownerId: v.id, kind: "chat", title: `Chat: ${f.conv.title}`.slice(0, 250), mime: "text/plain",
     textContent: `Question: ${f.question}\n\nAnswer: ${f.answerText}`,
     meta: { conversationId: f.conv.id, messageId: f.msg.id, model: f.msg.model, route: f.msg.route },
     status: "ready", visibility: "private", sensitive: f.sensitive,
@@ -88,14 +89,14 @@ async function applyReminder(v: Viewer, f: Awaited<ReturnType<typeof findProposa
     else {
       // Household members' person nodes may belong to someone else's brain; match by label in the household.
       const [row] = await db.select({ id: nodes.id }).from(nodes)
-        .where(and(eq(nodes.householdId, v.householdId), eq(nodes.type, "person"), isNull(nodes.mergedInto), ilike(nodes.label, p.aboutPerson.replace(/[%_\\]/g, "\\$&"))))
+        .where(and(eq(nodes.graphId, v.graphId), eq(nodes.type, "person"), isNull(nodes.mergedInto), ilike(nodes.label, p.aboutPerson.replace(/[%_\\]/g, "\\$&"))))
         .limit(1);
       if (row && (await gbrain.readableNodeIds(v, [row.id])).has(row.id)) aboutNodeId = row.id;
     }
   }
   const sourceId = await chatSource(v, f);
   const [row] = await db.insert(reminders).values({
-    householdId: v.householdId, ownerId: v.id, aboutNodeId, sourceId, title: p.title, detail: p.detail,
+    householdId: v.graphHouseholdId, graphId: v.graphId, ownerId: v.id, aboutNodeId, sourceId, title: p.title, detail: p.detail,
     dueAt: due, createdByKind: "assistant",
   }).returning({ id: reminders.id });
   void audit(v, "reminder.create", { type: "reminder", id: row.id }, { by: "assistant" }).catch(() => {});
@@ -108,12 +109,12 @@ async function applyWiki(v: Viewer, p: Extract<Proposal, { type: "propose_wiki_n
   const id = await db.transaction(async (tx) => {
     let slug = base;
     for (let i = 2; i < 50; i++) {
-      const [taken] = await tx.select({ id: wikiPages.id }).from(wikiPages).where(and(eq(wikiPages.householdId, v.householdId), eq(wikiPages.slug, slug))).limit(1);
+      const [taken] = await tx.select({ id: wikiPages.id }).from(wikiPages).where(and(eq(wikiPages.graphId, v.graphId), eq(wikiPages.slug, slug))).limit(1);
       if (!taken) break;
       slug = `${base}-${i}`;
     }
     const [page] = await tx.insert(wikiPages).values({
-      householdId: v.householdId, ownerId: v.id, slug, title: p.title, content, contentText: p.text, visibility: "private", version: 1, updatedBy: v.id,
+      householdId: v.graphHouseholdId, graphId: v.graphId, ownerId: v.id, slug, title: p.title, content, contentText: p.text, visibility: "private", version: 1, updatedBy: v.id,
     }).returning({ id: wikiPages.id, slug: wikiPages.slug });
     await tx.insert(wikiRevisions).values({
       pageId: page.id, version: 1, title: p.title, content, contentText: p.text, authorId: v.id, authorKind: "assistant",
@@ -144,7 +145,7 @@ async function decide(v: Viewer, input: { conversationId: string; messageId: str
     await addState(f.conv.id, { type: "proposal", messageId: f.msg.id, n: input.n, status: "dismissed" });
     return { status: "dismissed", result: null };
   }
-  if (v.role === "guest") throw new ProposalError(403, "Guests can't add to the family brain.");
+  if (!scopeOf(v).canWrite) throw new ProposalError(403, v.role === "guest" ? "Guests can't add to the family brain." : "You can look at this graph but not add to it.");
   let result: ProposalResult;
   try {
     const p = f.proposal;

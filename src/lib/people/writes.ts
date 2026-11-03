@@ -14,6 +14,10 @@ import { findRelation, getMeta, type Meta } from "@/lib/meta";
 import type { PropError } from "@/lib/meta/types";
 import { visibleNode, canEditNode } from "./data";
 import type { ObservationKind, Visibility } from "./types";
+import { scopeOf } from "@/lib/graphs/pure";
+
+const readOnlyMessage = (v: Viewer, what: string) =>
+  v.role === "guest" && scopeOf(v).family ? `Guests can't ${what}` : `You can look at this graph but can't ${what} in it`;
 
 export class PeopleError extends Error {
   constructor(public status: number, message: string, public details?: unknown) { super(message); }
@@ -43,12 +47,12 @@ async function safeAudit(v: Viewer, action: string, target: { type: string; id: 
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 async function writeProv(tx: Tx | typeof db, v: Viewer, subjectType: "node" | "edge", subjectId: string, note?: string) {
-  await tx.insert(provenance).values({ householdId: v.householdId, subjectType, subjectId, activity: "manual_edit", agentType: "user", agentId: v.id, confidence: 1, note });
+  await tx.insert(provenance).values({ householdId: v.graphHouseholdId, graphId: v.graphId, subjectType, subjectId, activity: "manual_edit", agentType: "user", agentId: v.id, confidence: 1, note });
 }
 
 /** Set nodes.kind directly (gbrain has no kind field yet), with provenance. No-op when unchanged. */
 async function setKind(v: Viewer, id: string, kind: string | null, opts: { onlyIfEmpty?: boolean } = {}) {
-  const [cur] = await db.select({ kind: nodes.kind }).from(nodes).where(eq(nodes.id, id));
+  const [cur] = await db.select({ kind: nodes.kind }).from(nodes).where(and(eq(nodes.id, id), eq(nodes.graphId, v.graphId)));
   if (!cur || cur.kind === kind || (opts.onlyIfEmpty && cur.kind)) return;
   await db.transaction(async (tx) => {
     await tx.update(nodes).set({ kind, updatedAt: new Date() }).where(eq(nodes.id, id));
@@ -78,7 +82,7 @@ export type CreatePersonInput = {
 async function insertPersonDirect(v: Viewer, input: { label: string; props: Record<string, unknown>; visibility: Visibility; sensitive: boolean; kind: string | null }) {
   return db.transaction(async (tx) => {
     const [n] = await tx.insert(nodes).values({
-      householdId: v.householdId, ownerId: v.id, type: "person", kind: input.kind, label: input.label, props: input.props,
+      householdId: v.graphHouseholdId, graphId: v.graphId, ownerId: v.id, type: "person", kind: input.kind, label: input.label, props: input.props,
       visibility: input.visibility, sensitive: input.sensitive,
     }).returning();
     await writeProv(tx, v, "node", n.id, "Added on the People page");
@@ -87,7 +91,7 @@ async function insertPersonDirect(v: Viewer, input: { label: string; props: Reco
 }
 
 export async function createPerson(v: Viewer, input: CreatePersonInput): Promise<{ id: string; created: boolean; edgeId: string | null }> {
-  if (v.role === "guest") throw new PeopleError(403, "Guests can't add people");
+  if (!scopeOf(v).canWrite) throw new PeopleError(403, readOnlyMessage(v, "add people"));
   const meta = await getMeta(v);
   const kind = input.kind ? meta.kind("person", input.kind) : undefined;
   if (input.kind && (!kind || kind.hidden)) throw new PeopleError(422, "Unknown kind of person", { fields: [{ key: "kind", message: "Pick a kind from the list" }] });
@@ -138,7 +142,7 @@ export async function updatePerson(v: Viewer, id: string, patch: UpdatePersonInp
   let props: Record<string, unknown> | undefined;
   if (patch.props) {
     // Children can't touch sensitive attributes they can't see.
-    if (v.role === "child" && node.ownerId !== v.id) {
+    if (scopeOf(v).role === "child" && node.ownerId !== v.id) {
       const sens = new Set(meta.attributesFor("person", kind).filter((a) => a.sensitive).map((a) => a.key));
       for (const k of Object.keys(patch.props)) if (sens.has(k)) throw new PeopleError(403, "You can't change that detail");
     }
@@ -177,14 +181,14 @@ async function addEdgeSafe(v: Viewer, e: { fromId: string; toId: string; relatio
     async () => {
       const sameDir = and(eq(edges.fromId, e.fromId), eq(edges.toId, e.toId));
       const reverse = and(eq(edges.fromId, e.toId), eq(edges.toId, e.fromId));
-      const [existing] = await db.select().from(edges).where(and(eq(edges.householdId, v.householdId), eq(edges.relation, e.relation), symmetric ? or(sameDir, reverse) : sameDir));
+      const [existing] = await db.select().from(edges).where(and(eq(edges.graphId, v.graphId), eq(edges.relation, e.relation), symmetric ? or(sameDir, reverse) : sameDir));
       return db.transaction(async (tx) => {
         if (existing && existing.status !== "rejected" && existing.status !== "superseded") {
           await tx.update(edges).set({ status: "confirmed", confidence: 1 }).where(eq(edges.id, existing.id));
           await writeProv(tx, v, "edge", existing.id, "Confirmed on the People page");
           return existing.id;
         }
-        const [row] = await tx.insert(edges).values({ householdId: v.householdId, ownerId: v.id, ...e, status: "confirmed", confidence: 1 }).returning();
+        const [row] = await tx.insert(edges).values({ householdId: v.graphHouseholdId, graphId: v.graphId, ownerId: v.id, ...e, status: "confirmed", confidence: 1 }).returning();
         await writeProv(tx, v, "edge", row.id, "Added on the People page");
         return row.id;
       });
@@ -201,7 +205,7 @@ export type AddRelationInput = {
 };
 
 export async function addRelation(v: Viewer, personId: string, input: AddRelationInput): Promise<{ edgeId: string; otherId: string }> {
-  if (v.role === "guest") throw new PeopleError(403, "Guests can't add relationships");
+  if (!scopeOf(v).canWrite) throw new PeopleError(403, readOnlyMessage(v, "add relationships"));
   const person = await visibleNode(v, personId);
   if (!person || person.type !== "person") throw new PeopleError(404, "Person not found");
   const meta = await getMeta(v);
@@ -247,7 +251,7 @@ export function defaultObservationVisibility(kind: ObservationKind, personVisibi
 }
 
 export async function addObservation(v: Viewer, personId: string, input: ObservationInput) {
-  if (v.role === "guest") throw new PeopleError(403, "Guests can't log check-ins");
+  if (!scopeOf(v).canWrite) throw new PeopleError(403, readOnlyMessage(v, "log check-ins"));
   const person = await visibleNode(v, personId);
   if (!person || person.type !== "person") throw new PeopleError(404, "Person not found");
   if (input.kind === "wellbeing" && (input.score == null || input.score < 1 || input.score > 5)) throw new PeopleError(422, "Pick how they are, from 1 to 5");
@@ -256,7 +260,7 @@ export async function addObservation(v: Viewer, personId: string, input: Observa
   // Never visible to more people than the person themself.
   const visibility = input.visibility ? narrowest(input.visibility, person.visibility) : defaultObservationVisibility(input.kind, person.visibility);
   const [row] = await db.insert(observations).values({
-    householdId: v.householdId, ownerId: v.id, personNodeId: personId, kind: input.kind,
+    householdId: v.graphHouseholdId, graphId: v.graphId, ownerId: v.id, personNodeId: personId, kind: input.kind,
     score: input.kind === "wellbeing" ? input.score! : null, note: input.note?.trim() || null,
     tags: [...new Set((input.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean))].slice(0, 12),
     at, authorKind: "user", visibility, sensitive: input.sensitive ?? (input.kind === "health" || person.sensitive),

@@ -19,7 +19,8 @@ export type MuxRoute = "auto" | "fast" | "agent" | "smart" | "vision" | "multili
 export type MuxMessage = { role: "system" | "user" | "assistant"; content: string | MuxContentPart[] };
 export type MuxContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
-export type MuxCallMeta = { userId: string; agent: string; traceId?: string; sensitive?: boolean };
+/** `graphId` is sent as an `x-mux-tags` entry (`graph:<id>`) so mux usage can be told apart per graph. */
+export type MuxCallMeta = { userId: string; agent: string; traceId?: string; sensitive?: boolean; graphId?: string };
 
 export type MuxResult = { text: string; model: string | null; route: string | null; requestId: string | null };
 

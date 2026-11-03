@@ -5,6 +5,7 @@ import { households, provenance, users, auditLog } from "@/db/schema";
 import { ensureBuiltins, getMeta } from "@/lib/meta";
 import { upsertKind, hideBuiltin } from "@/lib/meta/admin";
 import type { Viewer } from "@/lib/auth";
+import { viewerFor } from "@/lib/graphs/store";
 import { addObservation, addRelation, createPerson, peopleContext, peopleOverview, personProfile, updatePerson } from "@/lib/people";
 
 async function main() {
@@ -14,8 +15,8 @@ async function main() {
   try {
     const [pu] = await db.insert(users).values({ householdId: hh.id, email: `p-${hh.id}@x.test`, name: "Anna", role: "parent" }).returning();
     const [cu] = await db.insert(users).values({ householdId: hh.id, email: `c-${hh.id}@x.test`, name: "Emma", role: "child" }).returning();
-    const parent: Viewer = { id: pu.id, householdId: hh.id, name: "Anna", email: pu.email, role: "parent", personNodeId: null };
-    const child: Viewer = { id: cu.id, householdId: hh.id, name: "Emma", email: cu.email, role: "child", personNodeId: null };
+    const parent: Viewer = await viewerFor({ id: pu.id, householdId: hh.id, name: "Anna", email: pu.email, role: "parent" as const, personNodeId: null as string | null });
+    const child: Viewer = await viewerFor({ id: cu.id, householdId: hh.id, name: "Emma", email: cu.email, role: "child" as const, personNodeId: null as string | null });
 
     const me = await createPerson(parent, { label: "Anna", kind: "parent", visibility: "household" });
     await db.update(users).set({ personNodeId: me.id }).where(eq(users.id, pu.id));

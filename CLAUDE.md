@@ -30,6 +30,12 @@ mux's own GBrain is unrelated — do not use it.
 filters; every write records a `provenance` row (source, chunk, locator, quote, activity, agent, confidence).
 Facts the assistant inferred are `status: "inferred"` and never silently promoted.
 
+**Graphs** (`src/lib/graphs`): a person can have several separate graphs (Family, Work, one built for and shared with a
+partner, …). Every content row carries `graph_id`; the viewer carries the current graph (`mg_graph` cookie, checked
+against `graph_members` on every request). All reads and writes go through `scopeOf(viewer)` and pin `graph_id`;
+nothing links two graphs. The family graph keeps the household rules; other graphs use member roles
+(owner / editor / viewer). The shell's graph switcher (`src/components/graph-switcher.tsx`) switches, creates and shares.
+
 ## Contracts
 
 `src/lib/{auth,mux,gbrain,ingest}/index.ts` define the cross-workstream functions. Signatures are fixed; the owning

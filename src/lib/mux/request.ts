@@ -24,6 +24,7 @@ const HEADER_SAFE = (s: string) => s.replace(/[^\x20-\x7e]/g, "").slice(0, 200);
 export function buildHeaders(meta: MuxCallMeta, apiKey: string, extraTags: string[] = []): Record<string, string> {
   const tags = ["my-graph", ...extraTags];
   if (meta.sensitive) tags.push("sensitive");
+  if (meta.graphId) tags.push(`graph:${meta.graphId}`);
   const h: Record<string, string> = {
     "x-mux-agent": HEADER_SAFE(meta.agent || "my-graph"),
     "x-mux-user": HEADER_SAFE(meta.userId),

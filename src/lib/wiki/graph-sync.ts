@@ -14,6 +14,7 @@ import { sources, users, wikiPages } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import { addEdge, readableNodeIds, updateNode, upsertNode, type ProvenanceInput } from "@/lib/gbrain";
 import { ingestText } from "@/lib/ingest";
+import { viewerInGraph } from "@/lib/graphs/store";
 import { extractMentions, extractPageLinks, type DocNode } from "./doc";
 
 type PageRow = typeof wikiPages.$inferSelect;
@@ -40,18 +41,24 @@ export function syncPageGraphLater(editor: Viewer, pageId: string, prev: PrevSta
   chains.set(pageId, next);
 }
 
-/** The page owner as a Viewer: the graph footprint lives in the owner's brain even when someone else edits. */
-async function ownerViewer(editor: Viewer, ownerId: string): Promise<Viewer | null> {
-  if (editor.id === ownerId) return editor;
+/**
+ * The page owner as a Viewer working in the page's graph: the graph footprint lives in the owner's brain, in the
+ * page's own graph, even when someone else edits (or the owner has since switched to another graph).
+ */
+async function ownerViewer(editor: Viewer, ownerId: string, graphId: string): Promise<Viewer | null> {
+  if (editor.id === ownerId) return viewerInGraph(editor, graphId);
   const [u] = await db.select({ id: users.id, householdId: users.householdId, name: users.name, email: users.email, role: users.role, personNodeId: users.personNodeId })
     .from(users).where(eq(users.id, ownerId)).limit(1);
-  return u ?? null;
+  return u ? viewerInGraph(u, graphId) : null;
 }
 
-async function syncPageGraph(editor: Viewer, pageId: string, prev: PrevState | null): Promise<void> {
+async function syncPageGraph(editorNow: Viewer, pageId: string, prev: PrevState | null): Promise<void> {
   const [page] = await db.select().from(wikiPages).where(eq(wikiPages.id, pageId)).limit(1);
   if (!page) return; // deleted meanwhile
-  const owner = await ownerViewer(editor, page.ownerId);
+  // Both people act in the page's graph; nothing here may touch another graph.
+  const editor = await viewerInGraph(editorNow, page.graphId);
+  if (!editor) return;
+  const owner = await ownerViewer(editor, page.ownerId, page.graphId);
   if (!owner) return;
 
   // 1. Source row with the page text.
@@ -59,7 +66,7 @@ async function syncPageGraph(editor: Viewer, pageId: string, prev: PrevState | n
   try {
     if (!sourceId) {
       const [src] = await db.insert(sources).values({
-        householdId: page.householdId, ownerId: page.ownerId, kind: "wiki", title: page.title, mime: "text/plain",
+        householdId: page.householdId, graphId: page.graphId, ownerId: page.ownerId, kind: "wiki", title: page.title, mime: "text/plain",
         textContent: page.contentText, status: "pending", visibility: page.visibility,
         meta: { wikiPageId: page.id, slug: page.slug },
       }).returning({ id: sources.id });
@@ -114,7 +121,7 @@ async function syncPageGraph(editor: Viewer, pageId: string, prev: PrevState | n
     if (linkIds.length) {
       try {
         const linked = await db.select({ nodeId: wikiPages.nodeId }).from(wikiPages)
-          .where(and(inArray(wikiPages.id, linkIds), eq(wikiPages.householdId, page.householdId)));
+          .where(and(inArray(wikiPages.id, linkIds), eq(wikiPages.graphId, page.graphId)));
         for (const l of linked) if (l.nodeId) targets.add(l.nodeId);
       } catch (e) {
         warn("page links", page.id, e);

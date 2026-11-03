@@ -28,7 +28,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function listConversations(v: Viewer, limit = 100): Promise<ConversationSummary[]> {
   const rows = await db.select({ id: conversations.id, title: conversations.title, updatedAt: conversations.updatedAt, createdAt: conversations.createdAt })
     .from(conversations)
-    .where(and(eq(conversations.userId, v.id), eq(conversations.householdId, v.householdId)))
+    .where(and(eq(conversations.userId, v.id), eq(conversations.graphId, v.graphId)))
     .orderBy(desc(conversations.updatedAt))
     .limit(Math.min(Math.max(limit, 1), 500));
   return rows.map((r) => ({ id: r.id, title: r.title, updatedAt: r.updatedAt.toISOString(), createdAt: r.createdAt.toISOString() }));
@@ -38,13 +38,13 @@ export async function listConversations(v: Viewer, limit = 100): Promise<Convers
 export async function ownConversation(v: Viewer, id: string) {
   if (!UUID.test(id)) return null;
   const [row] = await db.select().from(conversations)
-    .where(and(eq(conversations.id, id), eq(conversations.userId, v.id), eq(conversations.householdId, v.householdId)))
+    .where(and(eq(conversations.id, id), eq(conversations.userId, v.id), eq(conversations.graphId, v.graphId)))
     .limit(1);
   return row ?? null;
 }
 
 export async function createConversation(v: Viewer, title: string): Promise<{ id: string }> {
-  const [row] = await db.insert(conversations).values({ householdId: v.householdId, userId: v.id, title }).returning({ id: conversations.id });
+  const [row] = await db.insert(conversations).values({ householdId: v.graphHouseholdId, graphId: v.graphId, userId: v.id, title }).returning({ id: conversations.id });
   return row;
 }
 

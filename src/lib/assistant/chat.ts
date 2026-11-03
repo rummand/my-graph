@@ -39,7 +39,7 @@ function reasonOf(e: unknown): DegradedReason {
 async function writeTitle(v: Viewer, question: string, sensitive: boolean): Promise<string> {
   try {
     const r = await Promise.race([
-      mux.complete({ route: "fast", messages: titleMessages(question), maxTokens: 24, temperature: 0.2, meta: { userId: v.id, agent: "my-graph:chat-title", sensitive } }),
+      mux.complete({ route: "fast", messages: titleMessages(question), maxTokens: 24, temperature: 0.2, meta: { userId: v.id, agent: "my-graph:chat-title", sensitive, graphId: v.graphId } }),
       new Promise<null>((res) => setTimeout(() => res(null), 8000)),
     ]);
     return r ? cleanTitle(r.text, question) : fallbackTitle(question);
@@ -104,7 +104,7 @@ export function runTurn(v: Viewer, turn: Awaited<ReturnType<typeof prepareTurn>>
         try {
           const gen = mux.stream({
             route, messages, maxTokens: 1500, temperature: 0.3, signal,
-            meta: { userId: v.id, agent: "my-graph:assistant", traceId: turn.conversationId, sensitive },
+            meta: { userId: v.id, agent: "my-graph:assistant", traceId: turn.conversationId, sensitive, graphId: v.graphId },
           });
           for (;;) {
             const r = await gen.next();

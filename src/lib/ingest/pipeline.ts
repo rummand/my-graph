@@ -11,6 +11,7 @@ import { chunks, reminders, sources, users } from "@/db/schema";
 import type { Locator } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import * as gbrain from "@/lib/gbrain";
+import { viewerInGraph } from "@/lib/graphs/store";
 import * as mux from "@/lib/mux";
 import { getMeta, type Meta as MetaHelpers, type MetaNodeType } from "@/lib/meta";
 import { readStored } from "@/lib/storage";
@@ -66,9 +67,15 @@ async function muxIsUp(): Promise<boolean> {
  * Process one source end to end. Never throws: failures are written to the source row.
  * `fromFile`: run text extraction on the stored original; otherwise use the source's existing textContent.
  */
-export async function processSource(v: Viewer, sourceId: string, opts: { fromFile: boolean }): Promise<void> {
+export async function processSource(viewer: Viewer, sourceId: string, opts: { fromFile: boolean }): Promise<void> {
   const [src] = await db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
   if (!src) return;
+  // Everything read from a file lands in the file's own graph, whatever graph its owner is looking at now.
+  const v = await viewerInGraph(viewer, src.graphId);
+  if (!v) {
+    await db.update(sources).set({ status: "failed", error: "You are no longer a member of the graph this file belongs to." }).where(eq(sources.id, sourceId));
+    return;
+  }
   const meta: Meta = { ...(src.meta ?? {}) };
   delete meta.extraction; delete meta.extracted; delete meta.warnings; delete meta.failedStep;
   const warnings: string[] = [];
@@ -77,7 +84,7 @@ export async function processSource(v: Viewer, sourceId: string, opts: { fromFil
   let step = "reading the file";
   try {
     const muxUp = await muxIsUp();
-    const muxMeta: mux.MuxCallMeta = { userId: v.id, agent: AGENT, traceId: sourceId, sensitive: src.sensitive };
+    const muxMeta: mux.MuxCallMeta = { userId: v.id, agent: AGENT, traceId: sourceId, sensitive: src.sensitive, graphId: v.graphId };
 
     // 1. Text extraction
     let segments: TextSegment[];
@@ -103,7 +110,7 @@ export async function processSource(v: Viewer, sourceId: string, opts: { fromFil
 
     // 2. Chunk + embed
     step = "splitting the text";
-    const stored = await replaceChunks(src.id, src.ownerId, segments);
+    const stored = await replaceChunks(src.id, src.ownerId, src.graphId, segments);
     meta.chunks = stored.length;
     step = "indexing for search";
     meta.embedding = await embedChunks(stored, muxMeta, muxUp);
@@ -154,14 +161,14 @@ export async function processSource(v: Viewer, sourceId: string, opts: { fromFil
   }
 }
 
-async function replaceChunks(sourceId: string, ownerId: string, segments: TextSegment[]): Promise<StoredChunk[]> {
+async function replaceChunks(sourceId: string, ownerId: string, graphId: string, segments: TextSegment[]): Promise<StoredChunk[]> {
   const pieces = chunkSegments(segments);
   return db.transaction(async (tx) => {
     await tx.delete(chunks).where(eq(chunks.sourceId, sourceId));
     const out: StoredChunk[] = [];
     for (let i = 0; i < pieces.length; i += INSERT_BATCH) {
       const rows = pieces.slice(i, i + INSERT_BATCH).map((p, j) => ({
-        sourceId, ownerId, idx: i + j, text: p.text, locator: p.locator,
+        sourceId, ownerId, graphId, idx: i + j, text: p.text, locator: p.locator,
         search: sql`to_tsvector('simple', ${p.text})`,
       }));
       const ins = await tx.insert(chunks).values(rows).returning({ id: chunks.id, idx: chunks.idx, text: chunks.text, locator: chunks.locator });
@@ -368,7 +375,7 @@ async function createReminders(v: Viewer, sourceId: string, sourceTitle: string,
 
   const personIds = [...new Set(upcoming.flatMap((e) => [...e.personIds]))];
   const childUsers = await db.select({ personNodeId: users.personNodeId, name: users.name })
-    .from(users).where(and(eq(users.householdId, v.householdId), eq(users.role, "child")));
+    .from(users).where(and(eq(users.householdId, v.graphHouseholdId), eq(users.role, "child")));
   const children = new Map<string, string>();
   for (const u of childUsers) if (u.personNodeId) children.set(u.personNodeId, u.name);
   const known = await knownPeople(v);
@@ -382,10 +389,10 @@ async function createReminders(v: Viewer, sourceId: string, sourceTitle: string,
       const dueAt = reminderDueAt(ev.startAt, now);
       if (!dueAt) continue;
       const existing = await db.select({ id: reminders.id }).from(reminders)
-        .where(and(eq(reminders.ownerId, v.id), eq(reminders.nodeId, ev.nodeId), eq(reminders.aboutNodeId, pid))).limit(1);
+        .where(and(eq(reminders.graphId, v.graphId), eq(reminders.ownerId, v.id), eq(reminders.nodeId, ev.nodeId), eq(reminders.aboutNodeId, pid))).limit(1);
       if (existing.length) continue;
       await db.insert(reminders).values({
-        householdId: v.householdId, ownerId: v.id, aboutNodeId: pid, nodeId: ev.nodeId, sourceId,
+        householdId: v.graphHouseholdId, graphId: v.graphId, ownerId: v.id, aboutNodeId: pid, nodeId: ev.nodeId, sourceId,
         title: `${childName}: ${ev.label}`,
         detail: `Coming up on ${ev.startAt.toISOString().slice(0, 10)}. Found in “${sourceTitle}”.`,
         dueAt, createdByKind: "assistant",

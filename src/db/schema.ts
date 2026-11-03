@@ -3,12 +3,15 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * My Graph's data model. Every user (login) owns a personal brain: nodes, edges, sources and pages carry an
- * `ownerId`. `visibility` decides who else in the household may see an item:
+ * My Graph's data model. Content lives in graphs (see `graphs`): every content row carries a `graphId`, and a
+ * viewer only ever reads the graph they are working in, and only while they are a member of it. Within a graph,
+ * every item has an `ownerId` (who added it) and a `visibility` deciding who else in that graph may see it.
+ * In the household's family graph:
  *   private   — only the owner
  *   parents   — the owner + every parent/owner in the household
  *   household — everyone in the household (children included)
  * Guests only see items explicitly shared to them through `shares`.
+ * In any other graph, "household" means every member of that graph and "parents" its owner and editors.
  * Rule: no fact (edge) or node may exist without at least one `provenance` row.
  */
 
@@ -26,6 +29,8 @@ export const agentTypeEnum = pgEnum("agent_type", ["user", "model", "rule"]);
 export const subjectTypeEnum = pgEnum("subject_type", ["node", "edge"]);
 export const authorKindEnum = pgEnum("author_kind", ["user", "assistant"]);
 export const messageRoleEnum = pgEnum("message_role", ["user", "assistant", "system"]);
+export const graphKindEnum = pgEnum("graph_kind", ["family", "personal", "work", "shared", "other"]);
+export const graphRoleEnum = pgEnum("graph_role", ["owner", "editor", "viewer"]);
 
 /* ── Accounts ─────────────────────────────────────────────────────────────────────────────────────────── */
 
@@ -93,11 +98,67 @@ export const auditLog = pgTable("audit_log", {
   at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("audit_household_at_idx").on(t.householdId, t.at)]);
 
+/* ── Graphs: separate brains a person owns and shares ─────────────────────────────────────────────────── */
+
+/**
+ * A graph is one separate brain. Every content row (nodes, edges, sources, chunks, provenance, wiki pages,
+ * conversations, reminders, observations) belongs to exactly one graph, and nothing ever connects two graphs.
+ * Each household has one `family` graph (all household members, family rules); a person can own more graphs
+ * (personal, work, one built for someone) and share them with specific people through `graph_members`.
+ * `householdId` is the owner's household: its meta model is the graph's ontology.
+ */
+export const graphs = pgTable("graphs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
+  ownerId: uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  /** Hue (0-359) for the graph's colour dot. */
+  color: integer("color").notNull().default(210),
+  kind: graphKindEnum("kind").notNull().default("other"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+}, (t) => [
+  index("graphs_household_idx").on(t.householdId),
+  index("graphs_owner_idx").on(t.ownerId),
+]);
+
+export const graphMembers = pgTable("graph_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  role: graphRoleEnum("role").notNull(),
+  addedBy: uuid("added_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("graph_members_graph_user_idx").on(t.graphId, t.userId),
+  index("graph_members_user_idx").on(t.userId),
+]);
+
+/** An invitation link to join a graph. The link carries a random token; only sha256(token) is stored. */
+export const graphInvites = pgTable("graph_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  email: text("email").notNull(),
+  role: graphRoleEnum("role").notNull().default("editor"),
+  tokenHash: text("token_hash").notNull(),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  acceptedBy: uuid("accepted_by"),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("graph_invites_token_idx").on(t.tokenHash),
+  index("graph_invites_graph_idx").on(t.graphId),
+]);
+
 /* ── GBrain: the per-login knowledge graph ────────────────────────────────────────────────────────────── */
 
 export const nodes = pgTable("nodes", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
   ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   type: nodeTypeEnum("type").notNull(),
   /** Meta-model kind within the type (meta_kinds.key), e.g. person → "teacher", place → "school". */
@@ -122,11 +183,14 @@ export const nodes = pgTable("nodes", {
 }, (t) => [
   index("nodes_owner_type_idx").on(t.ownerId, t.type),
   index("nodes_household_start_idx").on(t.householdId, t.startAt),
+  index("nodes_graph_type_idx").on(t.graphId, t.type),
+  index("nodes_graph_start_idx").on(t.graphId, t.startAt),
 ]);
 
 export const edges = pgTable("edges", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
   ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   fromId: uuid("from_id").notNull().references(() => nodes.id, { onDelete: "cascade" }),
   toId: uuid("to_id").notNull().references(() => nodes.id, { onDelete: "cascade" }),
@@ -140,12 +204,13 @@ export const edges = pgTable("edges", {
   supersededBy: uuid("superseded_by"),
   visibility: visibilityEnum("visibility").notNull().default("private"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("edges_from_idx").on(t.fromId), index("edges_to_idx").on(t.toId)]);
+}, (t) => [index("edges_from_idx").on(t.fromId), index("edges_to_idx").on(t.toId), index("edges_graph_idx").on(t.graphId)]);
 
 /** Original artefacts: uploaded files, wiki pages, chat messages, manual entries. Stored unchanged. */
 export const sources = pgTable("sources", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
   ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   kind: sourceKindEnum("kind").notNull(),
   title: text("title").notNull(),
@@ -163,19 +228,20 @@ export const sources = pgTable("sources", {
   /** The source's own document node in the graph. */
   nodeId: uuid("node_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("sources_owner_idx").on(t.ownerId, t.createdAt)]);
+}, (t) => [index("sources_owner_idx").on(t.ownerId, t.createdAt), index("sources_graph_idx").on(t.graphId, t.createdAt)]);
 
 /** Text chunks of a source for retrieval; locator points back into the source (page, offsets, bbox, time). */
 export const chunks = pgTable("chunks", {
   id: uuid("id").primaryKey().defaultRandom(),
   sourceId: uuid("source_id").notNull().references(() => sources.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
   ownerId: uuid("owner_id").notNull(),
   idx: integer("idx").notNull(),
   text: text("text").notNull(),
   locator: jsonb("locator").$type<Locator>().notNull().default({}),
   embedding: vector("embedding", { dimensions: 1024 }),
   search: tsvector("search"),
-}, (t) => [index("chunks_source_idx").on(t.sourceId)]);
+}, (t) => [index("chunks_source_idx").on(t.sourceId), index("chunks_graph_idx").on(t.graphId)]);
 
 export type Locator = { page?: number; charStart?: number; charEnd?: number; bbox?: [number, number, number, number]; timeStartSec?: number; timeEndSec?: number };
 
@@ -183,6 +249,7 @@ export type Locator = { page?: number; charStart?: number; charEnd?: number; bbo
 export const provenance = pgTable("provenance", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
   subjectType: subjectTypeEnum("subject_type").notNull(),
   subjectId: uuid("subject_id").notNull(),
   sourceId: uuid("source_id").references(() => sources.id, { onDelete: "set null" }),
@@ -197,7 +264,7 @@ export const provenance = pgTable("provenance", {
   confidence: real("confidence").notNull().default(1),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("provenance_subject_idx").on(t.subjectType, t.subjectId)]);
+}, (t) => [index("provenance_subject_idx").on(t.subjectType, t.subjectId), index("provenance_graph_idx").on(t.graphId)]);
 
 /** Explicit share of a node to a user (guests, or a private item shown to one person). */
 export const shares = pgTable("shares", {
@@ -214,6 +281,7 @@ export const shares = pgTable("shares", {
 export const wikiPages = pgTable("wiki_pages", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
   ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   slug: text("slug").notNull(),
   title: text("title").notNull(),
@@ -229,7 +297,7 @@ export const wikiPages = pgTable("wiki_pages", {
   updatedBy: uuid("updated_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex("wiki_owner_slug_idx").on(t.householdId, t.slug)]);
+}, (t) => [uniqueIndex("wiki_graph_slug_idx").on(t.graphId, t.slug)]);
 
 export const wikiRevisions = pgTable("wiki_revisions", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -249,11 +317,12 @@ export const wikiRevisions = pgTable("wiki_revisions", {
 export const conversations = pgTable("conversations", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull().default("New conversation"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [index("conversations_graph_user_idx").on(t.graphId, t.userId)]);
 
 export type Citation = { n: number; sourceId?: string; nodeId?: string; edgeId?: string; title: string; quote?: string; locator?: Locator; confidence?: number };
 
@@ -273,6 +342,7 @@ export const messages = pgTable("messages", {
 export const reminders = pgTable("reminders", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
   ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   /** The person the reminder is about (e.g. a child's person node). */
   aboutNodeId: uuid("about_node_id"),
@@ -285,7 +355,7 @@ export const reminders = pgTable("reminders", {
   done: boolean("done").notNull().default(false),
   createdByKind: authorKindEnum("created_by_kind").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("reminders_owner_due_idx").on(t.ownerId, t.dueAt)]);
+}, (t) => [index("reminders_owner_due_idx").on(t.ownerId, t.dueAt), index("reminders_graph_due_idx").on(t.graphId, t.dueAt)]);
 
 /* ── Meta model: the household's own ontology on top of the graph ─────────────────────────────────────── */
 
@@ -352,6 +422,7 @@ export const observationKindEnum = pgEnum("observation_kind", ["wellbeing", "hea
 export const observations = pgTable("observations", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
   ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   personNodeId: uuid("person_node_id").notNull().references(() => nodes.id, { onDelete: "cascade" }),
   kind: observationKindEnum("kind").notNull(),
@@ -365,4 +436,4 @@ export const observations = pgTable("observations", {
   visibility: visibilityEnum("visibility").notNull().default("private"),
   sensitive: boolean("sensitive").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("observations_person_at_idx").on(t.personNodeId, t.at)]);
+}, (t) => [index("observations_person_at_idx").on(t.personNodeId, t.at), index("observations_graph_idx").on(t.graphId)]);

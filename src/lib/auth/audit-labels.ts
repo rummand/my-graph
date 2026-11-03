@@ -27,6 +27,16 @@ const LABELS: Record<string, string> = {
   "member.password_reset": "Set a new password for a family member",
   "member.sign_in_disabled": "Turned off a family member's sign-in",
   "member.remove": "Removed a family member",
+  "graph.create": "Made a new graph",
+  "graph.update": "Changed a graph's details",
+  "graph.archive": "Archived a graph",
+  "graph.member_add": "Added someone to a graph",
+  "graph.member_role": "Changed what someone may do in a graph",
+  "graph.member_remove": "Removed someone from a graph",
+  "graph.leave": "Left a graph",
+  "graph.invite_create": "Invited someone to a graph",
+  "graph.invite_revoke": "Cancelled a graph invite",
+  "graph.invite_accept": "Accepted an invite to a graph",
 };
 
 export function auditActionLabel(action: string): string {

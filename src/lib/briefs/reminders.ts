@@ -8,7 +8,8 @@ import { nodes, reminders, sources } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import { canManageReminder, isParentRole } from "./access";
 import type { ReminderCreate, ReminderPatch } from "./schemas";
-import { visibleWhere } from "./sql";
+import { inGraph, visibleWhere } from "./sql";
+import { scopeOf } from "@/lib/graphs/pure";
 
 /** A reminder as sent to the browser (dates as ISO strings). */
 export type ReminderDTO = {
@@ -32,6 +33,7 @@ const aboutLabelFor = (v: Viewer) => sql<string | null>`(select ${nodes.label} f
 const selectCols = (v: Viewer) => ({
   id: reminders.id,
   householdId: reminders.householdId,
+  graphId: reminders.graphId,
   ownerId: reminders.ownerId,
   title: reminders.title,
   detail: reminders.detail,
@@ -61,10 +63,10 @@ function toDTO(r: Row): ReminderDTO {
  * can't open (an assistant reminder read from someone's private letter must not reveal what the letter says).
  */
 function accessWhere(v: Viewer): SQL {
-  const own = and(eq(reminders.householdId, v.householdId), eq(reminders.ownerId, v.id))!;
-  if (!isParentRole(v.role)) return own;
+  const own = and(inGraph(v, reminders.graphId), eq(reminders.ownerId, v.id))!;
+  if (!isParentRole(scopeOf(v).role)) return own;
   const sourceOk = sql`(${reminders.sourceId} is null or exists (select 1 from ${sources} where ${and(eq(sources.id, reminders.sourceId), visibleWhere(v, sources))}))`;
-  return or(own, and(eq(reminders.householdId, v.householdId), sourceOk))!;
+  return or(own, and(inGraph(v, reminders.graphId), sourceOk))!;
 }
 
 export async function listReminders(v: Viewer, opts: { upcoming?: boolean; days?: number; aboutNodeId?: string; includeDone?: boolean; limit?: number; now?: Date } = {}): Promise<ReminderDTO[]> {
@@ -104,7 +106,7 @@ export async function nodeVisibleTo(v: Viewer, nodeId: string): Promise<boolean>
   if (n) return true;
   // Family members' own person nodes are always fine to set a reminder about.
   const [p] = await db.select({ id: nodes.id }).from(nodes)
-    .where(and(eq(nodes.id, nodeId), eq(nodes.householdId, v.householdId), eq(nodes.type, "person"), isNull(nodes.mergedInto)))
+    .where(and(eq(nodes.id, nodeId), eq(nodes.graphId, v.graphId), eq(nodes.type, "person"), isNull(nodes.mergedInto)))
     .limit(1);
   return Boolean(p);
 }
@@ -112,11 +114,13 @@ export async function nodeVisibleTo(v: Viewer, nodeId: string): Promise<boolean>
 export class ReminderInputError extends Error {}
 
 export async function createReminder(v: Viewer, input: ReminderCreate): Promise<ReminderDTO> {
+  if (!scopeOf(v).canWrite) throw new ReminderInputError("You can look at this graph but not add reminders to it.");
   if (input.aboutNodeId && !(await nodeVisibleTo(v, input.aboutNodeId))) {
     throw new ReminderInputError("We couldn't find the person or item this reminder is about.");
   }
   const [row] = await db.insert(reminders).values({
-    householdId: v.householdId,
+    householdId: v.graphHouseholdId,
+    graphId: v.graphId,
     ownerId: v.id,
     title: input.title,
     detail: input.detail,
