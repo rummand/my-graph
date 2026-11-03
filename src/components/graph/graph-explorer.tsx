@@ -133,7 +133,7 @@ export function GraphExplorer({ data, centerId, truncated }: { data: GraphData; 
             );
           })}
         </div>
-        <Tabs className="ml-auto" value={view} onSelect={setView} items={[{ value: "graph", label: "Graph" }, { value: "list", label: "List" }]} />
+        <Tabs className="ml-auto" value={view} onSelect={setView} items={[{ value: "graph", label: "Map" }, { value: "list", label: "List" }]} />
       </div>
 
       <div className="grid gap-3 lg:h-[calc(100dvh-14rem)] lg:min-h-[520px] lg:grid-cols-[minmax(0,1fr)_340px]">

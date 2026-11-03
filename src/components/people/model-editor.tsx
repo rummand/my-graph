@@ -7,7 +7,7 @@ import { Avatar, Badge, Button, IconButton, Input, NodeChip, Select, Tabs } from
 import { attributesFor } from "@/lib/meta/model";
 import {
   ATTR_TYPES, CATEGORY_LABELS, CIRCLE_LABELS, CIRCLES, RELATION_CATEGORIES,
-  type Circle, type MetaAttribute, type MetaKind, type MetaModel, type MetaRelation,
+  type MetaAttribute, type MetaKind, type MetaModel, type MetaRelation,
 } from "@/lib/meta/types";
 import { normaliseCircle } from "@/lib/people/circles";
 import { api, fieldErrors, type FieldErrors } from "./format";

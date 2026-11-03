@@ -167,6 +167,15 @@ describe("managing graphs", () => {
     expect(pickGraph(mine, FAMILY_HH, null)?.id).toBe(G.family);
     expect(pickGraph([{ id: G.forSara, kind: "shared" as const, householdId: FAMILY_HH, archivedAt: null }], SARA_HH, null)?.id).toBe(G.forSara);
     expect(pickGraph([], SARA_HH, null)).toBeNull();
+    // Sara (no family graph) starts in the graph Anna shared with her, not her own empty Personal graph.
+    const saras = [
+      { id: G.saraPersonal, kind: "personal" as const, householdId: SARA_HH, archivedAt: null },
+      { id: G.forSara, kind: "shared" as const, householdId: FAMILY_HH, archivedAt: null },
+    ];
+    expect(pickGraph(saras, SARA_HH, null)?.id).toBe(G.forSara);
+    expect(pickGraph(saras, SARA_HH, G.saraPersonal)?.id).toBe(G.saraPersonal);
+    // A forged id for a graph she isn't in falls back the same way.
+    expect(pickGraph(saras, SARA_HH, G.family)?.id).toBe(G.forSara);
   });
   it("archiving: never the family graph, never your last graph", () => {
     expect(archiveProblem({ kind: "family", archivedAt: null }, 3)).toMatch(/family/);

@@ -8,9 +8,9 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Editor } from "@tiptap/react";
-import { formatDistanceToNow } from "date-fns";
+import { format, isThisYear } from "date-fns";
 import { AlertTriangle, Check, History, LoaderCircle, Pencil, Trash2 } from "lucide-react";
-import { Button } from "@/components/ui";
+import { Button, Select } from "@/components/ui";
 import type { Doc } from "@/lib/wiki/doc";
 import { VISIBILITIES, VISIBILITY_HINT, VISIBILITY_LABEL, type Visibility } from "@/lib/wiki/labels";
 import { DocView, isEmptyDoc } from "./doc-view";
@@ -30,8 +30,16 @@ type SaveState =
 
 const AUTOSAVE_MS = 1500;
 
+/** Who can see a page, as a sentence for the line under the title. */
+const VISIBILITY_SENTENCE: Partial<Record<Visibility, string>> = {
+  private: "Only you can see it",
+  parents: "Parents can see it",
+  household: "The whole family can see it",
+};
+
 function When({ iso }: { iso: string }) {
-  return <time dateTime={iso} title={new Date(iso).toLocaleString()} suppressHydrationWarning>{formatDistanceToNow(new Date(iso), { addSuffix: true })}</time>;
+  const d = new Date(iso);
+  return <time dateTime={iso} title={d.toLocaleString()} suppressHydrationWarning>{format(d, isThisYear(d) ? "EEE d MMM 'at' HH:mm" : "d MMM yyyy")}</time>;
 }
 
 export function WikiPageClient({ initial, startEditing, children }: { initial: ClientPage; startEditing: boolean; children?: React.ReactNode }) {
@@ -184,11 +192,15 @@ export function WikiPageClient({ initial, startEditing, children }: { initial: C
   const lastEdited = (
     <>Edited <When iso={page.updatedAt} />{page.updatedByName ? <> by {page.updatedByName}</> : null}</>
   );
+  const seenBy = VISIBILITY_SENTENCE[page.visibility] ?? `Visible to ${VISIBILITY_LABEL[page.visibility]}`;
+  const meta = (
+    <>{lastEdited}. {seenBy}.{!page.isOwner && <> Started by {page.ownerName}.</>}</>
+  );
 
   return (
     <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_16rem]">
       <article className="min-w-0">
-        <nav aria-label="Breadcrumb" className="mb-3 text-sm text-muted">
+        <nav aria-label="Breadcrumb" className="mb-4 text-sm text-muted">
           <Link href="/wiki" className="hover:text-fg hover:underline">Wiki</Link>
           <span aria-hidden> / </span>
           <span className="text-fg">{title || "Untitled"}</span>
@@ -201,15 +213,12 @@ export function WikiPageClient({ initial, startEditing, children }: { initial: C
                 <label htmlFor={titleId} className="sr-only">Page title</label>
                 <input id={titleId} value={title} maxLength={200} placeholder="Page title"
                   onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) { titleRef.current = e.target.value; changed(); } }}
-                  className="w-full max-w-[70ch] rounded-md border border-transparent bg-transparent px-0 py-1 text-2xl font-semibold tracking-tight outline-none placeholder:text-muted focus:border-line focus:px-2" />
+                  className="w-full max-w-[70ch] rounded-md border border-transparent bg-transparent px-0 py-0.5 text-[28px]/[1.15] font-semibold tracking-[-0.02em] outline-none placeholder:text-muted focus:border-line focus:px-2" />
               </>
             ) : (
-              <h1 className="break-words text-2xl font-semibold tracking-tight">{page.title}</h1>
+              <h1 className="break-words text-[28px]/[1.15] font-semibold tracking-[-0.02em]">{page.title}</h1>
             )}
-            <p className="mt-1 text-sm text-muted">
-              {lastEdited}<span aria-hidden> · </span>Visible to {VISIBILITY_LABEL[page.visibility]}
-              {!page.isOwner && <> · Started by {page.ownerName}</>}
-            </p>
+            <p className="mt-2 text-sm text-muted">{meta}</p>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {editing && <SaveIndicator state={state} onRetry={() => void save()} />}
@@ -253,19 +262,18 @@ export function WikiPageClient({ initial, startEditing, children }: { initial: C
         </dialog>
       </article>
 
-      <aside className="space-y-6 lg:pt-10" aria-label="About this page">
+      <aside className="space-y-8 lg:pt-10" aria-label="About this page">
         {children}
         {(page.can.changeVisibility || page.can.delete) && (
-          <section className="space-y-3 border-t border-line pt-4">
+          <section className="space-y-3">
             <h2 className="text-sm font-semibold">Page settings</h2>
             {page.can.changeVisibility && (
               <div>
                 <label htmlFor={`${titleId}-vis`} className="mb-1 block text-sm">Who can see this</label>
-                <select id={`${titleId}-vis`} value={page.visibility} disabled={visBusy} aria-describedby={`${titleId}-vis-hint`}
-                  onChange={(e) => void changeVisibility(e.target.value as Visibility)}
-                  className="w-full rounded-md border border-line bg-surface px-3 py-2 text-sm disabled:opacity-60">
+                <Select id={`${titleId}-vis`} value={page.visibility} disabled={visBusy} aria-describedby={`${titleId}-vis-hint`}
+                  onChange={(e) => void changeVisibility(e.target.value as Visibility)}>
                   {VISIBILITIES.map((v) => <option key={v} value={v}>{VISIBILITY_LABEL[v]}</option>)}
-                </select>
+                </Select>
                 <p id={`${titleId}-vis-hint`} className="mt-1 text-xs text-muted">{VISIBILITY_HINT[page.visibility]}</p>
                 {visError && <p role="alert" className="mt-1 text-xs text-danger">{visError}</p>}
               </div>

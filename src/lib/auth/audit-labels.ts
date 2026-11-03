@@ -70,3 +70,29 @@ export function auditDetail(meta: Record<string, unknown>): string {
   if (s("ip") && meta.ip !== "unknown") parts.push(`from ${meta.ip}`);
   return parts.join(" · ");
 }
+
+/** Account-level actions (sign-in, devices, members) belong to the household, not to whichever graph was open. */
+const ACCOUNT_AREAS = new Set(["setup", "auth", "session", "device", "password", "passkey", "profile", "member"]);
+
+/** True when an action is about content in a graph and should carry that graph's id. */
+export function auditIsGraphScoped(action: string): boolean {
+  return !ACCOUNT_AREAS.has(action.split(".")[0]);
+}
+
+/** The graph an audit entry belongs to: `meta.graphId`, or the graph itself for graph.* entries. Null = household-wide. */
+export function auditGraphId(e: { targetType: string | null; targetId: string | null; meta: Record<string, unknown> | null }): string | null {
+  const g = e.meta?.graphId;
+  if (typeof g === "string" && g) return g;
+  return e.targetType === "graph" && e.targetId ? e.targetId : null;
+}
+
+/**
+ * Whether a household activity-log entry may be shown to `viewerId`: household-wide entries always, an entry from
+ * one graph only to members of that graph (or to the person who did it).
+ */
+export function auditVisibleTo(e: { userId: string | null; targetType: string | null; targetId: string | null; meta: Record<string, unknown> | null },
+  viewerId: string, myGraphIds: ReadonlySet<string>): boolean {
+  if (e.userId === viewerId) return true;
+  const g = auditGraphId(e);
+  return g === null || myGraphIds.has(g);
+}

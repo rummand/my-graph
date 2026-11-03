@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import { clsx } from "clsx";
 import { Bot } from "lucide-react";
 import { EmptyState } from "@/components/ui";
@@ -39,15 +39,15 @@ export default async function WikiHistory({ params, searchParams }: Props) {
   const pageHref = `/wiki/${encodeURIComponent(page.slug)}`;
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div>
       <nav aria-label="Breadcrumb" className="mb-3 text-sm text-muted">
         <Link href="/wiki" className="hover:text-fg hover:underline">Wiki</Link><span aria-hidden> / </span>
         <Link href={pageHref} className="hover:text-fg hover:underline">{page.title}</Link><span aria-hidden> / </span>
         <span className="text-fg">History</span>
       </nav>
-      <header className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight">History of “{page.title}”</h1>
-        <p className="mt-1 max-w-prose text-sm text-muted">Every saved version, newest first. Edits made close together by the same person are grouped into one version. Restoring a version adds it as a new one, so nothing is lost.</p>
+      <header className="mb-8">
+        <h1 className="text-[28px]/[1.15] font-semibold tracking-[-0.02em]">History of “{page.title}”</h1>
+        <p className="mt-2 max-w-[60ch] text-muted">Every saved version, newest first. Edits made close together by the same person are grouped into one version. Restoring a version adds it as a new one, so nothing is lost.</p>
       </header>
 
       {!selected ? (
@@ -69,11 +69,11 @@ export default async function WikiHistory({ params, searchParams }: Props) {
                           {r.authorKind === "assistant" && <Bot aria-hidden className="size-4 shrink-0" />}
                           <span className="truncate">{r.authorName}</span>
                         </span>
-                        <span className="shrink-0 text-xs text-muted">v{r.version}</span>
+                        <span className="shrink-0 text-xs tabular-nums text-muted">Version {r.version}</span>
                       </span>
                       <span className="block text-xs text-muted">
-                        <time dateTime={r.createdAt.toISOString()} title={format(r.createdAt, "PPpp")}>{formatDistanceToNow(r.createdAt, { addSuffix: true })}</time>
-                        {i === 0 && " · current"}
+                        <time dateTime={r.createdAt.toISOString()} title={format(r.createdAt, "PPpp")}>{format(r.createdAt, "EEE d MMM, HH:mm")}</time>
+                        {i === 0 && ", the current one"}
                       </span>
                       <span className="block text-xs text-muted">
                         {r.summary ?? (prev ? `+${stats.added} / −${stats.removed} words` : "First version")}
@@ -88,10 +88,10 @@ export default async function WikiHistory({ params, searchParams }: Props) {
           <section aria-labelledby="rev-heading" className="min-w-0">
             <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h2 id="rev-heading" className="text-lg font-semibold">Version {selected.version}{selectedIdx === 0 ? " (current)" : ""}</h2>
+                <h2 id="rev-heading" className="text-lg font-semibold tracking-[-0.01em]">Version {selected.version}{selectedIdx === 0 ? " (current)" : ""}</h2>
                 <p className="text-sm text-muted">
-                  {selected.authorName} · {format(selected.createdAt, "PPpp")}
-                  {previous ? <> · compared with version {previous.version}</> : <> · the first version</>}
+                  Saved by {selected.authorName} on {format(selected.createdAt, "EEE d MMM 'at' HH:mm")}.{" "}
+                  {previous ? <>Compared with version {previous.version}.</> : <>This is the first version.</>}
                 </p>
               </div>
               {selectedIdx > 0 && page.can.edit && (

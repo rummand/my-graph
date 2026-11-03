@@ -4,7 +4,7 @@ import { graph, isUuid } from "@/lib/gbrain";
 import { getMeta } from "@/lib/meta";
 import { GraphExplorer, type GraphData } from "@/components/graph";
 
-export const metadata: Metadata = { title: "Graph · My Graph" };
+export const metadata: Metadata = { title: "Connections · My Graph" };
 export const dynamic = "force-dynamic";
 
 const LIMIT = 300;
@@ -28,7 +28,7 @@ export default async function GraphPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <header className="mb-5">
-        <h1 className="text-[28px]/[1.15] font-semibold tracking-[-0.02em]">{centerLabel ? `Around ${centerLabel}` : "Graph"}</h1>
+        <h1 className="text-[28px]/[1.15] font-semibold tracking-[-0.02em]">{centerLabel ? `Around ${centerLabel}` : "Connections"}</h1>
         <p className="mt-1.5 max-w-[60ch] text-muted">
           {centerLabel
             ? `Everyone and everything within two steps of ${centerLabel}.`

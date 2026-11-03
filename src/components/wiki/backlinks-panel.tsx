@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { FileText } from "lucide-react";
-import { NodeChip } from "@/components/ui";
+import { NodeChip, PersonChip } from "@/components/ui";
 import type { Backlinks } from "@/lib/wiki";
 
 /** Pages that point here, and the graph nodes this page mentions. */
@@ -33,7 +33,9 @@ export function BacklinksPanel({ backlinks, nodeId }: { backlinks: Backlinks; no
         ) : (
           <ul className="flex flex-wrap gap-1.5">
             {backlinks.mentions.map((m) => (
-              <li key={m.id}><NodeChip type={m.type} label={m.label} href={m.readable ? `/node/${m.id}` : undefined} /></li>
+              <li key={m.id}>{m.type === "person"
+                ? <PersonChip id={m.id} name={m.label} href={m.readable ? `/people/${m.id}` : undefined} />
+                : <NodeChip type={m.type} label={m.label} href={m.readable ? `/node/${m.id}` : undefined} />}</li>
             ))}
           </ul>
         )}

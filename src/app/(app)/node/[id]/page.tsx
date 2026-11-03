@@ -59,7 +59,7 @@ export default async function NodePage({ params }: Props) {
   return (
     <article>
       <Link href={`/graph?center=${node.id}`} className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
-        <ArrowLeft className="size-4" /> Graph
+        <ArrowLeft className="size-4" /> Connections
       </Link>
 
       <header className="mb-10 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-5">
@@ -75,7 +75,7 @@ export default async function NodePage({ params }: Props) {
           </div>
         </div>
         <div className="col-span-2 flex flex-wrap items-start gap-2 sm:col-span-1 sm:justify-end">
-          <Link href={`/graph?center=${node.id}`} className={buttonClass("secondary")}><Crosshair className="size-4" /> Show in graph</Link>
+          <Link href={`/graph?center=${node.id}`} className={buttonClass("secondary")}><Crosshair className="size-4" /> Show connections</Link>
           {d.canEdit && <NodeEditor node={{ id: node.id, label: node.label, aliases: node.aliases, summary: node.summary, visibility: node.visibility, sensitive: node.sensitive }} />}
         </div>
 

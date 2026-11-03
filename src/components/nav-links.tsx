@@ -19,7 +19,7 @@ const PRIMARY: NavItem[] = [
 const SECONDARY: NavItem[] = [
   { href: "/library", label: "Library", icon: FolderOpen },
   { href: "/wiki", label: "Wiki", icon: FileText, hideFor: ["guest"] },
-  { href: "/graph", label: "Graph", icon: Network },
+  { href: "/graph", label: "Connections", icon: Network },
   { href: "/graphs", label: "Graphs", icon: Layers },
   { href: "/settings", label: "Family & settings", icon: Settings },
 ];

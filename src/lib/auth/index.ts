@@ -6,6 +6,7 @@ import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { writeAudit } from "./audit";
+import { auditIsGraphScoped } from "./audit-labels";
 import { API_HEADER, PATH_HEADER, SESSION_COOKIE } from "./constants";
 import { isWellFormedToken } from "./session";
 import { loadSession, type SessionState as StoredSession, type ViewerRow } from "./store";
@@ -104,5 +105,9 @@ export async function requireParentApi(): Promise<Viewer> {
 
 /** Append-only audit entry. */
 export async function audit(v: Pick<Viewer, "id" | "householdId"> | null, action: string, target?: { type: string; id: string }, meta: Record<string, unknown> = {}): Promise<void> {
-  await writeAudit(v, action, target, meta);
+  // Content actions remember the graph they happened in, so the household's activity log can keep another
+  // graph's activity (a Work file, a page in a graph shared with someone else) away from the rest of the family.
+  const graphId = v ? (v as { graphId?: unknown }).graphId : undefined;
+  const tagged = typeof graphId === "string" && auditIsGraphScoped(action) && meta.graphId === undefined ? { ...meta, graphId } : meta;
+  await writeAudit(v, action, target, tagged);
 }

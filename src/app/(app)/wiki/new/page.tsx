@@ -12,7 +12,7 @@ export default async function NewWikiPage({ searchParams }: { searchParams: Prom
   const title = typeof raw.title === "string" ? raw.title.slice(0, 200) : "";
   if (v.role === "guest") {
     return (
-      <div className="mx-auto max-w-3xl">
+      <div className="max-w-3xl">
         <EmptyState title="Guests can't create pages">
           <p>Ask someone in the family to write it, or to share it with you.</p>
           <Link href="/" className="mt-3 inline-block text-accent hover:underline">Back to Today</Link>
@@ -21,7 +21,7 @@ export default async function NewWikiPage({ searchParams }: { searchParams: Prom
     );
   }
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="max-w-3xl">
       <nav aria-label="Breadcrumb" className="mb-3 text-sm text-muted">
         <Link href="/wiki" className="hover:text-fg hover:underline">Wiki</Link><span aria-hidden> / </span><span className="text-fg">New page</span>
       </nav>

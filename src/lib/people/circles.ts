@@ -5,16 +5,19 @@
  * the deterministic placement (collision-free by construction) is used instead.
  */
 import { forceCollide, forceRadial, forceSimulation, forceX, forceY, type SimulationNodeDatum } from "d3";
-import type { Circle } from "@/lib/meta/types";
+import { CIRCLE_LABELS, type Circle } from "@/lib/meta/types";
 
-/** Ring order from the centre out. School and care share a ring. */
+/**
+ * Ring order from the centre out. School and care share a ring. Ring labels use the names of the circle filters
+ * above the map (CIRCLE_LABELS); the shared ring names both, briefly, so it still fits at the top of its ring.
+ */
 export const RINGS: { key: string; circles: Circle[]; label: string }[] = [
-  { key: "family", circles: ["family"], label: "Family" },
-  { key: "close", circles: ["close"], label: "Close friends" },
-  { key: "school_care", circles: ["school", "care"], label: "School & care" },
-  { key: "social", circles: ["social"], label: "Friends & neighbours" },
-  { key: "work", circles: ["work"], label: "Work" },
-  { key: "other", circles: ["other"], label: "Others" },
+  { key: "family", circles: ["family"], label: CIRCLE_LABELS.family },
+  { key: "close", circles: ["close"], label: CIRCLE_LABELS.close },
+  { key: "school_care", circles: ["school", "care"], label: "School, daycare & health" },
+  { key: "social", circles: ["social"], label: CIRCLE_LABELS.social },
+  { key: "work", circles: ["work"], label: CIRCLE_LABELS.work },
+  { key: "other", circles: ["other"], label: CIRCLE_LABELS.other },
 ];
 
 export function ringOf(circle: string | null | undefined): number {

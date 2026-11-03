@@ -12,14 +12,13 @@ export function DiffView({ before, after, beforeTitle, afterTitle }: { before: s
       <p className="mb-3 text-sm text-muted">
         {stats.added === 0 && stats.removed === 0 && !titleChanged ? "No text changes in this version." : (
           <>
-            <span className="text-accent">{stats.added} word{stats.added === 1 ? "" : "s"} added</span>
-            <span aria-hidden> · </span>
-            <span className="text-danger">{stats.removed} removed</span>
-            {titleChanged && <> · Title changed from “{beforeTitle}” to “{afterTitle}”</>}
+            <span className="text-accent">{stats.added} word{stats.added === 1 ? "" : "s"} added</span>,{" "}
+            <span className="text-danger">{stats.removed} removed</span>.
+            {titleChanged && <> Title changed from “{beforeTitle}” to “{afterTitle}”.</>}
           </>
         )}
       </p>
-      <div className="max-w-[70ch] whitespace-pre-wrap break-words rounded-lg border border-line bg-surface p-4 leading-7">
+      <div className="max-w-[70ch] whitespace-pre-wrap break-words rounded-lg bg-surface p-4 leading-7">
         {shown.length === 0 && <span className="text-muted">This version is empty.</span>}
         {shown.map((s, i) => {
           if (s.op === "gap") return <span key={i} className="my-1 block select-none text-center text-xs text-muted">··· {s.words} unchanged word{s.words === 1 ? "" : "s"} ···</span>;

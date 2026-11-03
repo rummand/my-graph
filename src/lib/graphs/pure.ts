@@ -146,7 +146,11 @@ export function inviteState(i: { expiresAt: Date; acceptedAt: Date | null; revok
   return "open";
 }
 
-/** The graph to work in: the requested one if the person is a member, else their family graph, else their first. */
+/**
+ * The graph to work in: the requested one if the person is a member, else their family graph, else a graph someone
+ * shared with them (people who joined through an invite should land in what was made for them, not in their own
+ * empty Personal graph), else their first.
+ */
 export function pickGraph<T extends { id: string; kind: GraphKind; householdId: string; archivedAt: Date | null }>(
   graphs: T[], homeHouseholdId: string, requested: string | null | undefined,
 ): T | null {
@@ -155,7 +159,9 @@ export function pickGraph<T extends { id: string; kind: GraphKind; householdId: 
     const hit = live.find((g) => g.id === requested);
     if (hit) return hit;
   }
-  return live.find((g) => g.kind === "family" && g.householdId === homeHouseholdId) ?? live[0] ?? null;
+  return live.find((g) => g.kind === "family" && g.householdId === homeHouseholdId)
+    ?? live.find((g) => g.householdId !== homeHouseholdId)
+    ?? live[0] ?? null;
 }
 
 export const DEFAULT_HUES: Record<GraphKind, number> = { family: 28, personal: 265, work: 210, shared: 340, other: 160 };

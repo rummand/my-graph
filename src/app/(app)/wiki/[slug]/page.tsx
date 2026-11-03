@@ -35,7 +35,7 @@ export default async function WikiPageRoute({ params, searchParams }: Props) {
   }
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div>
       <WikiPageClient
         key={`${page.id}:${page.version}`}
         startEditing={sp.edit === "1"}

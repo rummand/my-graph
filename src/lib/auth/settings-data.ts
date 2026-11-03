@@ -1,7 +1,8 @@
 /** Reads for the settings pages (server-only). Every function is scoped to the viewer's household. */
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { auditLog, households, passkeys, users } from "@/db/schema";
+import { auditLog, graphMembers, households, passkeys, users } from "@/db/schema";
+import { auditVisibleTo } from "./audit-labels";
 import type { Viewer } from "./index";
 import { canManageRole } from "./members";
 import { describeUserAgent } from "./session";
@@ -65,9 +66,17 @@ export type AuditView = {
 };
 
 export async function recentAudit(v: Viewer, opts: { limit?: number; userId?: string } = {}): Promise<AuditView[]> {
-  const rows = await db.select().from(auditLog)
-    .where(and(eq(auditLog.householdId, v.householdId), opts.userId ? eq(auditLog.userId, opts.userId) : undefined))
-    .orderBy(desc(auditLog.at)).limit(Math.min(opts.limit ?? 100, 500));
+  const limit = Math.min(opts.limit ?? 100, 500);
+  // Entries from one graph (a Work file, a graph shared with a partner) show only to that graph's members, so the
+  // family log never reveals what someone does in their other graphs. Over-fetch, then filter.
+  const [raw, mine] = await Promise.all([
+    db.select().from(auditLog)
+      .where(and(eq(auditLog.householdId, v.householdId), opts.userId ? eq(auditLog.userId, opts.userId) : undefined))
+      .orderBy(desc(auditLog.at)).limit(limit * 4),
+    db.select({ id: graphMembers.graphId }).from(graphMembers).where(eq(graphMembers.userId, v.id)),
+  ]);
+  const myGraphs = new Set(mine.map((m) => m.id));
+  const rows = raw.filter((r) => auditVisibleTo(r, v.id, myGraphs)).slice(0, limit);
   const names = new Map((await db.select({ id: users.id, name: users.name }).from(users).where(eq(users.householdId, v.householdId))).map((u) => [u.id, u.name]));
   return rows.map((r) => ({
     id: r.id, at: r.at.toISOString(), action: r.action, actor: r.userId ? names.get(r.userId) ?? "Removed member" : null,

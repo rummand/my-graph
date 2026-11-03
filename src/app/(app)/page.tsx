@@ -28,7 +28,10 @@ export default async function TodayPage() {
     href: c.personNodeId ? hrefs.node(c.personNodeId) : null, age: ageLabel(c.age),
     personNodeId: c.personNodeId, userId: c.userId,
   }));
-  const family: Lane = { key: "family", colorId: null, name: "Whole family", href: null, age: "Everything else", personNodeId: null, userId: null };
+  // Outside the family graph there is no "family": the row is simply everything in this graph.
+  const inFamily = viewer.graphKind === "family";
+  const family: Lane = { key: "family", colorId: null, name: inFamily ? "Whole family" : "Everything", href: null,
+    age: inFamily ? "Everything else" : `In ${viewer.graphName}`, personNodeId: null, userId: null };
 
   const people = kids.filter((c) => c.personNodeId).map((c) => ({ personNodeId: c.personNodeId!, name: c.name }));
   if (viewer.personNodeId && !people.some((p) => p.personNodeId === viewer.personNodeId)) {
