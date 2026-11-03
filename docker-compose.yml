@@ -1,0 +1,13 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: mygraph
+      POSTGRES_PASSWORD: mygraph
+      POSTGRES_DB: mygraph
+    ports:
+      - "5433:5432"
+    volumes:
+      - mygraph-db:/var/lib/postgresql/data
+volumes:
+  mygraph-db:
