@@ -4,7 +4,7 @@
  * reminders, GBrain's source rule for uploads).
  */
 import "server-only";
-import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { provenance, sources, users } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
@@ -37,7 +37,8 @@ export async function loadTimeline(v: Viewer, q: TimelineQuery = {}): Promise<Ti
       ? timeline(v, { from, to, personIds: q.people, topicIds: topicFilter, limit })
       : Promise.resolve({ events: [] as GNode[], involves: [] as { eventId: string; personId: string }[] }),
     db.select({ id: users.id, role: users.role, birthYear: users.birthYear, personNodeId: users.personNodeId, name: users.name })
-      .from(users).where(eq(users.householdId, v.householdId)),
+      // Members of the current graph (the household, in the family graph).
+      .from(users).where(sql`exists (select 1 from graph_members gm where gm.user_id = ${users.id} and gm.graph_id = ${v.graphId})`),
     types.has("reminder") && v.role !== "guest" ? safe(() => listReminders(v, { limit: 200 }), []) : Promise.resolve([]),
     types.has("source") && !topicFilter ? loadSources(v, from, to) : Promise.resolve([]),
     safe(() => listNodes(v, { type: "topic", limit: 200 }), [] as GNode[]),
@@ -139,7 +140,7 @@ async function loadSources(v: Viewer, from?: Date, to?: Date) {
   const ctx = await accessContext(v);
   return db.select({ id: sources.id, title: sources.title, ownerId: sources.ownerId, createdAt: sources.createdAt, nodeId: sources.nodeId, sensitive: sources.sensitive })
     .from(sources)
-    .where(and(eq(sources.householdId, v.householdId), eq(sources.kind, "upload"), sourceReadSql(ctx, "sources"),
+    .where(and(eq(sources.graphId, v.graphId), eq(sources.kind, "upload"), sourceReadSql(ctx, "sources"),
       from ? gte(sources.createdAt, from) : undefined, to ? lte(sources.createdAt, to) : undefined))
     .orderBy(desc(sources.createdAt)).limit(500);
 }

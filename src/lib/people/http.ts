@@ -28,6 +28,8 @@ export function query<T extends z.ZodType>(req: Request, schema: T): z.infer<T> 
 
 export function requireParent(v: Viewer) {
   if (!isParent(v)) throw new HttpError(403, "Only parents can change this");
+  // The model belongs to the household whose graph is open: only that household's parents change it.
+  if (v.graphHouseholdId !== v.householdId) throw new HttpError(403, "This graph uses its owner's household model. Only they can change it.");
 }
 
 /** Wrap a handler: resolves the viewer, maps thrown errors to `{ error }` JSON with the right status. */

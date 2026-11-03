@@ -2,46 +2,53 @@
  * Who may read, edit and delete a wiki page. Same visibility rules as the graph, checked locally so wiki reads don't
  * depend on GBrain internals. Pure functions + one SQL fragment that mirrors canReadPage.
  *
+ * A page belongs to one graph and is only ever visible inside it. Within the graph:
  *   private   ("Only me")     — the owner only
- *   parents   ("Parents")     — the owner and every owner/parent in the household (children never)
- *   household ("Whole family")— everyone in the household
+ *   parents   ("Parents")     — the owner and every owner/parent in the household (non-family graph: owner + editors)
+ *   household ("Whole family")— everyone in the graph
  * Guests don't see wiki pages (they only see graph items shared with them explicitly).
  *
- * Editing: the owner, plus anyone who can read a shared page (household or parents), except guests.
+ * Editing: the owner, plus anyone who can read a shared page (household or parents), except guests and viewers.
  * Deleting: the owner, or a parent for a whole-family page. Changing who can see it: the owner only.
  */
 import { sql, type SQL } from "drizzle-orm";
+import { sameGraph, scopeOf, type ScopeInput } from "@/lib/graphs/pure";
 
 export type Role = "owner" | "parent" | "child" | "guest";
 import type { Visibility } from "./labels";
 export type { Visibility };
 
-export type PageViewer = { id: string; householdId: string; role: Role };
-export type PageAccessItem = { ownerId: string; householdId: string; visibility: Visibility };
+export type PageViewer = ScopeInput;
+export type PageAccessItem = { ownerId: string; householdId: string; visibility: Visibility; graphId?: string | null };
 
 export const isParentRole = (r: Role) => r === "owner" || r === "parent";
 
 export function canReadPage(v: PageViewer, p: PageAccessItem): boolean {
-  if (v.role === "guest") return false;
-  if (p.householdId !== v.householdId) return false;
-  if (p.ownerId === v.id) return true;
+  const s = scopeOf(v);
+  if (s.role === "guest") return false;
+  if (!sameGraph(s, p.graphId)) return false;
+  if (p.householdId !== s.householdId) return false;
+  if (p.ownerId === s.id) return true;
   if (p.visibility === "household") return true;
-  if (p.visibility === "parents") return isParentRole(v.role);
+  if (p.visibility === "parents") return isParentRole(s.role);
   return false;
 }
 
 export function canEditPage(v: PageViewer, p: PageAccessItem): boolean {
   if (!canReadPage(v, p)) return false;
-  return p.ownerId === v.id || p.visibility !== "private";
+  if (!scopeOf(v).canWrite) return false;
+  return p.ownerId === scopeOf(v).id || p.visibility !== "private";
 }
 
 export function canDeletePage(v: PageViewer, p: PageAccessItem): boolean {
   if (!canReadPage(v, p)) return false;
-  return p.ownerId === v.id || (p.visibility === "household" && isParentRole(v.role));
+  const s = scopeOf(v);
+  if (!s.canWrite) return false;
+  return p.ownerId === s.id || (p.visibility === "household" && isParentRole(s.role));
 }
 
 export function canChangeVisibility(v: PageViewer, p: PageAccessItem): boolean {
-  return canReadPage(v, p) && p.ownerId === v.id;
+  return canReadPage(v, p) && scopeOf(v).canWrite && p.ownerId === scopeOf(v).id;
 }
 
 export type PagePermissions = { edit: boolean; delete: boolean; changeVisibility: boolean };
@@ -52,11 +59,14 @@ export function pagePermissions(v: PageViewer, p: PageAccessItem): PagePermissio
 
 /** SQL twin of canReadPage for list queries. `t` is the wiki_pages table alias (default "wiki_pages"). */
 export function pageReadSql(v: PageViewer, t = "wiki_pages"): SQL {
-  if (v.role === "guest") return sql`false`;
+  const s = scopeOf(v);
+  if (s.role === "guest") return sql`false`;
+  if (!/^[a-z_][a-z0-9_]*$/i.test(t)) throw new Error(`bad alias ${t}`);
   const col = (c: string) => sql.raw(`"${t}"."${c}"`);
-  const parent = isParentRole(v.role);
-  return sql`(${col("household_id")} = ${v.householdId} and (
-    ${col("owner_id")} = ${v.id}
+  const parent = isParentRole(s.role);
+  const graph = s.graphId ? sql`${col("graph_id")} = ${s.graphId}` : sql`true`;
+  return sql`(${graph} and ${col("household_id")} = ${s.householdId} and (
+    ${col("owner_id")} = ${s.id}
     or ${col("visibility")} = 'household'
     or (${parent ? sql`true` : sql`false`} and ${col("visibility")} = 'parents')
   ))`;

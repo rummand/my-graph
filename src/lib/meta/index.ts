@@ -11,6 +11,9 @@ import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { metaAttributes, metaKinds, metaRelations } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
+
+/** Whose meta model: the graph's household when the viewer carries one, else their own household. */
+export type MetaScope = Pick<Viewer, "householdId"> & { graphHouseholdId?: string };
 import { BUILTIN_ATTRIBUTES, BUILTIN_KINDS, BUILTIN_RELATIONS } from "./builtins";
 import {
   attributesFor as _attributesFor, findKind, kindsFor as _kindsFor, mergeMetaModel, relationLabel as _relationLabel,
@@ -81,10 +84,10 @@ function differs(have: Record<string, unknown>, want: Record<string, unknown>): 
 
 /* ── Reading ──────────────────────────────────────────────────────────────────────────────────────────── */
 
-/** The merged meta model for the viewer's household (built-ins + household overrides/additions; hidden ones flagged). */
-export async function getMetaModel(viewer: Pick<Viewer, "householdId">): Promise<MetaModel> {
+/** The meta model of the household whose graph the viewer is working in (a shared graph uses its owner's). */
+export async function getMetaModel(viewer: MetaScope): Promise<MetaModel> {
   await ensureBuiltins();
-  const hh = viewer.householdId;
+  const hh = viewer.graphHouseholdId ?? viewer.householdId;
   const [kinds, relations, attributes] = await Promise.all([
     db.select().from(metaKinds).where(or(isNull(metaKinds.householdId), eq(metaKinds.householdId, hh))),
     db.select().from(metaRelations).where(or(isNull(metaRelations.householdId), eq(metaRelations.householdId, hh))),
@@ -122,19 +125,19 @@ export function bindMeta(model: MetaModel): Meta {
   };
 }
 
-export async function getMeta(viewer: Pick<Viewer, "householdId">): Promise<Meta> {
+export async function getMeta(viewer: MetaScope): Promise<Meta> {
   return bindMeta(await getMetaModel(viewer));
 }
 
 /* Viewer-scoped convenience versions of the pure helpers. */
-export async function kindsFor(viewer: Pick<Viewer, "householdId">, type: MetaNodeType) { return (await getMeta(viewer)).kindsFor(type); }
-export async function relationLabel(viewer: Pick<Viewer, "householdId">, key: string, direction: "out" | "in" = "out") { return (await getMeta(viewer)).relationLabel(key, direction); }
-export async function attributesFor(viewer: Pick<Viewer, "householdId">, type: MetaNodeType, kind?: string | null) { return (await getMeta(viewer)).attributesFor(type, kind); }
-export async function validateProps(viewer: Pick<Viewer, "householdId">, type: MetaNodeType, kind: string | null | undefined, props: Record<string, unknown>, opts?: { partial?: boolean }) {
+export async function kindsFor(viewer: MetaScope, type: MetaNodeType) { return (await getMeta(viewer)).kindsFor(type); }
+export async function relationLabel(viewer: MetaScope, key: string, direction: "out" | "in" = "out") { return (await getMeta(viewer)).relationLabel(key, direction); }
+export async function attributesFor(viewer: MetaScope, type: MetaNodeType, kind?: string | null) { return (await getMeta(viewer)).attributesFor(type, kind); }
+export async function validateProps(viewer: MetaScope, type: MetaNodeType, kind: string | null | undefined, props: Record<string, unknown>, opts?: { partial?: boolean }) {
   return (await getMeta(viewer)).validateProps(type, kind, props, opts);
 }
 /** Kind suggestion for extraction: keyword heuristic restricted to the household's visible kinds. */
-export async function suggestKind(viewer: Pick<Viewer, "householdId">, label: string, context?: Parameters<typeof _suggestKind>[1]) {
+export async function suggestKind(viewer: MetaScope, label: string, context?: Parameters<typeof _suggestKind>[1]) {
   return (await getMeta(viewer)).suggestKind(label, context);
 }
 

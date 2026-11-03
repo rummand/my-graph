@@ -4,7 +4,7 @@ import { canEditItem, canReadEdgeItem, canReadItem, guestActive, nodeReadSql, sh
 const H = "h1", OTHER_H = "h2";
 const now = new Date("2026-11-03T12:00:00Z");
 const past = new Date("2026-11-01T00:00:00Z"), future = new Date("2026-12-01T00:00:00Z");
-const ctx = (role: AccessCtx["role"], id: string = role, active = true): AccessCtx => ({ id, householdId: H, role, active });
+const ctx = (role: AccessCtx["role"], id: string = role, active = true): AccessCtx => ({ id, householdId: H, role, active, graphId: null, canWrite: role !== "guest" });
 const item = (p: Partial<AccessItem> = {}): AccessItem => ({ ownerId: "owner", householdId: H, visibility: "private", sensitive: false, ...p });
 
 describe("canReadItem", () => {

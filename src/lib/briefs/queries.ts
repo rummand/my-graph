@@ -4,6 +4,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { edges, nodes, provenance, sources, users, wikiPages } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
+import { scopeOf } from "@/lib/graphs/pure";
 import { canSeeItem, visibleChildren } from "./access";
 import { humanizeRelation } from "./context";
 import { visibleWhere } from "./sql";
@@ -12,7 +13,7 @@ export type ChildRow = { id: string; name: string; birthYear: number | null; per
 
 /** Children in the household the viewer gets a card for (parents: all; a child: themself; guests: none). */
 export async function loadChildren(v: Viewer): Promise<ChildRow[]> {
-  if (v.role === "guest") return [];
+  if (v.role === "guest" || !scopeOf(v).family) return [];
   const rows = await db.select({
     id: users.id, name: users.name, birthYear: users.birthYear, personNodeId: users.personNodeId, personLabel: nodes.label,
   }).from(users)
@@ -39,8 +40,8 @@ export async function loadAttentionFacts(v: Viewer, opts: { days?: number; limit
     eq(edges.status, "unconfirmed"),
     lt(edges.confidence, opts.maxConfidence ?? 0.6),
     gte(edges.createdAt, since),
-    visibleWhere(v, { ownerId: fromN.ownerId, householdId: fromN.householdId, visibility: fromN.visibility, sensitive: fromN.sensitive }),
-    visibleWhere(v, { ownerId: toN.ownerId, householdId: toN.householdId, visibility: toN.visibility, sensitive: toN.sensitive }),
+    visibleWhere(v, { ownerId: fromN.ownerId, householdId: fromN.householdId, graphId: fromN.graphId, visibility: fromN.visibility, sensitive: fromN.sensitive }),
+    visibleWhere(v, { ownerId: toN.ownerId, householdId: toN.householdId, graphId: toN.graphId, visibility: toN.visibility, sensitive: toN.sensitive }),
     isNull(fromN.mergedInto),
     isNull(toN.mergedInto),
   );
@@ -64,7 +65,7 @@ export async function loadAttentionFacts(v: Viewer, opts: { days?: number; limit
 
   const provRows = await db.select({
     subjectId: provenance.subjectId, sourceId: provenance.sourceId, quote: provenance.quote, locator: provenance.locator,
-    sourceTitle: sources.title, sourceOwnerId: sources.ownerId, sourceHouseholdId: sources.householdId, sourceVisibility: sources.visibility,
+    sourceTitle: sources.title, sourceOwnerId: sources.ownerId, sourceHouseholdId: sources.householdId, sourceGraphId: sources.graphId, sourceVisibility: sources.visibility,
     sourceSensitive: sources.sensitive,
   }).from(provenance)
     .leftJoin(sources, eq(sources.id, provenance.sourceId))
@@ -77,7 +78,7 @@ export async function loadAttentionFacts(v: Viewer, opts: { days?: number; limit
     const p = firstProv.get(r.edgeId);
     // Only show the source title if the viewer could open that source.
     const sourceVisible = Boolean(p?.sourceId && p.sourceOwnerId && p.sourceHouseholdId && p.sourceVisibility
-      && canSeeItem(v, { ownerId: p.sourceOwnerId, householdId: p.sourceHouseholdId, visibility: p.sourceVisibility, sensitive: p.sourceSensitive ?? false }));
+      && canSeeItem(v, { ownerId: p.sourceOwnerId, householdId: p.sourceHouseholdId, graphId: p.sourceGraphId, visibility: p.sourceVisibility, sensitive: p.sourceSensitive ?? false }));
     return {
       edgeId: r.edgeId, fromId: r.fromId, fromLabel: r.fromLabel, fromType: r.fromType, toId: r.toId, toLabel: r.toLabel, toType: r.toType,
       relation: r.relation, text: `${r.fromLabel} ${humanizeRelation(r.relation)} ${r.toLabel}`,
@@ -98,7 +99,7 @@ const sourceCols = {
 
 /** The viewer's own uploads that failed (they're the one who can retry them). */
 export async function loadFailedUploads(v: Viewer, limit = 5): Promise<{ items: SourceRow[]; total: number }> {
-  const where = and(eq(sources.householdId, v.householdId), eq(sources.ownerId, v.id), eq(sources.status, "failed"));
+  const where = and(eq(sources.graphId, v.graphId), eq(sources.ownerId, v.id), eq(sources.status, "failed"));
   const [items, [{ total }]] = await Promise.all([
     db.select(sourceCols).from(sources).where(where).orderBy(desc(sources.createdAt)).limit(limit),
     db.select({ total: count() }).from(sources).where(where),
@@ -109,7 +110,7 @@ export async function loadFailedUploads(v: Viewer, limit = 5): Promise<{ items: 
 /** Latest files and notes the viewer can see (wiki and chat sources are shown elsewhere). */
 export async function loadRecentSources(v: Viewer, limit = 5): Promise<SourceRow[]> {
   return db.select(sourceCols).from(sources)
-    .where(and(visibleWhere(v, { ownerId: sources.ownerId, householdId: sources.householdId, visibility: sources.visibility, sensitive: sources.sensitive }), notInArray(sources.kind, ["wiki", "chat"]), ne(sources.status, "failed")))
+    .where(and(visibleWhere(v, { ownerId: sources.ownerId, householdId: sources.householdId, graphId: sources.graphId, visibility: sources.visibility, sensitive: sources.sensitive }), notInArray(sources.kind, ["wiki", "chat"]), ne(sources.status, "failed")))
     .orderBy(desc(sources.createdAt))
     .limit(limit);
 }

@@ -9,6 +9,7 @@ import { db } from "@/db";
 import { sources } from "@/db/schema";
 import { audit, type Viewer } from "@/lib/auth";
 import { putFile, sha256Hex } from "@/lib/storage";
+import { scopeOf } from "@/lib/graphs/pure";
 import { IngestError } from "./errors";
 import { detectFileType, MAX_UPLOAD_BYTES } from "./mime";
 import { enqueue, processSource } from "./pipeline";
@@ -21,18 +22,20 @@ export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "p
   if (file.size === 0) throw new IngestError(400, `"${name}" is empty.`);
   if (file.size > MAX_UPLOAD_BYTES) throw new IngestError(413, `"${name}" is ${(file.size / 1024 / 1024).toFixed(0)} MB. The limit is 50 MB per file.`);
 
+  if (!scopeOf(v).canWrite) throw new IngestError(403, "You can look at this graph but not add files to it.");
   const bytes = new Uint8Array(await file.arrayBuffer());
   const type = detectFileType(name, file.type, bytes.subarray(0, 8192));
   if (!type.ok) throw new IngestError(415, type.reason);
 
   const sha256 = sha256Hex(bytes);
   const [dup] = await db.select({ id: sources.id }).from(sources)
-    .where(and(eq(sources.ownerId, v.id), eq(sources.sha256, sha256))).limit(1);
+    .where(and(eq(sources.graphId, v.graphId), eq(sources.ownerId, v.id), eq(sources.sha256, sha256))).limit(1);
   if (dup) return { sourceId: dup.id, duplicate: true };
 
   const stored = await putFile(bytes);
   const [row] = await db.insert(sources).values({
-    householdId: v.householdId,
+    householdId: v.graphHouseholdId,
+    graphId: v.graphId,
     ownerId: v.id,
     kind: "upload",
     title: name,
@@ -57,17 +60,17 @@ export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "p
  * recorded on the source row (status / error / meta); this function does not throw for processing failures.
  */
 export async function ingestText(v: Viewer, sourceId: string): Promise<void> {
-  const [src] = await db.select({ ownerId: sources.ownerId }).from(sources).where(eq(sources.id, sourceId)).limit(1);
+  const [src] = await db.select({ ownerId: sources.ownerId, graphId: sources.graphId }).from(sources).where(eq(sources.id, sourceId)).limit(1);
   if (!src) throw new IngestError(404, "Source not found.");
-  if (src.ownerId !== v.id) throw new IngestError(403, "Only the owner can process this source.");
+  if (src.ownerId !== v.id || src.graphId !== v.graphId) throw new IngestError(403, "Only the owner can process this source, in its own graph.");
   await new Promise<void>((resolve) => enqueue(() => processSource(v, sourceId, { fromFile: false }).finally(resolve)));
 }
 
 /** Run the whole pipeline again for an uploaded source (Retry). Returns immediately. */
 export async function reprocessSource(v: Viewer, sourceId: string): Promise<void> {
-  const [src] = await db.select({ ownerId: sources.ownerId, storageKey: sources.storageKey }).from(sources).where(eq(sources.id, sourceId)).limit(1);
+  const [src] = await db.select({ ownerId: sources.ownerId, graphId: sources.graphId, storageKey: sources.storageKey }).from(sources).where(eq(sources.id, sourceId)).limit(1);
   if (!src) throw new IngestError(404, "Source not found.");
-  if (src.ownerId !== v.id) throw new IngestError(403, "Only the person who added this file can reprocess it.");
+  if (src.ownerId !== v.id || src.graphId !== v.graphId) throw new IngestError(403, "Only the person who added this file can reprocess it.");
   await db.update(sources).set({ status: "pending", error: null }).where(eq(sources.id, sourceId));
   enqueue(() => processSource(v, sourceId, { fromFile: !!src.storageKey }));
 }

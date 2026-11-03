@@ -11,6 +11,7 @@ import * as mergeRoute from "@/app/api/nodes/[id]/merge/route";
 import * as suggRoute from "@/app/api/nodes/merge-suggestions/route";
 import * as edgeRoute from "@/app/api/graph/edges/[id]/route";
 import { addEdge } from "@/lib/gbrain";
+import { viewerFor } from "@/lib/graphs/store";
 
 /** Route handlers against the real database with auth mocked. Opt-in: GBRAIN_DB_TESTS=1 npx vitest run src/lib/gbrain/routes.db.test.ts */
 const enabled = !!process.env.GBRAIN_DB_TESTS;
@@ -21,7 +22,7 @@ describe.skipIf(!enabled)("routes (database)", () => {
 beforeAll(async () => {
   const [h] = await db.insert(households).values({ name: "route-check" }).returning(); hh = h.id;
   const [u] = await db.insert(users).values({ householdId: hh, email: `r${Date.now()}@x.test`, name: "Rita", role: "owner" }).returning();
-  Object.assign(viewer, { id: u.id, householdId: hh, name: "Rita", email: u.email, role: "owner", personNodeId: null });
+  Object.assign(viewer, await viewerFor({ id: u.id, householdId: hh, name: "Rita", email: u.email, role: "owner" as const, personNodeId: null }));
 });
 afterAll(async () => { await db.delete(households).where(eq(households.id, hh)); await sql.end(); });
 

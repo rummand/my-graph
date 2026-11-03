@@ -31,7 +31,9 @@ export async function POST(req: Request) {
       }, v.id);
       let edgeId: string | null = null;
       if (body.role === "child") {
-        let parentNode = v.personNodeId;
+        // From the users row: v.personNodeId is only set while the parent works in the family graph.
+        const [me] = await tx.select({ personNodeId: users.personNodeId }).from(users).where(eq(users.id, v.id));
+        let parentNode = me?.personNodeId ?? null;
         if (!parentNode) {
           // Older accounts may not have a person node yet: give the parent theirs first.
           parentNode = await createPersonNode(tx, { householdId: v.householdId, ownerId: v.id, label: v.name, role: v.role, agentId: v.id, note: "Created with the account" });

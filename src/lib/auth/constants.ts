@@ -11,6 +11,7 @@ export const PATH_HEADER = "x-mg-path";
 /** Paths that work without signing in. */
 export function isPublicPath(path: string): boolean {
   return path === "/login" || path.startsWith("/login/") || path === "/setup" || path.startsWith("/setup/")
+    || path.startsWith("/invite/")
     || path.startsWith("/api/") || path.startsWith("/_next/") || path === "/manifest.webmanifest"
     || path === "/favicon.ico" || path === "/robots.txt" || path.startsWith("/icons/")
     || /\.(?:png|jpg|jpeg|gif|svg|ico|webp|txt|xml|webmanifest|woff2?)$/.test(path);

@@ -60,10 +60,10 @@ export async function PATCH(req: Request, ctx: Ctx) {
         const set: Record<string, unknown> = { updatedAt: new Date() };
         if (body.name !== undefined && body.name !== m.name) set.label = body.name;
         if (body.birthYear !== undefined) set.props = sql`${nodes.props} || ${JSON.stringify({ birthYear: body.birthYear })}::jsonb`;
-        const [n] = await tx.update(nodes).set(set).where(and(eq(nodes.id, m.personNodeId), eq(nodes.ownerId, m.id))).returning({ id: nodes.id });
+        const [n] = await tx.update(nodes).set(set).where(and(eq(nodes.id, m.personNodeId), eq(nodes.ownerId, m.id))).returning({ id: nodes.id, graphId: nodes.graphId, householdId: nodes.householdId });
         if (n) {
           await tx.insert(provenance).values({
-            householdId: v.householdId, subjectType: "node", subjectId: n.id, activity: "manual_edit", agentType: "user",
+            householdId: n.householdId, graphId: n.graphId, subjectType: "node", subjectId: n.id, activity: "manual_edit", agentType: "user",
             agentId: v.id, confidence: 1, note: `${v.name} updated this in Family settings`,
           });
         }

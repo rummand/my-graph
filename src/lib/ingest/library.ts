@@ -68,7 +68,7 @@ export async function listSources(v: Viewer, f: ListFilters = {}): Promise<{ ite
   const where = and(...conds);
   const rows = await db
     .select({
-      id: sources.id, householdId: sources.householdId, ownerId: sources.ownerId, kind: sources.kind, title: sources.title,
+      id: sources.id, householdId: sources.householdId, graphId: sources.graphId, ownerId: sources.ownerId, kind: sources.kind, title: sources.title,
       mime: sources.mime, storageKey: sources.storageKey, sha256: sources.sha256, size: sources.size, textContent: sql<string | null>`null`,
       meta: sources.meta, status: sources.status, error: sources.error, visibility: sources.visibility, sensitive: sources.sensitive,
       nodeId: sources.nodeId, createdAt: sources.createdAt, ownerName: users.name,

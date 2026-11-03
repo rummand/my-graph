@@ -22,8 +22,11 @@ export class BriefUnavailableError extends Error {
 export const NOTHING_TO_BRIEF = "Nothing on the calendar and no open reminders for the next week. Enjoy the quiet.";
 
 /** Today's cached brief for the viewer, if one was written. */
-export function cachedBriefFor(v: Pick<Viewer, "id">, now = new Date()): CachedBrief | null {
-  return getCachedBrief(v.id, dayKey(now, appTimeZone()));
+/** Briefs are per person per graph: a brief written in one graph is never shown in another. */
+const briefKey = (v: Pick<Viewer, "id" | "graphId">) => `${v.id}:${v.graphId}`;
+
+export function cachedBriefFor(v: Pick<Viewer, "id" | "graphId">, now = new Date()): CachedBrief | null {
+  return getCachedBrief(briefKey(v), dayKey(now, appTimeZone()));
 }
 
 /**
@@ -34,7 +37,7 @@ export async function generateBrief(v: Viewer, opts: { refresh?: boolean; now?: 
   const tz = appTimeZone();
   const day = dayKey(now, tz);
   if (!opts.refresh) {
-    const hit = getCachedBrief(v.id, day);
+    const hit = getCachedBrief(briefKey(v), day);
     if (hit) return hit;
   }
 
@@ -60,7 +63,7 @@ export async function generateBrief(v: Viewer, opts: { refresh?: boolean; now?: 
         messages: buildBriefMessages(input, ctx),
         maxTokens: 400,
         temperature: 0.2,
-        meta: { userId: v.id, agent: "my-graph:daily-brief", sensitive: ctx.sensitive || undefined },
+        meta: { userId: v.id, agent: "my-graph:daily-brief", sensitive: ctx.sensitive || undefined, graphId: v.graphId },
       });
     } catch (err) {
       console.error("[briefs] mux.complete failed:", err);
@@ -70,6 +73,6 @@ export async function generateBrief(v: Viewer, opts: { refresh?: boolean; now?: 
     if (!picked.text) throw new BriefUnavailableError("The assistant returned an empty brief. Please try again.");
     brief = { text: picked.text, citations: picked.citations, generatedAt: new Date().toISOString(), day, model: res.model, local: false };
   }
-  setCachedBrief(v.id, brief);
+  setCachedBrief(briefKey(v), brief);
   return brief;
 }

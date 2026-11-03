@@ -12,7 +12,7 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql
 import { alias } from "drizzle-orm/pg-core";
 import { embed } from "@/lib/mux";
 import {
-  canEditItem, canReadItem, edgeSelfReadSql, guestActive, nodeEditSql, nodeReadSql, sourceReadSql, type AccessCtx,
+  canEditItem, canReadItem, ctxFor, edgeSelfReadSql, guestActive, nodeEditSql, nodeReadSql, sourceReadSql, type AccessCtx,
 } from "./access";
 import {
   clamp01, defaultEdgeStatus, findMergePairs, mergeAliases, namesMatch, narrowerVisibility, normalizeLabel,
@@ -89,7 +89,7 @@ const INACTIVE: EdgeStatus[] = ["rejected", "superseded"];
 const NOT_SAME_KEY = "gbrainNotSame";
 
 const nodeCols = {
-  id: nodes.id, ownerId: nodes.ownerId, householdId: nodes.householdId, type: nodes.type, kind: nodes.kind, label: nodes.label,
+  id: nodes.id, ownerId: nodes.ownerId, householdId: nodes.householdId, graphId: nodes.graphId, type: nodes.type, kind: nodes.kind, label: nodes.label,
   aliases: nodes.aliases, summary: nodes.summary, props: nodes.props, startAt: nodes.startAt, endAt: nodes.endAt,
   timePrecision: nodes.timePrecision, visibility: nodes.visibility, sensitive: nodes.sensitive, mergedInto: nodes.mergedInto,
   createdAt: nodes.createdAt, updatedAt: nodes.updatedAt,
@@ -97,7 +97,7 @@ const nodeCols = {
 type NodeRow = Pick<typeof nodes.$inferSelect, keyof typeof nodeCols>;
 
 const edgeCols = {
-  id: edges.id, ownerId: edges.ownerId, householdId: edges.householdId, fromId: edges.fromId, toId: edges.toId,
+  id: edges.id, ownerId: edges.ownerId, householdId: edges.householdId, graphId: edges.graphId, fromId: edges.fromId, toId: edges.toId,
   relation: edges.relation, props: edges.props, validFrom: edges.validFrom, validTo: edges.validTo,
   confidence: edges.confidence, status: edges.status, supersededBy: edges.supersededBy, visibility: edges.visibility,
   createdAt: edges.createdAt,
@@ -122,21 +122,28 @@ function toEdge(r: EdgeRow): GEdge {
 
 /** The viewer's access context (guests: is their access still valid?). */
 export async function accessContext(v: Viewer): Promise<AccessCtx> {
-  const base = { id: v.id, householdId: v.householdId, role: v.role };
-  if (v.role !== "guest") return { ...base, active: true };
+  if (v.role !== "guest") return ctxFor(v, true);
   const [u] = await db.select({ exp: users.accessExpiresAt }).from(users).where(eq(users.id, v.id));
-  return { ...base, active: guestActive(u?.exp ?? null) };
+  return ctxFor(v, guestActive(u?.exp ?? null));
+}
+
+/** The graph a write lands in. Every content write goes through this so nothing is written without a graph. */
+function graphOf(ctx: AccessCtx): string {
+  if (!ctx.graphId) throw new GBrainError(403, "Pick a graph to work in first.");
+  return ctx.graphId;
 }
 
 function assertCanWrite(ctx: AccessCtx) {
   if (!ctx.active) throw new GBrainError(403, "Your access has expired.");
   if (ctx.role === "guest") throw new GBrainError(403, "Guests can look at what has been shared with them but can't add to the graph.");
+  if (!ctx.canWrite) throw new GBrainError(403, "You can look at this graph but not add to it. Ask its owner to make you an editor.");
+  graphOf(ctx);
 }
 
-function provRow(householdId: string, subjectType: "node" | "edge", subjectId: string, p: ProvenanceInput) {
+function provRow(ctx: AccessCtx, subjectType: "node" | "edge", subjectId: string, p: ProvenanceInput) {
   if (!p.agentId) throw new GBrainError(400, "Every fact needs to say who or what recorded it.");
   return {
-    householdId, subjectType, subjectId,
+    householdId: ctx.householdId, graphId: graphOf(ctx), subjectType, subjectId,
     sourceId: p.sourceId ?? null, chunkId: p.chunkId ?? null, locator: p.locator ?? {}, quote: p.quote ?? null,
     activity: p.activity, agentType: p.agentType, agentId: p.agentId, confidence: clamp01(p.confidence), note: p.note ?? null,
   };
@@ -156,7 +163,7 @@ function embedNodeLater(v: Viewer, id: string, text: string, sensitive: boolean)
   if (!text.trim()) return;
   void (async () => {
     try {
-      const out = await embed([text.slice(0, 8000)], { userId: v.id, agent: "gbrain", sensitive });
+      const out = await embed([text.slice(0, 8000)], { userId: v.id, agent: "gbrain", sensitive, graphId: v.graphId });
       const vec = out?.[0];
       if (vec && vec.length === 1024) await db.update(nodes).set({ embedding: vec }).where(eq(nodes.id, id));
     } catch {
@@ -168,7 +175,7 @@ function embedNodeLater(v: Viewer, id: string, text: string, sensitive: boolean)
 async function embedQuery(v: Viewer, q: string): Promise<number[] | null> {
   try {
     const out = await Promise.race([
-      embed([q], { userId: v.id, agent: "gbrain-search" }),
+      embed([q], { userId: v.id, agent: "gbrain-search", graphId: v.graphId }),
       new Promise<null>((r) => setTimeout(() => r(null), 2500)),
     ]);
     const vec = out?.[0];
@@ -223,9 +230,10 @@ export async function upsertNode(v: Viewer, input: NodeInput, prov: ProvenanceIn
 
   const res = await db.transaction(async (tx) => {
     // Serialise resolution per owner and type so two concurrent extractions can't both create "Anna".
-    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`gbrain:node:${v.id}:${input.type}`}))`);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`gbrain:node:${graphOf(ctx)}:${v.id}:${input.type}`}))`);
+    // Resolution never reaches into another graph: the same name in Work and Family are two different nodes.
     const candidates = await tx.select({ id: nodes.id, label: nodes.label, aliases: nodes.aliases }).from(nodes)
-      .where(and(eq(nodes.ownerId, v.id), eq(nodes.type, input.type), isNull(nodes.mergedInto)));
+      .where(and(eq(nodes.graphId, graphOf(ctx)), eq(nodes.ownerId, v.id), eq(nodes.type, input.type), isNull(nodes.mergedInto)));
     const key = normalizeLabel(label);
     const match = candidates.find((c) => normalizeLabel(c.label) === key)
       ?? candidates.find((c) => namesMatch(c, { label, aliases: input.aliases }));
@@ -247,19 +255,19 @@ export async function upsertNode(v: Viewer, input: NodeInput, prov: ProvenanceIn
       if (Object.keys(patch).length) {
         [row] = await tx.update(nodes).set({ ...patch, updatedAt: new Date() }).where(eq(nodes.id, cur.id)).returning(nodeCols);
       }
-      await tx.insert(provenance).values(provRow(v.householdId, "node", cur.id, prov));
+      await tx.insert(provenance).values(provRow(ctx, "node", cur.id, prov));
       return { row, created: false, reembed: "aliases" in patch || "summary" in patch };
     }
 
     const sensitive = !!input.sensitive;
     const [row] = await tx.insert(nodes).values({
-      householdId: v.householdId, ownerId: v.id, type: input.type, kind: input.kind ?? null, label,
+      householdId: ctx.householdId, graphId: graphOf(ctx), ownerId: v.id, type: input.type, kind: input.kind ?? null, label,
       aliases: mergeAliases(label, input.aliases), summary: input.summary?.trim() || null, props: input.props ?? {},
       startAt: input.startAt ?? null, endAt: input.endAt ?? null, timePrecision: input.timePrecision ?? null,
       // Sensitive items default to parents-only; everything else to private.
       visibility: input.visibility ?? (sensitive ? "parents" : "private"), sensitive,
     }).returning(nodeCols);
-    await tx.insert(provenance).values(provRow(v.householdId, "node", row.id, prov));
+    await tx.insert(provenance).values(provRow(ctx, "node", row.id, prov));
     return { row, created: true, reembed: true };
   });
 
@@ -312,7 +320,7 @@ export async function updateNode(v: Viewer, id: string, patch: Partial<NodeInput
     if (start && end && end < start) throw new GBrainError(400, "The end can't be before the start.");
 
     const [updated] = await tx.update(nodes).set({ ...set, updatedAt: new Date() }).where(eq(nodes.id, id)).returning(nodeCols);
-    await tx.insert(provenance).values(provRow(v.householdId, "node", id, prov));
+    await tx.insert(provenance).values(provRow(ctx, "node", id, prov));
     return { updated, reembed: "label" in set || "summary" in set || "aliases" in set };
   });
 
@@ -370,12 +378,14 @@ async function addEdgeTx(tx: Tx, v: Viewer, ctx: AccessCtx, input: EdgeInput, pr
   const ends = await readableNodes(ctx, [input.fromId, input.toId], tx);
   const from = ends.find((n) => n.id === input.fromId), to = ends.find((n) => n.id === input.toId);
   if (!from || !to) throw new GBrainError(404, "One of the two things in this fact doesn't exist or isn't visible to you.");
+  // Facts never connect two graphs (readableNodes already only returns nodes in the viewer's graph; belt and braces).
+  if (from.graphId !== graphOf(ctx) || to.graphId !== graphOf(ctx)) throw new GBrainError(400, "Both things in a fact must be in the same graph.");
   if (input.validFrom && input.validTo && input.validTo < input.validFrom) throw new GBrainError(400, "A fact can't end before it starts.");
 
   const incoming = clamp01(prov.confidence ?? input.confidence);
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`gbrain:edge:${v.id}:${from.id}:${relation}:${to.id}`}))`);
   const [existing] = await tx.select(edgeCols).from(edges).where(and(
-    eq(edges.ownerId, v.id), eq(edges.fromId, from.id), eq(edges.relation, relation), eq(edges.toId, to.id),
+    eq(edges.graphId, graphOf(ctx)), eq(edges.ownerId, v.id), eq(edges.fromId, from.id), eq(edges.relation, relation), eq(edges.toId, to.id),
     notInArray(edges.status, INACTIVE),
   )).orderBy(asc(edges.createdAt)).limit(1).for("update");
 
@@ -387,17 +397,17 @@ async function addEdgeTx(tx: Tx, v: Viewer, ctx: AccessCtx, input: EdgeInput, pr
       validFrom: existing.validFrom ?? input.validFrom ?? null,
       validTo: existing.validTo ?? input.validTo ?? null,
     }).where(eq(edges.id, existing.id)).returning(edgeCols);
-    await tx.insert(provenance).values(provRow(v.householdId, "edge", row.id, { ...prov, confidence: incoming }));
+    await tx.insert(provenance).values(provRow(ctx, "edge", row.id, { ...prov, confidence: incoming }));
     return row;
   }
 
   const [row] = await tx.insert(edges).values({
-    householdId: v.householdId, ownerId: v.id, fromId: from.id, toId: to.id, relation, props: input.props ?? {},
+    householdId: ctx.householdId, graphId: graphOf(ctx), ownerId: v.id, fromId: from.id, toId: to.id, relation, props: input.props ?? {},
     validFrom: input.validFrom ?? null, validTo: input.validTo ?? null, confidence: incoming,
     status: input.status ?? defaultEdgeStatus(prov),
     visibility: input.visibility ?? narrowerVisibility(from.visibility, to.visibility),
   }).returning(edgeCols);
-  await tx.insert(provenance).values(provRow(v.householdId, "edge", row.id, { ...prov, confidence: incoming }));
+  await tx.insert(provenance).values(provRow(ctx, "edge", row.id, { ...prov, confidence: incoming }));
   return row;
 }
 
@@ -431,7 +441,7 @@ export async function setEdgeStatus(v: Viewer, id: string, status: EdgeStatus, n
       ...(status === "confirmed" ? { confidence: 1 } : {}),
       ...(status !== "superseded" ? { supersededBy: null } : {}),
     }).where(eq(edges.id, id)).returning(edgeCols);
-    await tx.insert(provenance).values(provRow(v.householdId, "edge", id, {
+    await tx.insert(provenance).values(provRow(ctx, "edge", id, {
       activity: "manual_edit", agentType: "user", agentId: v.id, confidence: 1, note: note?.trim() || STATUS_NOTE[status],
     }));
     return updated;
@@ -463,7 +473,7 @@ export async function correctEdge(v: Viewer, id: string, change: { relation?: st
       ...next, props: old.props, validFrom: old.validFrom, validTo: old.validTo, visibility: old.visibility, status: "confirmed",
     }, { activity: "manual_edit", agentType: "user", agentId: v.id, confidence: 1, note: note || "Corrected by hand" });
     await tx.update(edges).set({ status: "superseded", supersededBy: created.id }).where(eq(edges.id, old.id));
-    await tx.insert(provenance).values(provRow(v.householdId, "edge", old.id, {
+    await tx.insert(provenance).values(provRow(ctx, "edge", old.id, {
       activity: "manual_edit", agentType: "user", agentId: v.id, confidence: 1, note: note || "Replaced by a corrected fact",
     }));
     return created;
@@ -553,8 +563,10 @@ export async function agentNames(v: Viewer, provs: Pick<GProvenance, "agentType"
   const userIds = [...new Set(provs.filter((p) => p.agentType === "user").map((p) => p.agentId))].filter(isUuid);
   const out: Record<string, string> = {};
   if (userIds.length) {
+    // Names only of people in this graph (members), never of anyone else's household.
     const rows = await db.select({ id: users.id, name: users.name }).from(users)
-      .where(and(inArray(users.id, userIds), eq(users.householdId, v.householdId)));
+      .where(and(inArray(users.id, userIds),
+        sql`exists (select 1 from graph_members gm where gm.user_id = ${users.id} and gm.graph_id = ${v.graphId})`));
     for (const r of rows) out[r.id] = r.id === v.id ? `${r.name} (you)` : r.name;
   }
   return out;
@@ -577,7 +589,7 @@ export async function search(v: Viewer, query: string, opts?: { limit?: number; 
     .orderBy(sql`ts_rank(${nodes.search}, to_tsquery('simple', ${tq})) desc`).limit(per)).map((r) => r.id);
   const chunkText = async (tq: string) => (await db.select({ id: chunks.id }).from(chunks)
     .innerJoin(sources, eq(sources.id, chunks.sourceId))
-    .where(and(sourceReadSql(ctx, "sources"),
+    .where(and(sourceReadSql(ctx, "sources"), ctx.graphId ? eq(chunks.graphId, ctx.graphId) : sql`false`,
       sql`coalesce(${chunks.search}, to_tsvector('simple', ${chunks.text})) @@ to_tsquery('simple', ${tq})`))
     .orderBy(sql`ts_rank(coalesce(${chunks.search}, to_tsvector('simple', ${chunks.text})), to_tsquery('simple', ${tq})) desc`)
     .limit(per)).map((r) => r.id);
@@ -595,7 +607,7 @@ export async function search(v: Viewer, query: string, opts?: { limit?: number; 
       .orderBy(sql`${nodes.embedding} <=> ${vec}::vector`).limit(per).then((r) => r.map((x) => x.id)) : Promise.resolve([]),
     includeChunks ? withFallback(chunkText) : Promise.resolve([]),
     includeChunks && vec ? db.select({ id: chunks.id }).from(chunks).innerJoin(sources, eq(sources.id, chunks.sourceId))
-      .where(and(sourceReadSql(ctx, "sources"), isNotNull(chunks.embedding)))
+      .where(and(sourceReadSql(ctx, "sources"), ctx.graphId ? eq(chunks.graphId, ctx.graphId) : sql`false`, isNotNull(chunks.embedding)))
       .orderBy(sql`${chunks.embedding} <=> ${vec}::vector`).limit(per).then((r) => r.map((x) => x.id)) : Promise.resolve([]),
   ]);
 
@@ -701,6 +713,7 @@ export async function mergeNodes(v: Viewer, keepId: string, dropId: string): Pro
     // Merging copies names, notes and evidence onto the kept item; across owners that would hand one person's private
     // details to whoever can see the other's item.
     if (keep.ownerId !== drop.ownerId) throw new GBrainError(403, "These belong to different people's graphs, so they can't be merged.");
+    if (keep.graphId !== drop.graphId || keep.graphId !== graphOf(ctx)) throw new GBrainError(400, "Only items in the same graph can be merged.");
 
     // Facts move to the kept node.
     await tx.update(edges).set({ fromId: keepId }).where(eq(edges.fromId, dropId));
@@ -729,9 +742,9 @@ export async function mergeNodes(v: Viewer, keepId: string, dropId: string): Pro
         if ((rank[d.status] ?? 0) > (rank[status] ?? 0)) status = d.status;
         await tx.update(edges).set({ status: "superseded", supersededBy: first.id }).where(eq(edges.id, d.id));
         // Copy the duplicate's evidence onto the surviving fact.
-        await tx.execute(sql`insert into provenance (household_id, subject_type, subject_id, source_id, chunk_id, locator, quote, activity, agent_type, agent_id, confidence, note, created_at)
-          select household_id, subject_type, ${first.id}, source_id, chunk_id, locator, quote, activity, agent_type, agent_id, confidence, note, created_at
-          from provenance where subject_type = 'edge' and subject_id = ${d.id}`);
+        await tx.execute(sql`insert into provenance (household_id, graph_id, subject_type, subject_id, source_id, chunk_id, locator, quote, activity, agent_type, agent_id, confidence, note, created_at)
+          select household_id, graph_id, subject_type, ${first.id}, source_id, chunk_id, locator, quote, activity, agent_type, agent_id, confidence, note, created_at
+          from provenance where subject_type = 'edge' and subject_id = ${d.id} and graph_id = ${graphOf(ctx)}`);
       }
       await tx.update(edges).set({ confidence: conf, status }).where(eq(edges.id, first.id));
     }
@@ -764,8 +777,8 @@ export async function mergeNodes(v: Viewer, keepId: string, dropId: string): Pro
 
     const mergeProv = (note: string): ProvenanceInput => ({ activity: "manual_edit", agentType: "user", agentId: v.id, confidence: 1, note });
     await tx.insert(provenance).values([
-      provRow(v.householdId, "node", keepId, mergeProv(`Merged "${drop.label}" into this`)),
-      provRow(v.householdId, "node", dropId, mergeProv(`Merged into "${keep.label}"`)),
+      provRow(ctx, "node", keepId, mergeProv(`Merged "${drop.label}" into this`)),
+      provRow(ctx, "node", dropId, mergeProv(`Merged into "${keep.label}"`)),
     ]);
     return kept;
   });
@@ -818,7 +831,7 @@ export async function dismissMergeSuggestion(v: Viewer, aId: string, bId: string
       const other = both.find((x) => x.id !== n.id)!;
       const list = [...new Set([...asIdList(n.props[NOT_SAME_KEY]), other.id])];
       await tx.update(nodes).set({ props: { ...n.props, [NOT_SAME_KEY]: list } }).where(eq(nodes.id, n.id));
-      await tx.insert(provenance).values(provRow(v.householdId, "node", n.id, {
+      await tx.insert(provenance).values(provRow(ctx, "node", n.id, {
         activity: "manual_edit", agentType: "user", agentId: v.id, confidence: 1, note: `Marked as not the same as "${other.label}"`,
       }));
     }
@@ -830,7 +843,7 @@ export async function dismissMergeSuggestion(v: Viewer, aId: string, bId: string
 async function accessFacts(v: Viewer, id: string) {
   const ctx = await accessContext(v);
   if (!isUuid(id)) return { ctx, row: undefined, grants: [] };
-  const [row] = await db.select({ ownerId: nodes.ownerId, householdId: nodes.householdId, visibility: nodes.visibility, sensitive: nodes.sensitive })
+  const [row] = await db.select({ ownerId: nodes.ownerId, householdId: nodes.householdId, graphId: nodes.graphId, visibility: nodes.visibility, sensitive: nodes.sensitive })
     .from(nodes).where(eq(nodes.id, id));
   const grants = await db.select({ canEdit: shares.canEdit, expiresAt: shares.expiresAt }).from(shares)
     .where(and(eq(shares.nodeId, id), eq(shares.userId, v.id)));

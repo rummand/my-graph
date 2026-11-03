@@ -15,13 +15,16 @@ export async function PATCH(req: Request) {
       throw new AuthError(409, "Someone in My Graph already signs in with that email or username.", { fields: [{ key: "email", message: "Already in use." }] });
     }
     await db.transaction(async (tx) => {
-      await tx.update(users).set({ name: body.name, email: body.email }).where(eq(users.id, v.id));
-      if (body.name !== v.name && v.personNodeId) {
+      const [me] = await tx.update(users).set({ name: body.name, email: body.email }).where(eq(users.id, v.id)).returning({ personNodeId: users.personNodeId });
+      // Read from the row: v.personNodeId is only set while working in the family graph.
+      const personNodeId = me?.personNodeId ?? null;
+      if (body.name !== v.name && personNodeId) {
         const [n] = await tx.update(nodes).set({ label: body.name, updatedAt: new Date() })
-          .where(and(eq(nodes.id, v.personNodeId), eq(nodes.ownerId, v.id), eq(nodes.label, v.name))).returning({ id: nodes.id });
+          .where(and(eq(nodes.id, personNodeId), eq(nodes.ownerId, v.id), eq(nodes.label, v.name)))
+          .returning({ id: nodes.id, graphId: nodes.graphId, householdId: nodes.householdId });
         if (n) {
           await tx.insert(provenance).values({
-            householdId: v.householdId, subjectType: "node", subjectId: n.id, activity: "manual_edit", agentType: "user",
+            householdId: n.householdId, graphId: n.graphId, subjectType: "node", subjectId: n.id, activity: "manual_edit", agentType: "user",
             agentId: v.id, confidence: 1, note: `Renamed from "${v.name}" in Settings`,
           });
         }

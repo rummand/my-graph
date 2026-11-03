@@ -8,6 +8,7 @@ import { edges, nodes, observations, provenance, reminders, shares, sources, use
 import type { Viewer } from "@/lib/auth";
 import { findRelation, getMeta, type Meta } from "@/lib/meta";
 import { CATEGORY_LABELS } from "@/lib/meta/types";
+import { scopeOf } from "@/lib/graphs/pure";
 import { canModify, canSee, isParentRole, visibleWhere } from "./access";
 import { attentionItems, nextBirthday } from "./attention";
 import { normaliseCircle } from "./circles";
@@ -26,7 +27,7 @@ const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart
 /** The viewer's own person node: users.personNodeId, else a person node they own with their name. */
 export async function viewerPersonId(v: Viewer): Promise<string | null> {
   if (v.personNodeId) return v.personNodeId;
-  const [row] = await db.select({ id: nodes.id }).from(nodes).where(and(eq(nodes.ownerId, v.id), eq(nodes.type, "person"),
+  const [row] = await db.select({ id: nodes.id }).from(nodes).where(and(eq(nodes.graphId, v.graphId), eq(nodes.ownerId, v.id), eq(nodes.type, "person"),
     isNull(nodes.mergedInto), sql`lower(${nodes.label}) = lower(${v.name})`)).limit(1);
   return row?.id ?? null;
 }
@@ -55,7 +56,9 @@ async function edgesTouching(v: Viewer, ids: string[], relations?: string[]): Pr
 }
 
 async function householdPersonIds(v: Viewer): Promise<Set<string>> {
-  const rows = await db.select({ p: users.personNodeId }).from(users).where(eq(users.householdId, v.householdId));
+  // People who are members of this graph (in the family graph: the household).
+  const rows = await db.select({ p: users.personNodeId }).from(users)
+    .where(sql`exists (select 1 from graph_members gm where gm.user_id = ${users.id} and gm.graph_id = ${v.graphId})`);
   return new Set(rows.map((r) => r.p).filter((p): p is string => !!p));
 }
 
@@ -194,16 +197,16 @@ async function citationsFor(v: Viewer, subjectType: "node" | "edge", ids: string
   const rows = await db.select({
     subjectId: provenance.subjectId, sourceId: provenance.sourceId, activity: provenance.activity, agentType: provenance.agentType,
     confidence: provenance.confidence, createdAt: provenance.createdAt, locator: provenance.locator,
-    sourceTitle: sources.title, srcOwner: sources.ownerId, srcHh: sources.householdId, srcVis: sources.visibility, srcSensitive: sources.sensitive,
+    sourceTitle: sources.title, srcOwner: sources.ownerId, srcHh: sources.householdId, srcGraph: sources.graphId, srcVis: sources.visibility, srcSensitive: sources.sensitive,
   }).from(provenance).leftJoin(sources, eq(sources.id, provenance.sourceId))
-    .where(and(eq(provenance.subjectType, subjectType), inArray(provenance.subjectId, ids), eq(provenance.householdId, v.householdId)))
+    .where(and(eq(provenance.subjectType, subjectType), inArray(provenance.subjectId, ids), eq(provenance.graphId, v.graphId)))
     .orderBy(desc(provenance.createdAt));
   for (const r of rows) {
     const list = out.get(r.subjectId) ?? out.set(r.subjectId, []).get(r.subjectId)!;
     if (list.length >= 3) continue;
     const seen = (c: Citation) => list.some((x) => x.title === c.title && x.href === c.href);
     const page = r.locator?.page ? `p${r.locator.page}` : undefined;
-    if (r.sourceId && r.sourceTitle && canSee(v, { ownerId: r.srcOwner!, householdId: r.srcHh!, visibility: r.srcVis!, sensitive: r.srcSensitive! })) {
+    if (r.sourceId && r.sourceTitle && canSee(v, { ownerId: r.srcOwner!, householdId: r.srcHh!, graphId: r.srcGraph, visibility: r.srcVis!, sensitive: r.srcSensitive! })) {
       const c = { title: r.sourceTitle, href: `/library/${r.sourceId}`, detail: page, confidence: r.confidence < 1 ? r.confidence : undefined };
       if (!seen(c)) list.push(c);
     } else {
@@ -228,7 +231,7 @@ export async function listObservations(v: Viewer, personId: string, opts: { kind
 
 /** Attributes and props with sensitive ones removed for children who don't own the node. */
 export function redactForViewer(v: Viewer, ownerId: string, attrs: PersonProfile["attributes"], props: Record<string, unknown>) {
-  if (v.role !== "child" || ownerId === v.id) return { attributes: attrs, props };
+  if (scopeOf(v).role !== "child" || ownerId === v.id) return { attributes: attrs, props };
   const hiddenKeys = new Set(attrs.filter((a) => a.sensitive).map((a) => a.key));
   return {
     attributes: attrs.filter((a) => !a.sensitive),
@@ -326,7 +329,7 @@ function obsTitle(o: Observation): string {
   }
 }
 
-export async function canEditNode(v: Viewer, node: Pick<NodeRow, "id" | "ownerId" | "householdId" | "visibility" | "sensitive">): Promise<boolean> {
+export async function canEditNode(v: Viewer, node: Pick<NodeRow, "id" | "ownerId" | "householdId" | "graphId" | "visibility" | "sensitive">): Promise<boolean> {
   if (canModify(v, node)) return true;
   const [s] = await db.select({ id: shares.id }).from(shares).where(and(eq(shares.nodeId, node.id), eq(shares.userId, v.id), eq(shares.canEdit, true),
     or(isNull(shares.expiresAt), gte(shares.expiresAt, new Date()))));
