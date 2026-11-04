@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { complete, completeJson, embed, muxHealth, MuxAuthError, MuxError, MuxUnavailableError, stream, transcribe } from "./index";
+import { complete, completeJson, embed, muxHealth, MuxAuthError, MuxError, MuxUnavailableError, stream, transcribe, whisperLanguage } from "./index";
 import { buildHeaders, effectiveRoute, extractJson, muxConfig } from "./request";
 
 type Call = { url: string; init: RequestInit };
@@ -205,6 +205,25 @@ describe("transcribe", () => {
     expect(form.get("response_format")).toBe("verbose_json");
     expect((form.get("file") as File).name).toBe("note.mp3");
     expect(headersOf(calls[0])["content-type"]).toBeUndefined();
+    expect(form.get("language")).toBeNull(); // no language given: Whisper detects it
+  });
+
+  it("passes the chosen language to Whisper", async () => {
+    mockFetch(json({ text: "Hej" }));
+    await transcribe(new Blob(["abc"], { type: "audio/webm" }), "d.webm", meta, { language: "da" });
+    expect((calls[0].init.body as FormData).get("language")).toBe("da");
+    mockFetch(json({ text: "Hi" }));
+    await transcribe(new Blob(["abc"], { type: "audio/webm" }), "d.webm", meta, { language: "en-GB" });
+    expect((calls[0].init.body as FormData).get("language")).toBe("en");
+  });
+
+  it("only sends a language Whisper understands", () => {
+    expect(whisperLanguage("da")).toBe("da");
+    expect(whisperLanguage("da-DK")).toBe("da");
+    expect(whisperLanguage("EN_gb")).toBe("en");
+    expect(whisperLanguage("danish")).toBeNull();
+    expect(whisperLanguage("")).toBeNull();
+    expect(whisperLanguage(null)).toBeNull();
   });
 });
 

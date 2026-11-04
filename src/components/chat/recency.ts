@@ -87,12 +87,17 @@ export function shortModel(model: string | null | undefined): string | null {
 }
 
 /** Where a citation points inside its source, in words: "page 3", "at 1:20". */
-export function locatorWords(l: { page?: number; timeStartSec?: number; timeEndSec?: number } | undefined | null, t: TFn = EN_T): string | null {
+export function locatorWords(l: { page?: number; timeStartSec?: number; timeEndSec?: number; time?: number } | undefined | null, t: TFn = EN_T): string | null {
   if (!l) return null;
   if (typeof l.page === "number") return t("chat.sources.page", { n: l.page });
   if (typeof l.timeStartSec === "number") {
     const ts = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
     return typeof l.timeEndSec === "number" ? t("chat.sources.range", { from: ts(l.timeStartSec), to: ts(l.timeEndSec) }) : t("chat.sources.at", { t: ts(l.timeStartSec) });
+  }
+  // A recording's moment (ms), as a meeting from Record cites it.
+  if (typeof l.time === "number" && Number.isFinite(l.time)) {
+    const s = Math.floor(l.time / 1000);
+    return t("chat.sources.at", { t: `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}` });
   }
   return null;
 }

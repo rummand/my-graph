@@ -9,6 +9,7 @@ import { viewerFor } from "@/lib/auth/viewer-for";
 import { scopeOf } from "@/lib/graphs/pure";
 import { processSource, refreshSource } from "@/lib/ingest/pipeline";
 import * as mux from "@/lib/mux";
+import { clinicalDraftJob, clinicalTranscribeJob } from "@/lib/clinical/jobs";
 import { PermanentJobError, type JobProgress } from "./policy";
 import type { JobRow } from "./queue";
 
@@ -32,7 +33,7 @@ async function sourceOf(job: JobRow) {
 }
 
 /** Failures that reading again won't fix. */
-const PERMANENT = /original file is missing|unknown type|no longer a member|not supported|isn't supported|is empty|too large/i;
+const PERMANENT = /original file is missing|unknown type|no longer a member|not supported|isn't supported|is empty|too large|is damaged/i;
 
 const read: Handler = async (job, ctx) => {
   const v = await viewerOf(job);
@@ -56,4 +57,8 @@ const rebuild: Handler = async (job, ctx) => {
   if (out.error) throw new Error(out.error);
 };
 
-export const HANDLERS: Record<string, Handler> = { "ingest.read": read, "ingest.rebuild": rebuild };
+export const HANDLERS: Record<string, Handler> = {
+  "ingest.read": read, "ingest.rebuild": rebuild,
+  // Clinical background work (transcription, drafting): the handlers re-check the clinician's access and the consent.
+  "clinical.transcribe": clinicalTranscribeJob, "clinical.draft": clinicalDraftJob,
+};

@@ -7,7 +7,7 @@
  *   sources     { sources, route }                        — every numbered item the answer may cite
  *   sensitivity { level, badge }                          — the conversation now includes parents-only/private items
  *   delta       { text }                                  — visible answer text (proposals / clarify blocks held back)
- *   done        { messageId, citations, proposals, clarify, steps, thoughtMs, stopped, model, route, requestId, degraded, title }
+ *   done        { messageId, citations, proposals, clarify, steps, thoughtMs, stopped, model, route, requestId, degraded, title, mcpApprovals }
  *   error       { message }                               — only for failures before anything was saved
  */
 import type { AssistantStep, Citation } from "@/db/schema";
@@ -40,6 +40,10 @@ import { foldState } from "./state";
 import { voiceOf } from "./locale";
 import { itemSteps, memoryStep, offStep, searchStep, webSteps } from "./steps";
 import { checkAnswer, rulesForQuestion } from "@/lib/compliance/assistant";
+import { clinicalConsentFilter, consentHint, consentStepLabel } from "@/lib/clinical/chat";
+import type { McpApproval } from "@/lib/mcp-client";
+import { runMcpTools, type McpUse } from "./mcp";
+import { stripToolMarks } from "./mcp-plan";
 import { pageHint, type ResolvedPage } from "./page-context";
 import { addMessage, addState, conversationRows, createConversation, ownConversation, raiseConversationSensitivity, renameConversation, touchConversation } from "./store";
 
@@ -55,6 +59,8 @@ export type DoneEvent = {
   text: string;
   /** Facts read on the web about things in the graph, proposed as a change set (delivered by a person, never here). */
   changeSetId?: string | null;
+  /** Tools at connected MCP servers that would change something: shown as approval cards under the answer. */
+  mcpApprovals: McpApproval[];
 };
 
 function reasonOf(e: unknown): DegradedReason {
@@ -175,6 +181,12 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         if (mentioned.length) void recordMentions(v, { inType: "message", inId: turn.userMessageId, text: question }).catch(() => {});
         const plain = plainQuestion(question);
         const rulesPromise = safe(rulesForQuestion(v, plain), null, "corpus rules");
+        // The person's connected services (MCP), planned from the question alone while the graph is searched.
+        const lastAnswer = [...turn.history].reverse().find((h) => h.role === "assistant")?.content ?? null;
+        const toolsPromise = safe(runMcpTools(v, {
+          question: plain, today: longDay(now, tz), readOnly: !canWrite, sensitive: turn.sensitiveSoFar, recent: lastAnswer,
+          traceId: turn.conversationId, signal: both, onStep: (s) => step(s),
+        }), { steps: [], context: "", approvals: [], hints: [] } as McpUse, "MCP tools");
 
         // Retrieval and memory run together; each step is shown as soon as it finishes.
         const empty: Retrieval = { items: [], hits: 0, people: [] };
@@ -185,7 +197,12 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         const recall = memOk
           ? safe(memoryContext(v, { question: plain, limit: 12 }), { text: "", items: [] as Memory[] }, "memory").then((m) => { step(memoryStep(memoryCounts(m.items), { family: voice.family })); return m; })
           : Promise.resolve({ text: "", items: [] as Memory[] });
-        const [found, mem] = await Promise.all([retrieval, recall]);
+        const [found0, mem] = await Promise.all([retrieval, recall]);
+        // Clients and patients: their material is used only while their consent covers analysis.
+        const consent = await safe(clinicalConsentFilter(v, found0.items), { kept: found0.items, excluded: [] }, "clinical consent");
+        const found: Retrieval = consent.excluded.length ? { ...found0, items: consent.kept } : found0;
+        const consentLabel = consentStepLabel(consent.excluded);
+        if (consentLabel) step({ kind: "other", label: consentLabel });
         if (mem.items.length) void markMemoriesUsed(v, mem.items.map((m) => m.id)).catch(() => {});
 
         // The web, when the question needs the outside world and this person may use it.
@@ -203,6 +220,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         const webItems = web?.items ?? [];
         const items = selectItems(webFirst ? [...webItems, ...found.items] : [...found.items, ...webItems]);
         const ctx = numberContext(items);
+        const tools = await toolsPromise;
         for (const s of itemSteps(items, flags)) step(s);
         const off = offWords(flags);
         step(offStep(off));
@@ -214,7 +232,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         if (level !== turn.level) send("sensitivity", { level, badge: sensitivityBadge(level) });
 
         const webUsed = !!web?.pages.length;
-        const route = chooseRoute(question, { sensitive, tools: webUsed, contextItems: items.length, followUp: turn.history.length > 0 });
+        const route = chooseRoute(question, { sensitive, tools: webUsed || !!tools.context, contextItems: items.length, followUp: turn.history.length > 0 });
 
         // Facts the pages state about things in the graph → a change set, read while the answer is written.
         const factsPromise = webUsed && canWrite && !stoppedEarly(both)
@@ -230,6 +248,9 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         const hints = amb.map((a) => `"${a.name}" matches ${a.options.length} people ${voice.family ? "the family knows" : "in this graph"}: ${a.options.map((o) => o.label).join(", ")}. If it matters for the answer and the conversation doesn't say which, ask.`);
         if (mentioned.length) hints.push(`The person pointed at ${mentioned.map((m) => `"${m.label}"`).join(", ")} in the graph with @mentions: the question is about ${mentioned.length === 1 ? "that" : "those"}, not someone else with the same name.`);
         if (page) hints.push(pageHint(page));
+        const ch = consentHint(consent.excluded);
+        if (ch) hints.push(ch);
+        hints.push(...tools.hints);
         hints.push(...webHints({ need: need.use, allowed: webOk, web, today: longDay(now, tz) }));
         // The rules the graph follows (its corpora), when the question needs them: answered with references.
         const ruleCtx = await rulesPromise;
@@ -238,7 +259,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
           step({ kind: "read", label: `Read ${ruleCtx.rules.length} ${ruleCtx.rules.length === 1 ? "rule" : "rules"} from the corpora`, count: ruleCtx.rules.length });
         }
         const messages = buildMessages({
-          viewerName: v.name, today: longDay(now, tz), timeZone: tz, context: ctx.text, history: turn.history, question,
+          viewerName: v.name, today: longDay(now, tz), timeZone: tz, context: ctx.text + tools.context, history: turn.history, question,
           graphKind: v.graphKind, graphName: v.graphName, locale: voice.locale,
           tone: (settings.tone as Tone) ?? "warm", memory: mem.text, off, hints, summary: turn.summary, canRemember: memOk && canWrite,
         });
@@ -285,7 +306,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         const cl = parseClarify(raw);
         let clarify = stopped ? null : cl.clarify;
         if (!clarify && degraded && amb.length) clarify = clarifyFromAmbiguity(amb);
-        const content = dropUnknownCitations(clarify ? parseProposals(cl.text).text : cl.text, ctx.citations.length);
+        const content = stripToolMarks(dropUnknownCitations(clarify ? parseProposals(cl.text).text : cl.text, ctx.citations.length));
         const parsed = parseProposals(content);
         const citations = extractCitations(parsed.text, ctx.citations);
         // The web change set: waited for a little while after the answer (it is read in parallel).
@@ -304,6 +325,8 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
           steps, thoughtMs, clarify,
         });
         await touchConversation(turn.conversationId);
+        const mcpApprovals = stopped ? [] : tools.approvals;
+        if (mcpApprovals.length) await addState(turn.conversationId, { type: "mcp", messageId: saved.id, approvals: mcpApprovals });
 
         // Proposals: annotate (who'd see it, what it changes), then apply the ones the person always allows.
         const proposals: ProposalView[] = [];
@@ -350,7 +373,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         }
         const done: DoneEvent = {
           messageId: saved.id, citations, model: meta.model, route: meta.route ?? (degraded ? null : route), requestId: meta.requestId,
-          degraded, title, proposals, clarify, steps, thoughtMs, stopped, text: parsed.text, changeSetId,
+          degraded, title, proposals, clarify, steps, thoughtMs, stopped, text: parsed.text, changeSetId, mcpApprovals,
         };
         send("done", done);
         // Compliance: the answer and its proposals against the graph's corpora, after the answer (never slows it).

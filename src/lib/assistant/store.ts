@@ -6,6 +6,7 @@ import { and, asc, desc, eq, ilike, inArray, isNotNull, ne, or, sql } from "driz
 import { db } from "@/db";
 import { conversations, messages, type AssistantStep, type Citation } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
+import type { McpApproval } from "@/lib/mcp-client";
 import type { Clarify } from "./clarify";
 import { parseProposals, type ProposalView } from "./proposals";
 import { isSensitivity, raiseSensitivity, type Sensitivity } from "./sensitivity";
@@ -32,6 +33,8 @@ export type MessageView = {
   thoughtMs: number | null;
   clarify: Clarify | null;
   feedback: -1 | 1 | null;
+  /** Tools at connected services this answer prepared, waiting for the person's approval. */
+  mcpApprovals?: McpApproval[];
 };
 
 export type ConversationView = ConversationSummary & {
@@ -180,7 +183,7 @@ async function rowsOf(conversationId: string): Promise<Row[]> {
 
 /** Messages as the UI shows them: state folded in, proposals parsed out of assistant answers. */
 export function toViews(rows: Row[]): { messages: MessageView[]; sensitive: boolean } {
-  const { decisions, sensitive } = foldState(rows.filter((r) => r.role === "system").map((r) => r.content));
+  const { decisions, sensitive, mcp } = foldState(rows.filter((r) => r.role === "system").map((r) => r.content));
   const out: MessageView[] = [];
   for (const r of rows) {
     if (r.role === "system") continue;
@@ -190,6 +193,7 @@ export function toViews(rows: Row[]): { messages: MessageView[]; sensitive: bool
       createdAt: r.createdAt.toISOString(),
       steps: r.steps ?? [], thoughtMs: r.thoughtMs ?? null, clarify: r.clarify ?? null,
       feedback: r.feedback === 1 ? 1 : r.feedback === -1 ? -1 : null,
+      ...(mcp.has(r.id) ? { mcpApprovals: mcp.get(r.id) } : {}),
       proposals: proposals.map((p, i) => {
         const d = decisions.get(decisionKey(r.id, i + 1));
         return { ...p, n: i + 1, status: d?.status ?? "pending", result: d?.result ?? null, auto: d?.auto ?? null, keeperNote: d?.why ?? null };

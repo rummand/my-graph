@@ -15,6 +15,7 @@ import { decryptSecrets, encryptSecrets } from "./crypto";
 import { ConnectorError } from "./errors";
 import { clampEvery } from "./manifest";
 import { connectorById, offeredIn } from "./registry";
+import { isPlatformAdmin } from "@/lib/plans";
 import { claimOne, runClaimed } from "./run";
 import { readState } from "./state";
 import type { ConnectionRow, StreamCounts } from "./types";
@@ -173,7 +174,7 @@ export function kick(id: string, graphId: string): void {
 export async function createConnection(v: Viewer, input: { connector: string; label?: string; config?: Record<string, unknown>; secrets?: Record<string, unknown>; everyMinutes?: number }): Promise<ConnectionDTO> {
   assertMayConnect(v);
   const c = connectorById(input.connector);
-  if (!c || !offeredIn(v.graphKind).includes(c)) throw new ConnectionError(400, "That kind of connection isn't available in this graph.");
+  if (!c || !offeredIn(v.graphKind, isPlatformAdmin(v)).includes(c)) throw new ConnectionError(400, "That kind of connection isn't available in this graph.");
   if (c.manifest.status === "coming_soon" || !c.sync) throw new ConnectionError(400, "That connection isn't ready yet.");
   const secrets = cleanSecrets(parseOrThrow(c.manifest.secrets, cleanSecrets(input.secrets ?? {})) as Record<string, unknown>);
   const config = parseOrThrow(c.manifest.config, input.config ?? {}) as Record<string, unknown>;

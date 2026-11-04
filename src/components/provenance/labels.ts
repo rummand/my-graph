@@ -40,8 +40,22 @@ export function locatorLabel(l: Locator | null | undefined, t: TFn = EN): string
   if (typeof l.timeStartSec === "number") {
     const tm = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
     parts.push(typeof l.timeEndSec === "number" ? `${tm(l.timeStartSec)}–${tm(l.timeEndSec)}` : tm(l.timeStartSec));
+  } else if (typeof l.time === "number" && Number.isFinite(l.time)) {
+    const s = Math.floor(l.time / 1000);
+    parts.push(`${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`);
   }
   return parts.join(", ");
+}
+
+/**
+ * Where a source opens: a recording (its locator has `time`, the moment in ms on a meeting from Record) opens in the
+ * player at that moment (`/recordings/<id>#t=<seconds>`); a page of a document opens at the page; anything else in the
+ * library.
+ */
+export function sourceHref(sourceId: string, l?: Locator | null): string {
+  if (typeof l?.time === "number" && Number.isFinite(l.time) && l.time >= 0) return `/recordings/${sourceId}#t=${Math.floor(l.time / 1000)}`;
+  if (typeof l?.page === "number") return `/library/${sourceId}#page=${l.page}`;
+  return `/library/${sourceId}`;
 }
 
 export function confidenceLabel(c: number, t: TFn = EN): string {

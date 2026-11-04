@@ -16,6 +16,7 @@ import history from "./history";
 import memory from "./memory";
 import automations from "./automations";
 import connections from "./connections";
+import aula from "./aula";
 import graphs from "./graphs";
 import onboarding from "./onboarding";
 import model from "./model";
@@ -26,10 +27,12 @@ import docs from "./docs";
 import corpus from "./corpus";
 import compliance from "./compliance";
 import mcp from "./mcp";
+import mcpServer from "./mcpServer";
 import recordings from "./recordings";
 import clinical from "./clinical";
 import profile from "./profile";
+import providers from "./providers";
 
-const en: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, wiki, graph, changes, history, memory, automations, connections, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance, profile, clinical, mcp, recordings };
+const en: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, wiki, graph, changes, history, memory, automations, connections, aula, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance, profile, clinical, mcp, mcpServer, recordings, providers };
 
 export default en;

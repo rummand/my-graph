@@ -42,7 +42,7 @@ export function POST(req: Request) {
     const lang = dictationLanguageSchema.safeParse(form.get("language") ?? undefined);
     if (!lang.success) return jsonError(400, firstIssue(lang.error));
     try {
-      const r = await mux.transcribe(audio!, `dictation.${check.ext}`, { userId: v.id, agent: "my-graph:dictation", sensitive: true, graphId: v.graphId });
+      const r = await mux.transcribe(audio!, `dictation.${check.ext}`, { userId: v.id, agent: "my-graph:dictation", sensitive: true, graphId: v.graphId }, { language: lang.data });
       return NextResponse.json({ text: r.text.trim(), language: lang.data ?? null });
     } catch (e) {
       if (e instanceof mux.MuxAuthError || e instanceof mux.MuxUnavailableError) {

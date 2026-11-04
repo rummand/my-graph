@@ -13,6 +13,7 @@ import type { AssistantStep, Citation } from "@/db/schema";
 import { IconButton } from "@/components/ui";
 import type { ConversationSummary, ConversationView } from "@/lib/assistant/store";
 import type { ProposalView } from "@/lib/assistant/proposals";
+import type { McpApproval } from "@/lib/mcp-client";
 import type { Clarify } from "@/lib/assistant/clarify";
 import { sensitivityBadge, type Sensitivity } from "@/lib/assistant/sensitivity";
 import { readSse } from "@/lib/mux/sse";
@@ -291,6 +292,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
             model: (data.model as string) ?? null,
             route: (data.route as string) ?? null,
             content: typeof data.text === "string" ? data.text : m.content,
+            mcpApprovals: Array.isArray(data.mcpApprovals) ? (data.mcpApprovals as McpApproval[]) : [],
           }));
           if (typeof data.title === "string" && data.title) {
             const nt = data.title;

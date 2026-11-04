@@ -12,6 +12,9 @@
  * provenance and cited, facts they state about the graph become one change set for a person to deliver, and each
  * step shows in the run's history. A run has a budget of 3 searches and 5 page reads (shared by every call with
  * the same run id). A check-in only uses the web when its prompt asks for it outright.
+ *
+ * Connected services (MCP): read-only tools only — nobody is there to approve a tool that changes something, so
+ * those are never offered. Clients' and patients' material is used only while their consent covers analysis.
  */
 import type { Viewer } from "@/lib/auth";
 import type { AssistantStep, Citation } from "@/db/schema";
@@ -36,6 +39,8 @@ import { parseProposals, type Proposal } from "./proposals";
 import { flagsFrom, offWords, retrieve, type Retrieval } from "./retrieve";
 import { chooseRoute } from "./route";
 import { voiceOf } from "./locale";
+import { runMcpTools } from "./mcp";
+import { clinicalConsentFilter, consentHint, consentStepLabel } from "@/lib/clinical/chat";
 import { itemSteps, memoryStep, offStep, searchStep, webSteps } from "./steps";
 
 export type TaskResult = {
@@ -72,11 +77,18 @@ export async function runTask(v: Viewer, input: TaskInput): Promise<TaskResult> 
   const canWrite = scopeOf(v).canWrite;
   const memOk = memoryAllowedFor(v);
 
-  const [found, mem] = await Promise.all([
+  const toolsPromise = safe(runMcpTools(v, { question: prompt, today: longDay(now, tz), readOnly: true, sensitive: false, traceId: input.runId }),
+    { steps: [], context: "", approvals: [], hints: [] }, "MCP tools");
+  const [found0, mem] = await Promise.all([
     safe(retrieve(v, prompt, { tz, now, flags }), { items: [], hits: 0, people: [] }, "retrieve"),
     memOk ? safe(memoryContext(v, { question: prompt, limit: 12 }), { text: "", items: [] as Memory[] }, "memory") : Promise.resolve({ text: "", items: [] as Memory[] }),
   ]);
-  step(searchStep(flags, found.hits));
+  step(searchStep(flags, found0.hits));
+  const consent = await safe(clinicalConsentFilter(v, found0.items), { kept: found0.items, excluded: [] }, "clinical consent");
+  const found: Retrieval = consent.excluded.length ? { ...found0, items: consent.kept } : found0;
+  step(consentStepLabel(consent.excluded) ? { kind: "other", label: consentStepLabel(consent.excluded)! } : null);
+  const tools = await toolsPromise;
+  for (const s of tools.steps) step(s);
 
   // The web, when the prompt needs it and the owner may use it; within the run's budget.
   const need = needsWeb(prompt, { graphHits: found.hits });
@@ -114,13 +126,15 @@ export async function runTask(v: Viewer, input: TaskInput): Promise<TaskResult> 
   step(offStep(off));
 
   const messages = buildMessages({
-    viewerName: v.name, today: longDay(now, tz), timeZone: tz, context: ctx.text, history: [], question: prompt,
+    viewerName: v.name, today: longDay(now, tz), timeZone: tz, context: ctx.text + tools.context, history: [], question: prompt,
     graphKind: v.graphKind, graphName: v.graphName, locale: voice.locale, answerInLocale: true,
     tone: (settings.tone as Tone) ?? "warm", memory: mem.text, off, canRemember: memOk && canWrite,
     unattended: input.mode === "unattended",
     hints: [
       "Start with one plain sentence that says what matters most (it is shown on its own as the run's summary), then the details. Don't start with \"Here is\".",
       ...(wantWeb ? webHints({ need: true, allowed: webOk, web, today: longDay(now, tz) }) : []),
+      ...tools.hints,
+      ...(consentHint(consent.excluded) ? [consentHint(consent.excluded)!] : []),
     ],
   });
   const webUsed = !!web?.pages.length;

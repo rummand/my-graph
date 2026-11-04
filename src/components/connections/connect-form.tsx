@@ -19,6 +19,7 @@ function initialValues(info: ConnectorInfo, existing?: ConnectionDTO): Values {
     if (f.kind === "list") v[f.key] = Array.isArray(cur) ? cur.join("\n") : f.key === "folders" ? "INBOX" : "";
     else if (f.kind === "visibility") v[f.key] = typeof cur === "string" ? cur : "private";
     else if (f.kind === "number") v[f.key] = cur != null ? String(cur) : f.key === "port" ? "993" : "";
+    else if (f.kind === "boolean") v[f.key] = cur === true ? "true" : "false";
     else if (f.kind === "date") v[f.key] = typeof cur === "string" ? cur : f.key === "since" ? defaultSince() : "";
     else v[f.key] = cur != null ? String(cur) : "";
   }
@@ -71,6 +72,7 @@ export function ConnectForm({ info, people, family, existing, onDone, onCancel }
       if (f.kind === "list") config[f.key] = raw.split(/\n|,/).map((s) => s.trim()).filter(Boolean);
       else if (f.kind === "number") { if (raw.trim()) config[f.key] = Number(raw); }
       else if (f.kind === "person") config[f.key] = raw || null;
+      else if (f.kind === "boolean") config[f.key] = raw === "true";
       else if (raw.trim()) config[f.key] = raw.trim();
     }
     // A new connection without a name gets one in the reader's language ("Aula-kalender", "Kalender fra dbu.dk").
@@ -112,6 +114,13 @@ export function ConnectForm({ info, people, family, existing, onDone, onCancel }
             control = (
               <Select {...common} onChange={(e) => set(f.key, e.target.value)}>
                 {(["private", "parents", "household"] as const).map((v) => <option key={v} value={v}>{t(`connections.${visKey}.${v}`)}</option>)}
+              </Select>
+            );
+          } else if (f.kind === "boolean") {
+            control = (
+              <Select {...common} value={values[f.key] === "true" ? "true" : "false"} onChange={(e) => set(f.key, e.target.value)}>
+                <option value="false">{t("connections.fields.boolean.no")}</option>
+                <option value="true">{t("connections.fields.boolean.yes")}</option>
               </Select>
             );
           } else if (f.kind === "list") {

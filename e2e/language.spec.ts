@@ -10,7 +10,7 @@ const ENGLISH = [/\bToday\b/, /\bSettings\b/, /\bSign out\b/, /\bWaiting for you
 
 // Stored content that is English on purpose: web page titles, and suggestions written before runs used the owner's
 // language (stored text is shown as it was written).
-const CONTENT = [/ · [a-z0-9.-]+\.[a-z]{2,}$/, /^Open Today$/];
+const CONTENT = [/ · [a-z0-9.-]+\.[a-z]{2,}”?$/, /^Open Today$/];
 
 const PAGES = ["/", "/chat", "/people", "/timeline", "/library", "/wiki", "/artifacts", "/graph", "/connections", "/changes",
   "/history", "/memory", "/automations", "/graphs", "/settings"];

@@ -11,7 +11,7 @@
  * Rules: only the viewer's own connections in the viewer's current graph; only tools the graph allows (a person's
  * choice on the connection's page); a tool that writes is classified from the server's live tool list (not from what
  * is stored), and every call to one needs `approval`: a signed token from the card, bound to this person, connection,
- * tool and exact arguments, valid 10 minutes, posted by the person themself. A tool's answer is data, never instructions.
+ * tool and exact arguments, valid 10 minutes and once, posted by the person themself. A tool's answer is data, never instructions.
  */
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq, inArray } from "drizzle-orm";
@@ -109,6 +109,22 @@ export function approvalValid(token: string, p: { userId: string; graphId: strin
   }
 }
 
+/**
+ * Approvals already used: each token runs its call once. Kept per server process until the token would have expired
+ * anyway (a restart inside those 10 minutes forgets them; the token is still bound to the person, tool and arguments).
+ */
+const gs = globalThis as unknown as { __mgMcpSpent?: Map<string, number> };
+const spent = (gs.__mgMcpSpent ??= new Map());
+
+/** Mark a valid token as used. False when it was already used. */
+export function spendApproval(token: string, now = Date.now()): boolean {
+  for (const [k, exp] of spent) if (exp <= now) spent.delete(k);
+  const mac = token.split(".")[1] ?? token;
+  if (spent.has(mac)) return false;
+  spent.set(mac, now + APPROVAL_MS);
+  return true;
+}
+
 /* ── Calling ─────────────────────────────────────────────────────────────────────────────────────────── */
 
 const g = globalThis as unknown as { __mgMcpLive?: Map<string, { at: number; tools: McpToolInfo[] }> };
@@ -148,7 +164,8 @@ export async function callMcpTool(v: Viewer, input: { name?: string; connectionI
     const info = (await liveTools(row, client)).find((t) => t.name === tool);
     if (!info) return { status: "unavailable", message: `${row.label} no longer offers “${tool}”.` };
     if (info.writes) {
-      const ok = input.approval && approvalValid(input.approval, { userId: v.id, graphId: v.graphId, connectionId: row.id, tool, args });
+      const ok = !!input.approval && approvalValid(input.approval, { userId: v.id, graphId: v.graphId, connectionId: row.id, tool, args })
+        && spendApproval(input.approval);
       if (!ok) {
         const expiresAt = Date.now() + APPROVAL_MS;
         return {

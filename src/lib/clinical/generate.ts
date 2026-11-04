@@ -1,15 +1,21 @@
 /**
- * Background work on a session (in-process, status on the row): transcribe the recording through mux on the
- * sensitive route (local models, no fallback), surface risk mentions at once, then draft the note and, when the
- * consent allows analysis, themes, hypotheses and codes. Everything drafted is a proposal for the clinician.
+ * Background work on a session, on the durable job queue (src/lib/jobs; kinds "clinical.transcribe" about the audio
+ * source and "clinical.draft" about the transcript source, status mirrored on the session row): transcribe the recording through mux on the sensitive route
+ * (local models, no fallback) in the session's language, surface risk mentions at once, then draft the note and, when
+ * the consent allows analysis, themes, hypotheses and codes (checked against the bundled ICD-10 / ICPC-2 lists).
+ * Everything drafted is a proposal for the clinician. A restart never loses the work: the queue picks it up again.
  */
 import { and, eq, inArray, ne } from "drizzle-orm";
 import { db } from "@/db";
 import { clinicalItems, clinicalSessions, sources } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
+import { enqueueJob } from "@/lib/jobs/queue";
+import type { JobProgress } from "@/lib/jobs/policy";
 import { completeJson, isMuxDown, transcribe } from "@/lib/mux";
 import { readStored } from "@/lib/storage";
 import { ClinicalError, allowed, gate, loadClient, type ClientRecord } from "./access";
+import { checkCodes } from "./codes";
+import { codeTables } from "./codes-data";
 import { insertItems, replaceUnedited, type NewItem } from "./items";
 import { analysisPrompt, notesPrompt, type Lang } from "./prompts";
 import {
@@ -20,34 +26,48 @@ import { loadSession, saveTranscript, transcriptOf, type SessionRow } from "./re
 
 const meta = (v: Viewer, agent: string) => ({ userId: v.id, agent, sensitive: true, graphId: v.graphId });
 
-async function setWork(id: string, work: "idle" | "running" | "done" | "failed", error: string | null = null, extra: Partial<typeof clinicalSessions.$inferInsert> = {}) {
+export async function setWork(id: string, work: "idle" | "queued" | "running" | "done" | "failed", error: string | null = null, extra: Partial<typeof clinicalSessions.$inferInsert> = {}) {
   await db.update(clinicalSessions).set({ work, workError: error, updatedAt: new Date(), ...extra }).where(eq(clinicalSessions.id, id));
 }
 
-const errKey = (e: unknown) => (isMuxDown(e) ? "mux_down" : e instanceof ClinicalError ? e.key : "failed");
+export const errKey = (e: unknown) => (isMuxDown(e) ? "mux_down" : e instanceof ClinicalError ? e.key : "failed");
+
+type Progress = (p: JobProgress) => Promise<void>;
+const noProgress: Progress = async () => {};
 
 /**
- * Start transcribing a saved recording or dictation. Checks consent now (so the person sees a block at once), then runs
- * in the background. A recording needs the transcription consent; a dictation, the notes consent.
+ * Queue transcribing a saved recording or dictation. Checks consent now (so the person sees a block at once); the job
+ * checks again when it runs. A recording needs the transcription consent; a dictation, the notes consent.
  */
 export async function startTranscription(v: Viewer, sessionId: string, audioSourceId: string, mode: "record" | "upload" | "dictate"): Promise<void> {
   const { session, client } = await loadSession(v, sessionId, "write");
   gate(client, mode === "dictate" ? "dictate" : "transcribe");
-  await setWork(session.id, "running");
-  void runTranscription(v, session, client, audioSourceId, mode).catch(async (e) => {
-    console.error("[clinical] transcription failed", e);
-    await setWork(session.id, "failed", errKey(e)).catch(() => {});
+  await enqueueJob({
+    graphId: v.graphId, userId: v.id, kind: "clinical.transcribe", subjectId: audioSourceId,
+    payload: { sessionId: session.id, audioSourceId, mode }, priority: 5, heavy: true, maxAttempts: 3,
   });
+  await setWork(session.id, "running");
 }
 
-async function runTranscription(v: Viewer, session: SessionRow, client: ClientRecord, audioSourceId: string, mode: "record" | "upload" | "dictate") {
+/** The job: transcribe, then draft (in the same job, so the note follows the words without waiting in line again). */
+export async function runTranscriptionJob(v: Viewer, sessionId: string, audioSourceId: string, mode: "record" | "upload" | "dictate", progress: Progress = noProgress): Promise<void> {
+  const { session, client } = await loadSession(v, sessionId, "write");
+  gate(client, mode === "dictate" ? "dictate" : "transcribe");
+  await setWork(session.id, "running");
+  await runTranscription(v, session, client, audioSourceId, mode, progress);
+}
+
+async function runTranscription(v: Viewer, session: SessionRow, client: ClientRecord, audioSourceId: string, mode: "record" | "upload" | "dictate", progress: Progress) {
   const [src] = await db.select().from(sources).where(and(eq(sources.id, audioSourceId), eq(sources.graphId, v.graphId), eq(sources.ownerId, v.id)));
   if (!src?.storageKey) throw new ClinicalError(404, "clinical.err.notFound");
+  await progress({ step: "transcribing", label: "Transcribing the recording" });
   const bytes = await readStored(src.storageKey);
   const ext = (src.mime ?? "").includes("mp4") ? "m4a" : (src.mime ?? "").includes("ogg") ? "ogg" : (src.mime ?? "").includes("mpeg") ? "mp3" : (src.mime ?? "").includes("wav") ? "wav" : "webm";
-  const out = await transcribe(new Blob([new Uint8Array(bytes)], { type: src.mime ?? "audio/webm" }), `audio.${ext}`, meta(v, "clinical-transcribe"));
+  const language = session.language === "en" ? "en" : "da";
+  const out = await transcribe(new Blob([new Uint8Array(bytes)], { type: src.mime ?? "audio/webm" }), `audio.${ext}`, meta(v, "clinical-transcribe"), { language });
   await db.update(sources).set({ textContent: out.text, meta: { ...(src.meta ?? {}), segments: out.segments.slice(0, 5000) } }).where(eq(sources.id, src.id));
   if (mode === "dictate") {
+    await progress({ step: "note", label: "Adding the dictation to the note" });
     await addDictation(v, session, client, out.text);
     await setWork(session.id, "done");
     return;
@@ -58,7 +78,7 @@ async function runTranscription(v: Viewer, session: SessionRow, client: ClientRe
   const text = existing?.text?.trim() ? `${existing.text.trim()}\n\n${out.text}` : out.text;
   const segments = [...(existing?.segments ?? []), ...out.segments];
   await saveTranscript(v, fresh ?? session, client.label, text, segments, "transcription");
-  await draftNow(v, session.id);
+  await draftNow(v, session.id, progress);
 }
 
 /** The clinician's dictation becomes (or is added to) the session's draft note. */
@@ -90,16 +110,12 @@ async function addDictation(v: Viewer, session: SessionRow, client: ClientRecord
   await insertItems(db, v, client.id, [{ kind: "note", status: "proposed", purpose: "notes", sessionId: session.id, content: { sections: hasSections ? sections : {}, extra: hasSections ? "" : text.trim() }, model: hasSections ? "mux" : null }], "person", "dictated");
 }
 
-/** A transcript typed or pasted by the clinician (e.g. when transcription is not available). */
+/** A transcript typed or pasted by the clinician (e.g. when transcription is not available); drafting is queued. */
 export async function typedTranscript(v: Viewer, sessionId: string, text: string): Promise<void> {
   const { session, client } = await loadSession(v, sessionId, "write");
   gate(client, "draft_note");
-  await saveTranscript(v, session, client.label, text, [], "typed");
-  await setWork(session.id, "running");
-  void draftNow(v, session.id).catch(async (e) => {
-    console.error("[clinical] drafting failed", e);
-    await setWork(session.id, "failed", errKey(e)).catch(() => {});
-  });
+  const transcriptId = await saveTranscript(v, session, client.label, text, [], "typed");
+  await queueDraft(v, session.id, transcriptId);
 }
 
 /** Draft again on request. */
@@ -107,17 +123,27 @@ export async function startDraft(v: Viewer, sessionId: string): Promise<void> {
   const { session, client } = await loadSession(v, sessionId, "write");
   gate(client, "draft_note");
   if (!session.transcriptSourceId) throw new ClinicalError(409, "clinical.err.noTranscript");
+  await queueDraft(v, session.id, session.transcriptSourceId);
+}
+
+/** Jobs are about a source (the queue's subject): drafting is keyed by the session's transcript, one waiting at a time. */
+async function queueDraft(v: Viewer, sessionId: string, transcriptSourceId: string) {
+  await enqueueJob({ graphId: v.graphId, userId: v.id, kind: "clinical.draft", subjectId: transcriptSourceId, payload: { sessionId }, priority: 5, maxAttempts: 3 });
+  await setWork(sessionId, "running");
+}
+
+/** The job: draft the note (and analysis) for a session. */
+export async function runDraftJob(v: Viewer, sessionId: string, progress: Progress = noProgress): Promise<void> {
+  const { session, client } = await loadSession(v, sessionId, "write");
+  gate(client, "draft_note");
   await setWork(session.id, "running");
-  void draftNow(v, session.id).catch(async (e) => {
-    console.error("[clinical] drafting failed", e);
-    await setWork(session.id, "failed", errKey(e)).catch(() => {});
-  });
+  await draftNow(v, session.id, progress);
 }
 
 const RISK_CATS: RiskCategory[] = ["suicide", "self_harm", "harm_to_others"];
 
 /** Risk flags first (no model needed), then the note and the analysis. */
-async function draftNow(v: Viewer, sessionId: string): Promise<void> {
+async function draftNow(v: Viewer, sessionId: string, progress: Progress = noProgress): Promise<void> {
   const [session] = await db.select().from(clinicalSessions).where(eq(clinicalSessions.id, sessionId));
   if (!session) return;
   const client = await loadClient(v, session.clientNodeId, "write");
@@ -128,11 +154,13 @@ async function draftNow(v: Viewer, sessionId: string): Promise<void> {
   const ev = (quote: string, timeSec?: number | null) => ({ quote, sourceId: session.transcriptSourceId, timeSec: timeSec ?? null });
 
   // 1. Risk mentions, at once.
+  await progress({ step: "risk", label: "Looking for risk mentions" });
   const flags = extractRiskFlags(tr.text, tr.segments);
   await addRisks(v, session, client, flags.map((f) => ({ category: f.category, quote: f.quote, timeSec: f.timeSec ?? null })));
 
   // 2. The note (and, for doctors, medication and allergies), follow-ups and the model's own risk reading.
   let muxDown = false;
+  await progress({ step: "note", label: "Drafting the note" });
   try {
     const d = await completeJson({
       route: "smart", maxTokens: 4000, meta: meta(v, "clinical-note"),
@@ -167,6 +195,7 @@ async function draftNow(v: Viewer, sessionId: string): Promise<void> {
 
   // 3. Analysis, only while the consent covers it.
   if (!muxDown && allowed(client, "themes")) {
+    await progress({ step: "analysis", label: "Suggesting themes, hypotheses and codes" });
     try {
       const earlier = await earlierNotes(v, client.id, session.id);
       const a = await completeJson({
@@ -186,8 +215,13 @@ async function draftNow(v: Viewer, sessionId: string): Promise<void> {
         const statement = /^(hypothesis|hypotese)\s*:/i.test(h.statement) ? h.statement : `${lang === "da" ? "Hypotese" : "Hypothesis"}: ${h.statement}`;
         items.push({ kind: "hypothesis", status: "proposed", purpose: "analysis", sessionId: session.id, title: statement.slice(0, 500), content: { statement, against: verifiedQuotes(haystack, h.against ?? []), confidence: h.confidence ?? null }, evidence: q.map((x) => ev(x)), model: "mux" });
       }
-      for (const c of parseCodeSuggestions(a.codes, haystack)) {
-        items.push({ kind: "code", status: "proposed", purpose: "analysis", sessionId: session.id, title: `${c.code} ${c.label}`.trim(), content: { system: c.system, code: c.code, label: c.label, confidence: c.confidence }, evidence: c.evidence.map((x) => ev(x)), model: "mux" });
+      // Codes: only ones that exist in the official lists, with the official title; odd wording is flagged.
+      for (const c of checkCodes(parseCodeSuggestions(a.codes, haystack), await codeTables(), lang)) {
+        items.push({
+          kind: "code", status: "proposed", purpose: "analysis", sessionId: session.id, title: `${c.code} ${c.officialTitle}`.trim(),
+          content: { system: c.system, code: c.code, label: c.officialTitle, officialTitle: c.officialTitle, suggestedAs: c.suggestedAs, mismatch: c.mismatch, confidence: c.confidence },
+          evidence: c.evidence.map((x) => ev(x)), model: "mux",
+        });
       }
       await db.transaction(async (tx) => {
         await replaceUnedited(tx, session.id, ["theme", "hypothesis", "code"]);

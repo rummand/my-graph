@@ -156,6 +156,9 @@ const messages: MessageTree = {
     from: "{route} from {model}",
     route: { fast: "Quick answer", smart: "Careful answer", agent: "Careful answer", auto: "Answer", code: "Answer", multilingual: "Answer", vision: "Answer" },
     answer: "Answer",
+    toolResult: "What {service} answered",
+    toolExpired: "The approval for “{tool}” in {service} ran out. Ask again to prepare it once more.",
+    toolsWaiting: { one: "1 action waits for your approval", other: "{count} actions wait for your approval" },
   },
   steps: {
     did: "What the assistant did",

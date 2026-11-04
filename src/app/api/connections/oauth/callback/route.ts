@@ -2,14 +2,17 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { ConnectionError } from "@/lib/connectors";
 import { appOrigin, connectionIdOfState, finishOAuth } from "@/lib/connectors/mcp/oauth-flow";
+import { finishProviderOAuth, isProviderSignIn } from "@/lib/connectors/oauth/flow";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /**
- * GET ?code&state&iss (or ?error) — where an MCP server sends the person back after its consent page. Finishes the
- * sign-in and goes to the connection's page. Only ever redirects to a path on My Graph (no open redirect); a
- * problem is said on the connection's page (or on Connections) as ?signin=<message>.
+ * GET ?code&state&iss (or ?error) — where an MCP server, or Google / Microsoft / Dropbox, sends the person back after
+ * the consent page. The state names the connection; a Google, Microsoft or Dropbox connection finishes with the
+ * provider flow, anything else with the MCP flow (unchanged). Finishes the sign-in and goes to the connection's page.
+ * Only ever redirects to a path on My Graph (no open redirect); a problem is said on the connection's page (or on
+ * Connections) as ?signin=<message>.
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -20,7 +23,10 @@ export async function GET(req: Request) {
   if (s.status !== "active") return NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(`/api/connections/oauth/callback${url.search}`)}`, base), 303);
   const id = connectionIdOfState(p.get("state"));
   try {
-    const done = await finishOAuth(s.viewer, { code: p.get("code"), state: p.get("state"), iss: p.get("iss"), error: p.get("error"), errorDescription: p.get("error_description") });
+    const provider = await isProviderSignIn(s.viewer, p.get("state"));
+    const done = provider
+      ? await finishProviderOAuth(s.viewer, { code: p.get("code"), state: p.get("state"), error: p.get("error"), errorDescription: p.get("error_description") })
+      : await finishOAuth(s.viewer, { code: p.get("code"), state: p.get("state"), iss: p.get("iss"), error: p.get("error"), errorDescription: p.get("error_description") });
     return to(`/connections/${done}`);
   } catch (e) {
     const msg = e instanceof ConnectionError ? e.message : "The sign-in didn't finish. Try again.";

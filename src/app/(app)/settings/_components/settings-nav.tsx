@@ -4,14 +4,14 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import {
-  ArrowUpRight, BadgeCheck, Bot, Database, Globe, KeyRound, Layers, Palette, Plug, ScrollText, Shapes, ShieldCheck, UserRound, UsersRound,
+  ArrowUpRight, BadgeCheck, Bot, Cable, Database, Globe, KeyRound, Layers, Palette, Plug, ScrollText, Shapes, ShieldCheck, UserRound, UsersRound,
 } from "lucide-react";
 import { useT } from "@/lib/i18n/client";
 
 const ICONS = {
   profile: UserRound, language: Globe, appearance: Palette, security: KeyRound, graph: Layers, household: UsersRound,
   assistant: Bot, connections: Plug, data: Database, family: UsersRound, audit: ScrollText, model: Shapes,
-  plan: BadgeCheck, admin: ShieldCheck,
+  plan: BadgeCheck, admin: ShieldCheck, aiApps: Cable,
 } as const;
 /**
  * `key` names the label (settings.nav.<key>) and the icon. `anchor` items are sections of /settings. `label`

@@ -1,0 +1,10 @@
+{
+  "id": "rss",
+  "name": "RSS and Atom feeds",
+  "version": "1.0.0",
+  "protocol": 1,
+  "runtime": "node",
+  "entry": "index.mjs",
+  "description": "Reads a news feed (RSS 2.0 or Atom): each new item becomes a document in the library, with its link.",
+  "limits": { "timeoutSeconds": 60, "memoryMb": 128, "maxRecords": 500 }
+}

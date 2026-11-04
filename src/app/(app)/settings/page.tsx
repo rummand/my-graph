@@ -159,6 +159,7 @@ export default async function SettingsPage() {
         <Group id="connections">
           <Row id="connections-h" title={t("settings.connections.title")} lead={t("settings.connections.lead")}>
             <Onward href="/connections" title={t("settings.connections.open")} />
+            <Onward href="/settings/ai-apps" title={t("mcpServer.nav")} hint={t("mcpServer.setup.lead")} />
           </Row>
         </Group>
       )}

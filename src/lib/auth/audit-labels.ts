@@ -54,6 +54,12 @@ const LABELS: Record<string, string> = {
   "reminder.create": "Added a reminder",
   "reminder.update": "Changed a reminder",
   "reminder.delete": "Deleted a reminder",
+  "mcp.call": "An AI app used My Graph",
+  "mcp.allow": "Connected an AI app",
+  "mcp.deny": "Turned away an AI app",
+  "mcp.revoke": "Disconnected an AI app",
+  "mcp.key.create": "Made an access key for AI apps",
+  "mcp.key.revoke": "Revoked an access key for AI apps",
 };
 
 export function auditActionLabel(action: string): string {

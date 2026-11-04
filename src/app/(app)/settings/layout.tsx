@@ -2,6 +2,7 @@ import { isParent, requireUser } from "@/lib/auth";
 import { canUseAssistantTools } from "@/lib/automations/policy";
 import { isPlatformAdmin } from "@/lib/plans";
 import { getAdminT } from "@/lib/plans/i18n";
+import { getT } from "@/lib/i18n";
 import { SettingsNav, type SettingsTab } from "./_components/settings-nav";
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
@@ -18,6 +19,8 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     ...(canUseAssistantTools(v) ? [{ href: "/settings#assistant", key: "assistant", anchor: true } as const] : []),
     ...(v.role !== "guest" && v.role !== "child" ? [{ href: "/settings#connections", key: "connections", anchor: true } as const] : []),
     { href: "/settings#data", key: "data", anchor: true },
+    // My Graph in Claude, ChatGPT and Claude Code (the MCP server): for the grown-ups, as Connections is.
+    ...(v.role !== "guest" && v.role !== "child" ? [{ href: "/settings/ai-apps", key: "aiApps", label: (await getT())("mcpServer.nav") } as const] : []),
     ...(parent ? [
       { href: "/settings/family", key: "family" } as const,
       { href: "/settings/audit", key: "audit" } as const,

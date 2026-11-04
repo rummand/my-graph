@@ -45,13 +45,15 @@ describe("manifests", () => {
     expect(clampEvery(60, m)).toBe(60);
   });
 
-  it("offers Aula only in a family graph and shows it as coming soon", () => {
-    expect(offeredIn("family").map((c) => c.manifest.id)).toEqual(["aula_calendar", "record", "imap", "ics", "mcp", "aula"]);
-    expect(offeredIn("work").map((c) => c.manifest.id)).toEqual(["record", "imap", "ics", "mcp"]);
+  it("offers Aula only in a family graph, as unofficial, and plugins only to the platform admin", () => {
+    const PROVIDERS = ["gmail", "google_calendar", "google_drive", "microsoft", "dropbox"];
+    expect(offeredIn("family").map((c) => c.manifest.id)).toEqual(["aula_calendar", "aula", "record", "imap", ...PROVIDERS, "ics", "mcp"]);
+    expect(offeredIn("work").map((c) => c.manifest.id)).toEqual(["record", "imap", ...PROVIDERS, "ics", "mcp"]);
+    expect(offeredIn("work", true).map((c) => c.manifest.id)).toEqual(["record", "imap", ...PROVIDERS, "ics", "mcp", "plugin"]);
     const aula = connectorInfo(connectorById("aula")!);
-    expect(aula.status).toBe("coming_soon");
+    expect(aula.status).toBe("unofficial");
     expect(aula.authType).toBe("mitid_session");
-    expect(connectorById("aula")!.sync).toBeUndefined();
+    expect(typeof connectorById("aula")!.sync).toBe("function");
   });
 
   it("validates config and secrets with the manifest's schemas", () => {

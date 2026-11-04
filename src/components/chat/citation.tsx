@@ -6,10 +6,12 @@ import { ChevronDown, FileText, Share2 } from "lucide-react";
 import type { Citation } from "@/db/schema";
 import { useT } from "@/lib/i18n/client";
 import type { TFn } from "@/lib/i18n/core";
+import { sourceHref } from "@/components/provenance/labels";
 import { locatorWords } from "./recency";
 
+/** Where a citation opens: a recording at its moment (#t=seconds), a document in the library, a node on its page. */
 export function citationHref(c: Citation): string | undefined {
-  if (c.sourceId) return `/library/${c.sourceId}`;
+  if (c.sourceId) return typeof c.locator?.time === "number" ? sourceHref(c.sourceId, c.locator) : `/library/${c.sourceId}`;
   if (c.nodeId) return `/node/${c.nodeId}`;
   return undefined;
 }

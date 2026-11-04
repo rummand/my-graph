@@ -88,7 +88,23 @@ nothing links two graphs. The family graph keeps the household rules; other grap
   and contain the value. Only a minimised query leaves the graph. SSRF guard in `src/lib/web/guard.ts`.
 - **Connectors** (`src/lib/connectors`): typed manifests, encrypted secrets (never returned or logged), cursors saved
   with the data, a 60s scheduler with leases, SSRF guard on every connect and redirect (development opens loopback
-  only). Calendar (ICS / Aula) and IMAP; what they bring in is proposed, never written directly. Page `/connections`.
+  only). What they bring in is stored as sources (url, externalId, connectionId, fetchedAt) and everything derived is
+  proposed, never written directly. Page `/connections`. Connectors: ICS link, Aula calendar, **Aula messages**
+  (unofficial, family graph only, read-only; MitID sign-in via the one-file helper from `/connections/aula` + a one-time
+  pairing code, see `connectors/aula`), IMAP, **Gmail, Google Calendar, Google Drive (picker, `drive.file`), Outlook
+  and OneDrive (one Microsoft sign-in), Dropbox** (`connectors/oauth`: the household's own developer apps, PKCE,
+  rotated refresh tokens, env `GOOGLE_*`, `MICROSOFT_*`, `DROPBOX_*`), MCP servers and Record (the assistant may use
+  their tools; writing tools always need a single-use approval from the person, unattended runs get reading tools
+  only), and **plugin** (platform admin only, below).
+- **My Graph as an MCP server** (`src/lib/mcp-server`, `/api/mcp`, `/.well-known/*`, `/settings/ai-apps`): tools
+  `search_graph get_node list_people timeline history who_said get_document ask propose_changes` for Claude, ChatGPT
+  and Claude Code. Every key or OAuth grant is one person + one graph + `read | propose`; the person is re-resolved on
+  every call (`viewerFor`). Own OAuth 2.1 server (dynamic registration, exact redirect match, PKCE S256, single-use
+  codes, rotated refresh tokens, everything stored hashed). `propose_changes` only opens a draft change set. Results
+  are fenced as untrusted `<graph-data>`. Tables `mcp_clients/codes/grants/tokens/keys`.
+- **Plugin SDK** (`src/lib/plugins`, `docs/plugins/README.md`, `examples/plugin-rss`): out-of-process connectors over
+  JSON lines (spec/check/discover/read). Only plugins the platform admin installed in `MG_PLUGINS_DIR` run (dev falls
+  back to `examples/plugin-*`), with timeouts, output/record/memory caps and a scrubbed environment; no OS sandbox.
 - **Cross-graph objects** (`src/lib/links`): the one allowed crossing between graphs. A node can be shared into or
   connected with another graph the person is a member of and may write in; tables `node_identities`,
   `node_identity_members`. Later changes travel only as "Update <name>" change sets in the other graph (gbrain's node

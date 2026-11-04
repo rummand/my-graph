@@ -4,13 +4,18 @@ import { db } from "@/db";
 import { sources } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import { accessContext } from "@/lib/gbrain";
+import { liveJobsFor, type LiveJob } from "@/lib/jobs/queue";
 import { sourceReadSql } from "@/lib/gbrain/access";
 import { allowed, colleagues, consentViews, loadClient, type ConsentView } from "./access";
 import { listItems, type ItemView } from "./items";
 import { PURPOSES, type Discipline, type Purpose } from "./pure";
 import { consentHistory, listSessions, loadSession, sharedWith, transcriptOf, type ConsentEventView } from "./records";
 
-export type SessionSummary = { id: string; kind: string; title: string | null; startsAt: string; status: string; work: string; workError: string | null; hasAudio: boolean; hasTranscript: boolean };
+export type SessionSummary = {
+  id: string; kind: string; title: string | null; startsAt: string; status: string; work: string; workError: string | null; hasAudio: boolean; hasTranscript: boolean;
+  /** The queued or running job for this session, if any: "waiting" in line or what it is doing now. */
+  job: { status: "queued" | "running"; step: string | null; label: string | null; attempts: number } | null;
+};
 
 export type ClientPageData = {
   client: { id: string; label: string; kind: string; discipline: Discipline; ownerName: string | null; access: "clinician" | "colleague"; createdAt: string; reason: string | null };
@@ -23,15 +28,28 @@ export type ClientPageData = {
   items: ItemView[];
 };
 
-/** Background work runs in-process: a "running" that hasn't moved for 15 minutes was cut off by a restart. */
+/**
+ * Background work runs on the job queue. A "running" with no live job that hasn't moved for 15 minutes was cut off
+ * (an old in-process run, or a job that gave up without saying so).
+ */
 const STALE_MS = 15 * 60_000;
-const sessionSummary = (s: Awaited<ReturnType<typeof listSessions>>[number]): SessionSummary => {
-  const stale = s.work === "running" && Date.now() - s.updatedAt.getTime() > STALE_MS;
+type SessionRowLike = Awaited<ReturnType<typeof listSessions>>[number];
+const sessionSummary = (s: SessionRowLike, live: Map<string, LiveJob> = new Map()): SessionSummary => {
+  const j = (s.audioSourceId ? live.get(s.audioSourceId) : undefined) ?? (s.transcriptSourceId ? live.get(s.transcriptSourceId) : undefined) ?? null;
+  const stale = !j && s.work === "running" && Date.now() - s.updatedAt.getTime() > STALE_MS;
   return {
-  id: s.id, kind: s.kind, title: s.title, startsAt: s.startsAt.toISOString(), status: s.status, work: stale ? "failed" : s.work, workError: stale ? "interrupted" : s.workError,
-  hasAudio: !!s.audioSourceId, hasTranscript: !!s.transcriptSourceId,
+    id: s.id, kind: s.kind, title: s.title, startsAt: s.startsAt.toISOString(), status: s.status,
+    work: j ? "running" : stale ? "failed" : s.work, workError: j ? null : stale ? "interrupted" : s.workError,
+    hasAudio: !!s.audioSourceId, hasTranscript: !!s.transcriptSourceId,
+    job: j ? { status: j.status, step: j.progress?.step ?? null, label: j.progress?.label ?? null, attempts: j.attempts } : null,
   };
 };
+
+/** The live jobs (transcription by its audio, drafting by its transcript) of these sessions. */
+async function sessionJobs(rows: SessionRowLike[]): Promise<Map<string, LiveJob>> {
+  const ids = rows.flatMap((s) => [s.audioSourceId, s.transcriptSourceId].filter((x): x is string => !!x));
+  return ids.length ? liveJobsFor(ids).catch(() => new Map<string, LiveJob>()) : new Map<string, LiveJob>();
+}
 
 export async function clientPage(v: Viewer, id: string): Promise<ClientPageData> {
   const rec = await loadClient(v, id);
@@ -40,6 +58,7 @@ export async function clientPage(v: Viewer, id: string): Promise<ClientPageData>
     consentViews(v, rec.id), consentHistory(v, rec.id), mine ? sharedWith(v, rec.id) : Promise.resolve([]),
     mine ? colleagues(v) : Promise.resolve([]), listSessions(v, { clientId: rec.id }), listItems(v, rec),
   ]);
+  const live = await sessionJobs(sessions);
   return {
     client: {
       id: rec.id, label: rec.label, kind: rec.kind, discipline: rec.discipline, ownerName: rec.ownerName, access: rec.access, createdAt: rec.createdAt.toISOString(),
@@ -47,7 +66,7 @@ export async function clientPage(v: Viewer, id: string): Promise<ClientPageData>
     },
     consent: { state: rec.consent.state, allowed: Object.fromEntries(PURPOSES.map((p) => [p, rec.consent.allowed[p]])) as Record<Purpose, boolean>, reviewAt: rec.consent.reviewAt?.toISOString() ?? null },
     consents, consentEvents: events, sharedWith: shared, colleagues: team.map((c) => ({ id: c.id, name: c.name })),
-    sessions: sessions.map(sessionSummary), items,
+    sessions: sessions.map((x) => sessionSummary(x, live)), items,
   };
 }
 
@@ -62,9 +81,9 @@ export type SessionPageData = {
 
 export async function sessionPage(v: Viewer, id: string): Promise<SessionPageData> {
   const { session, client } = await loadSession(v, id);
-  const [tr, items] = await Promise.all([transcriptOf(session), listItems(v, client, { sessionId: session.id })]);
+  const [tr, items, live] = await Promise.all([transcriptOf(session), listItems(v, client, { sessionId: session.id }), sessionJobs([session])]);
   return {
-    session: { ...sessionSummary(session), language: session.language, discipline: session.discipline as Discipline },
+    session: { ...sessionSummary(session, live), language: session.language, discipline: session.discipline as Discipline },
     client: {
       id: client.id, label: client.label, kind: client.kind, discipline: client.discipline, ownerName: client.ownerName, access: client.access,
       createdAt: client.createdAt.toISOString(), reason: typeof client.props.referral_reason === "string" ? client.props.referral_reason : null,

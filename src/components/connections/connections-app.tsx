@@ -9,6 +9,7 @@ import type { ConnectionDTO, ConnectorInfo } from "@/lib/connectors";
 import { api, ConnectorIcon, CountsLine, iconFor, StatusBadge, StatusDot, useStatusText, type Person } from "./bits";
 import { ConnectForm } from "./connect-form";
 import { McpConnectForm } from "./mcp-form";
+import { isOAuthConnector, OAuthConnectForm } from "./oauth-connect";
 
 const MCP = new Set(["mcp", "record"]);
 import { DisconnectDialog } from "./disconnect-dialog";
@@ -76,7 +77,9 @@ export function ConnectionsApp({ initial, connectors, people, family, graphName 
             {connectors.map((info) => (
               <li key={info.id} className="px-4 py-4">
                 <GalleryItem info={info} open={open === info.id} onToggle={() => setOpen(open === info.id ? null : info.id)}>
-                  {MCP.has(info.id) ? (
+                  {isOAuthConnector(info.id) ? (
+                    <OAuthConnectForm info={info} people={people} family={family} onCancel={() => setOpen(null)} />
+                  ) : MCP.has(info.id) ? (
                     <McpConnectForm info={info} family={family} onCancel={() => setOpen(null)}
                       onDone={(c) => { patch(c); setOpen(null); setNotice(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
                   ) : (
@@ -140,7 +143,7 @@ function ConnectionRow({ c, onChanged, onDisconnect, onError }: { c: ConnectionD
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 pl-7 sm:pl-0">
         {c.status === "needs_you"
-          ? <Link href={`/connections/${c.id}#settings`} className={buttonClass("primary", "sm")}>{t("connections.actions.fix")}</Link>
+          ? <Link href={c.connector === "aula" ? "/connections/aula" : `/connections/${c.id}#settings`} className={buttonClass("primary", "sm")}>{t("connections.actions.fix")}</Link>
           : c.status !== "paused" && <Button size="sm" variant="secondary" disabled={busy || c.status === "running"} onClick={runNow}>{t("connections.actions.runNow")}</Button>}
         {c.status === "paused"
           ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => setPaused(false)}>{t("connections.actions.resume")}</Button>
@@ -173,7 +176,10 @@ function GalleryItem({ info, open, onToggle, children }: { info: ConnectorInfo; 
             {soon && <p className="mt-2 max-w-[65ch] text-sm text-muted">{t(`connections.connectors.${info.id}.soon`)}</p>}
           </div>
         </div>
-        {!soon && !open && <Button size="sm" variant="secondary" className="ml-7 self-start sm:ml-0" onClick={onToggle} aria-expanded={open}>{t("connections.connect")}</Button>}
+        {!soon && !open && (info.id === "aula"
+          // Aula signs in with MitID through the Connect Aula helper, not the generic form.
+          ? <Link href="/connections/aula" className={clsx(buttonClass("secondary", "sm"), "ml-7 self-start sm:ml-0")}>{t("connections.connectors.aula.open")}</Link>
+          : <Button size="sm" variant="secondary" className="ml-7 self-start sm:ml-0" onClick={onToggle} aria-expanded={open}>{t("connections.connect")}</Button>)}
       </div>
       <AnimatePresence initial={false}>
         {open && (

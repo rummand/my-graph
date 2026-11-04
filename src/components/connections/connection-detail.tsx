@@ -11,6 +11,8 @@ import { api, ConnectorIcon, CountsLine, StatusDot, useStatusText, type Person }
 import { ConnectForm } from "./connect-form";
 import { McpConnectForm } from "./mcp-form";
 import { McpTools } from "./mcp-tools";
+import { isOAuthConnector, SignInAgain } from "./oauth-connect";
+import { OAuthSettings } from "./oauth-settings";
 
 const MCP = new Set(["mcp", "record"]);
 import { DisconnectDialog } from "./disconnect-dialog";
@@ -92,8 +94,12 @@ export function ConnectionDetail({ initial, runs: initialRuns, info, people, fam
             {signin === "ok" ? t("mcp.auth.signedIn") : signin}
           </p>
         )}
+        {isOAuthConnector(c.connector) && c.status === "needs_you" && ["signIn", "signInAgain", "scopeMissing", "oauthRefused"].includes(c.detailCode ?? "") && <SignInAgain c={c} />}
         {mcp && c.status === "needs_you" && c.detailCode === "signIn" && info && (
           <div className="mt-3"><McpConnectForm info={info} family={family} existing={{ ...c, config: { ...c.config, authMode: "oauth" } }} onDone={(next) => setC(next)} /></div>
+        )}
+        {c.connector === "aula" && c.status === "needs_you" && (
+          <Link href="/connections/aula" className={clsx(buttonClass("primary", "sm"), "mt-3")}>{t("connections.actions.fix")}</Link>
         )}
         {c.connector === "record" && c.counts.total > 0 && (
           <Link href="/recordings" className={clsx(buttonClass("secondary", "sm"), "mt-3")}>{t("recordings.title")}</Link>
@@ -114,7 +120,9 @@ export function ConnectionDetail({ initial, runs: initialRuns, info, people, fam
         <div id="settings" className="scroll-mt-6">
           <Section title={t("connections.detail.settingsTitle")}>
             <p className="mb-4 max-w-[65ch] text-sm text-muted">{t(`connections.connectors.${info.id}.help`)}</p>
-            {mcp
+            {isOAuthConnector(c.connector)
+              ? <OAuthSettings c={c} people={people} family={family} onDone={(next) => { setC(next); void reload(); }} />
+              : mcp
               ? <McpConnectForm info={info} family={family} existing={c} onDone={(next) => { setC(next); void reload(); }} />
               : <ConnectForm info={info} people={people} family={family} existing={c} onDone={(next) => { setC(next); void reload(); }} />}
           </Section>

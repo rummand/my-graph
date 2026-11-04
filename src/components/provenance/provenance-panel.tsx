@@ -1,7 +1,7 @@
 import { clsx } from "clsx";
 import { CitationChip } from "@/components/ui";
 import type { Locale, TFn } from "@/lib/i18n/core";
-import { EN, formatDate, locatorLabel, percentSure, provenanceByline, type ProvenanceView } from "./labels";
+import { EN, formatDate, locatorLabel, percentSure, provenanceByline, sourceHref, type ProvenanceView } from "./labels";
 
 /**
  * "Why do we believe this?": every record behind a node or fact. Each record leads with its source as a cobalt
@@ -41,7 +41,7 @@ function ProvenanceItem({ n, p, agents, t, locale }: { n: number; p: ProvenanceV
   const where = locatorLabel(p.locator, t);
   const title = p.sourceTitle ?? (p.activity === "manual_edit" ? t("graph.prov.enteredByHand") : t("graph.prov.noSourceDoc"));
   const low = p.confidence < 0.6;
-  const href = p.sourceId ? `/library/${p.sourceId}${typeof p.locator?.page === "number" ? `#page=${p.locator.page}` : ""}` : undefined;
+  const href = p.sourceId ? sourceHref(p.sourceId, p.locator) : undefined;
   return (
     <li className="min-w-0 text-sm">
       <div className="flex items-baseline justify-between gap-3">

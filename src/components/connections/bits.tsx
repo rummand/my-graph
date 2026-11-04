@@ -32,6 +32,8 @@ export function ConnectorIcon({ icon, className }: { icon: ConnectorInfo["icon"]
 export function iconFor(connector: string): ConnectorInfo["icon"] {
   if (connector === "record") return "mic";
   if (connector === "mcp") return "plug";
+  if (connector === "gmail" || connector === "microsoft") return "mail";
+  if (connector === "google_drive" || connector === "dropbox") return "folder";
   return connector === "imap" ? "mail" : connector === "aula_calendar" || connector === "aula" ? "school" : "calendar";
 }
 

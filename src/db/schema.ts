@@ -1451,3 +1451,76 @@ export const recordingTimelines = pgTable("recording_timelines", {
   hasAudio: boolean("has_audio"),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("recording_timelines_graph_idx").on(t.graphId)]);
+
+/* ── My Graph as an MCP server: AI apps (OAuth) and personal access keys (mcp-server workstream) ─────────── */
+
+/**
+ * Apps that registered themselves (OAuth dynamic client registration, RFC 7591): claude.ai, ChatGPT, Claude Code.
+ * The name is the one the app gave itself, never checked. A client secret, when there is one, is kept as a hash.
+ */
+export const mcpClients = pgTable("mcp_clients", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  uri: text("uri"),
+  redirectUris: text("redirect_uris").array().notNull(),
+  /** none | client_secret_post | client_secret_basic */
+  authMethod: text("auth_method").notNull(),
+  secretHash: text("secret_hash"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** A code from the consent page: ten minutes, used once, bound to its PKCE challenge, one graph and one scope. */
+export const mcpCodes = pgTable("mcp_codes", {
+  codeHash: text("code_hash").primaryKey(),
+  clientId: text("client_id").notNull().references(() => mcpClients.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** read | propose */
+  scope: text("scope").notNull(),
+  resource: text("resource").notNull(),
+  redirectUri: text("redirect_uri").notNull(),
+  challenge: text("challenge").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  grantId: text("grant_id"),
+}, (t) => [index("mcp_codes_expires_idx").on(t.expiresAt)]);
+
+/** One connected app: a person allowed an app into one graph, to read or to read and propose. */
+export const mcpGrants = pgTable("mcp_grants", {
+  id: text("id").primaryKey(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  clientId: text("client_id").notNull().references(() => mcpClients.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  scope: text("scope").notNull(),
+  resource: text("resource").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (t) => [index("mcp_grants_user_idx").on(t.userId, t.revokedAt)]);
+
+/** Access tokens (an hour) and refresh tokens (30 days, rotated on every use) of a grant, kept as hashes. */
+export const mcpTokens = pgTable("mcp_tokens", {
+  id: text("id").primaryKey(),
+  grantId: text("grant_id").notNull().references(() => mcpGrants.id, { onDelete: "cascade" }),
+  /** access | refresh */
+  kind: text("kind").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("mcp_tokens_hash_uq").on(t.tokenHash), index("mcp_tokens_grant_idx").on(t.grantId)]);
+
+/** Personal access keys for the MCP server: one person, one graph, read or read and propose. Shown once, hashed. */
+export const mcpKeys = pgTable("mcp_keys", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  /** The first characters, to tell keys apart ("mgk_3fA9…"). */
+  prefix: text("prefix").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  scope: text("scope").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (t) => [uniqueIndex("mcp_keys_hash_uq").on(t.tokenHash), index("mcp_keys_user_idx").on(t.userId, t.revokedAt)]);

@@ -17,11 +17,18 @@ import { API_HEADER, PATH_HEADER, SESSION_COOKIE, isPublicPath, sessionCookieOpt
 
 const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
 
+/**
+ * MCP endpoints that authenticate with a bearer token or client credentials and never read the session cookie, so a
+ * cross-site request carries no ambient authority. Browser-based MCP clients call these from their own origin. The
+ * consent (authorize), keys and apps routes use the session and keep the origin check.
+ */
+const BEARER_ONLY = new Set(["/api/mcp", "/api/mcp/oauth/register", "/api/mcp/oauth/token", "/api/mcp/oauth/revoke"]);
+
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const isApi = pathname.startsWith("/api/") || pathname === "/api";
 
-  if (isApi && !SAFE.has(req.method)) {
+  if (isApi && !SAFE.has(req.method) && !BEARER_ONLY.has(pathname)) {
     const ok = isAllowedOrigin({
       origin: req.headers.get("origin"),
       secFetchSite: req.headers.get("sec-fetch-site"),

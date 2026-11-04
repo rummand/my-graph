@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateManifest } from "../manifest";
-import { approvalToken, approvalValid } from "../mcp/hook";
+import { approvalToken, approvalValid, spendApproval } from "../mcp/hook";
 import { enabledTools } from "../mcp/config";
 import { audioFrom, makeLimiter, mayPlay, passStatus, proxyHeaders, rangeToForward, reuseUntil, type PlayableSource } from "./audio-proxy";
 import { capabilitiesOf, planMeetings, recordManifest } from "./connector";
@@ -101,6 +101,14 @@ describe("tools a graph allows, and approvals", () => {
     expect(approvalValid(token, { ...base, tool: "add_todo" })).toBe(false);
     expect(approvalValid(token, base, Date.now() + 120_000)).toBe(false);
     expect(approvalValid(token.replace(/.$/, (c) => (c === "A" ? "B" : "A")), base)).toBe(false);
+  });
+
+  it("an approval runs its call once", () => {
+    const base = { userId: "u1", graphId: "g1", connectionId: "c1", tool: "complete_todo", args: { id: "t9" } };
+    const token = approvalToken({ ...base, expiresAt: Date.now() + 60_000 });
+    expect(spendApproval(token)).toBe(true);
+    expect(spendApproval(token)).toBe(false);
+    expect(spendApproval(approvalToken({ ...base, expiresAt: Date.now() + 60_001 }))).toBe(true);
   });
 });
 

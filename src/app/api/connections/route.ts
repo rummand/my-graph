@@ -1,10 +1,11 @@
+import { isPlatformAdmin } from "@/lib/plans";
 import { CONNECTORS, connectorInfo, createConnection, listConnections, offeredIn } from "@/lib/connectors";
 import { createBody, parseJson, route } from "@/lib/connectors/http";
 
 /** GET: my connections in this graph, and the connectors this graph offers. Secrets are never included. */
 export const GET = route(async (_req, v) => ({
   connections: await listConnections(v),
-  connectors: offeredIn(v.graphKind).map(connectorInfo),
+  connectors: offeredIn(v.graphKind, isPlatformAdmin(v)).map(connectorInfo),
   all: CONNECTORS.length,
 }));
 

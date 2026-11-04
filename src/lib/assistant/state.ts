@@ -25,6 +25,15 @@ export const stateSchema = z.discriminatedUnion("type", [
   }),
   /** Something sensitive was discussed: later turns stay on local models. */
   z.object({ type: z.literal("sensitive") }),
+  /** Tools at connected MCP servers that an answer prepared and that wait for the person's approval (cards). */
+  z.object({
+    type: z.literal("mcp"),
+    messageId: z.string(),
+    approvals: z.array(z.object({
+      token: z.string().max(4000), connectionId: z.string(), connection: z.string(), server: z.string().nullable(), tool: z.string(),
+      title: z.string().nullable(), description: z.string().nullable(), args: z.record(z.string(), z.unknown()), expiresAt: z.string(),
+    })).max(10),
+  }),
 ]);
 export type ConversationState = z.infer<typeof stateSchema>;
 
@@ -48,13 +57,17 @@ export type Decisions = Map<string, Decision>;
 export const decisionKey = (messageId: string, n: number) => `${messageId}#${n}`;
 
 /** Fold the state messages of a conversation (oldest first). */
-export function foldState(contents: string[]): { decisions: Decisions; sensitive: boolean } {
+export type McpApprovals = Map<string, Extract<ConversationState, { type: "mcp" }>["approvals"]>;
+
+export function foldState(contents: string[]): { decisions: Decisions; sensitive: boolean; mcp: McpApprovals } {
   const decisions: Decisions = new Map();
+  const mcp: McpApprovals = new Map();
   let sensitive = false;
   for (const c of contents) {
     const s = decodeState(c);
     if (!s) continue;
     if (s.type === "sensitive") sensitive = true;
+    else if (s.type === "mcp") mcp.set(s.messageId, [...(mcp.get(s.messageId) ?? []), ...s.approvals]);
     else {
       const key = decisionKey(s.messageId, s.n);
       // An undo keeps what was created (for the label) but the latest status wins.
@@ -63,5 +76,5 @@ export function foldState(contents: string[]): { decisions: Decisions; sensitive
       decisions.set(key, { status: s.status, result: s.result ?? prev?.result ?? null, auto: s.auto ?? prev?.auto ?? null, ...(why ? { why } : {}) });
     }
   }
-  return { decisions, sensitive };
+  return { decisions, sensitive, mcp };
 }

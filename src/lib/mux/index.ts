@@ -188,12 +188,24 @@ export async function embed(texts: string[], meta: MuxCallMeta): Promise<number[
   }
 }
 
-/** Speech to text through mux's /v1/audio/transcriptions. */
-export async function transcribe(file: Blob, filename: string, meta: MuxCallMeta): Promise<{ text: string; segments: { start: number; end: number; text: string }[] }> {
+/** Whisper's `language`: an ISO 639-1 code ("da", "en", "da-DK" → "da"); anything else is left out (auto-detect). */
+export function whisperLanguage(lang: string | null | undefined): string | null {
+  const m = /^([a-z]{2})(?:[-_][a-z]{2})?$/i.exec((lang ?? "").trim());
+  return m ? m[1].toLowerCase() : null;
+}
+
+/**
+ * Speech to text through mux's /v1/audio/transcriptions. `language` (Whisper's "language": "da", "en") makes
+ * recognition faster and more accurate when it is known — the person's choice in dictation, the session's language in
+ * clinical recordings. Left out, Whisper detects it.
+ */
+export async function transcribe(file: Blob, filename: string, meta: MuxCallMeta, opts: { language?: string | null } = {}): Promise<{ text: string; segments: { start: number; end: number; text: string }[] }> {
   const { apiKey } = requireKey();
   const form = new FormData();
   form.append("model", "transcribe");
   form.append("response_format", "verbose_json");
+  const language = whisperLanguage(opts.language);
+  if (language) form.append("language", language);
   form.append("file", file, filename || "audio");
   const res = await post("/v1/audio/transcriptions", {
     body: form,

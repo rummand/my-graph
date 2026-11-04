@@ -155,6 +155,9 @@ const messages: MessageTree = {
     from: "{route} fra {model}",
     route: { fast: "Hurtigt svar", smart: "Grundigt svar", agent: "Grundigt svar", auto: "Svar", code: "Svar", multilingual: "Svar", vision: "Svar" },
     answer: "Svar",
+    toolResult: "Det svarede {service}",
+    toolExpired: "Godkendelsen af “{tool}” i {service} er udløbet. Spørg igen, så bliver den gjort klar på ny.",
+    toolsWaiting: { one: "1 handling venter på din godkendelse", other: "{count} handlinger venter på din godkendelse" },
   },
   steps: {
     did: "Hvad assistenten gjorde",

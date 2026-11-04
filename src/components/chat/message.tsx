@@ -13,6 +13,7 @@ import type { ProposalView } from "@/lib/assistant/proposals";
 import { Markdown } from "./markdown";
 import { SourceList } from "./citation";
 import { ProposalCard } from "./proposal-card";
+import { McpApprovals } from "./mcp-approvals";
 import { shortModel } from "./recency";
 import { ClarifyPicker } from "./clarify-picker";
 import { LiveSteps, WorkedLine } from "./work-steps";
@@ -68,6 +69,8 @@ export function Answer({ m, conversationId, onDecided, canClarify, onClarify, on
           ))}
         </div>
       )}
+
+      {!m.streaming && m.mcpApprovals && m.mcpApprovals.length > 0 && <McpApprovals approvals={m.mcpApprovals} />}
 
       {!m.streaming && <ProposedChanges steps={m.steps} />}
 

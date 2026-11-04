@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
-import { rebuildProgress, startRebuild } from "@/lib/timeline/rebuild";
+import { rebuildStatus, startRebuild } from "@/lib/timeline/rebuild";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ function fail(err: unknown) {
 export async function GET() {
   try {
     const v = await requireUser();
-    return NextResponse.json({ progress: rebuildProgress(v) }, { headers: noStore });
+    return NextResponse.json({ progress: await rebuildStatus(v) }, { headers: noStore });
   } catch (err) {
     return fail(err);
   }

@@ -47,6 +47,39 @@ type Meta = Record<string, unknown>;
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 500);
 
+const FAMILY: Record<string, { en: string }> = {
+  docx: { en: "Word document" }, pptx: { en: "PowerPoint presentation" }, spreadsheet: { en: "Excel workbook" }, pdf: { en: "PDF" }, archive: { en: "zip file" },
+};
+
+/**
+ * A parser's error → one plain sentence for the library (pure, unit-tested). Office files are zip archives of XML:
+ * their parsers fail with messages like "Can't find end of central directory : is this a zip file ?" or
+ * "[xmldom error] … @#[line:undefined,col:undefined]", which mean nothing to the person who uploaded the file.
+ */
+export function readableParserError(message: string, kind: string | null | undefined): string {
+  const what = FAMILY[kind ?? ""]?.en ?? "file";
+  const m = message || "";
+  if (/central directory|corrupted zip|end of data reached|is this a zip file|invalid (zip|signature)|unexpected end/i.test(m)) {
+    return `This ${what} is damaged or wasn't fully downloaded, so it can't be opened. Open it on your computer, save it again, and add that copy.`;
+  }
+  if (/main document part|could not find .*(part|presentation|workbook)|no (slides|sheets) found/i.test(m)) {
+    return `This file is named like a ${what}, but it doesn't contain one. Save it again as a ${what} and add that copy.`;
+  }
+  if (/xmldom|parse error|hierarchy request|unclosed|malformed|not well-formed|invalid xml/i.test(m)) {
+    return `Part of this ${what} is damaged, so its text can't be read. Open it, save it again, and add that copy.`;
+  }
+  if (/password|encrypt/i.test(m)) return `This ${what} is protected with a password. Remove the password, save it, and add it again.`;
+  // Anything else: the message without parser noise ("undefined", positions, stack-like tails).
+  const clean = m.replace(/@#\[[^\]]*\]/g, "").replace(/\[line:[^\]]*\]/gi, "").replace(/\b(undefined|null|NaN)\b/g, "").replace(/\s+/g, " ").trim();
+  return clean ? clean.slice(0, 300) : `This ${what} couldn't be read.`;
+}
+
+/** The title a document gives itself (PowerPoint and Excel properties), else the file's name. */
+export function documentTitleOf(meta: Record<string, unknown>, fallback: string): string {
+  const t = typeof meta.documentTitle === "string" ? meta.documentTitle.replace(/\s+/g, " ").trim() : "";
+  return t && t.length <= 300 ? t : fallback;
+}
+
 /** Reports what the pipeline is doing to the job running it (and lets the job stop it at a step boundary). */
 export type OnProgress = (p: JobProgress) => Promise<void> | void;
 const noProgress: OnProgress = () => {};
@@ -155,7 +188,7 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     if (!docNodeId) {
       const { node } = await gbrain.upsertNode(v, {
         type: "document",
-        label: src.title,
+        label: documentTitleOf(meta, src.title),
         summary: typeof meta.captionText === "string" ? meta.captionText : undefined,
         props: { sourceId: src.id, mime: src.mime, kind: src.kind },
         startAt: docDate?.at ?? occurredAt ?? null,
@@ -175,7 +208,7 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     if (!muxUp) meta.extraction = "skipped: mux unreachable";
     else if (stored.length === 0) meta.extraction = "skipped: no text";
     else {
-      const r = await readFacts(v, src.title, stored, muxMeta, progress);
+      const r = await readFacts(v, documentTitleOf(meta, src.title), stored, muxMeta, progress);
       groups = r.groups;
       meta.extraction = r.summary;
       if (r.model) meta.extractionModel = r.model;
@@ -201,7 +234,7 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       }
       // …and so is one a run cut off by a restart made but never recorded on the source.
       await withdrawUndecidedProposals(v, src.id);
-      const p = await proposeFromSource(v, { id: src.id, title: src.title, visibility: src.visibility, docNodeId, header: emailHeader(meta) },
+      const p = await proposeFromSource(v, { id: src.id, title: documentTitleOf(meta, src.title), visibility: src.visibility, docNodeId, header: emailHeader(meta) },
         groups, meta.correspondentsDone ? [] : participants, recording);
       Object.assign(meta, p);
       if (participants.length) meta.correspondentsDone = true;
@@ -217,7 +250,7 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     meta.failedStep = step;
     meta.finishedAt = new Date().toISOString();
     await db.update(sources)
-      .set({ status: "failed", error: `Failed while ${step}: ${errText(e)}`, meta })
+      .set({ status: "failed", error: step === "reading the text" ? readableParserError(errText(e), kind) : `Failed while ${step}: ${errText(e)}`, meta })
       .where(eq(sources.id, sourceId))
       .catch((e2) => console.error("[ingest] could not record failure", e2));
   }
@@ -654,7 +687,7 @@ export async function refreshSource(viewer: Viewer, sourceId: string, muxUp: boo
         .where(eq(chunks.sourceId, src.id)).orderBy(chunks.idx);
       if (stored.length) {
         const muxMeta: mux.MuxCallMeta = { userId: v.id, agent: AGENT, traceId: src.id, sensitive: src.sensitive, graphId: v.graphId };
-        const r = await readFacts(v, src.title, stored.map((c) => ({ ...c, locator: c.locator ?? {} })), muxMeta);
+        const r = await readFacts(v, documentTitleOf(meta, src.title), stored.map((c) => ({ ...c, locator: c.locator ?? {} })), muxMeta);
         meta.extraction = r.summary;
         const stated = r.groups.map((g) => checkStatedDate(g.ex.documentDate, g.chunks.map((c) => c.text).join("\n"))).find(Boolean);
         const currentOrigin = (meta.documentDateFrom as { origin?: DateOrigin } | undefined)?.origin;
@@ -664,7 +697,7 @@ export async function refreshSource(viewer: Viewer, sourceId: string, muxUp: boo
           meta.documentDateFrom = { origin: "model", quote: stated.quote ?? null }; out.date = true;
         }
         const recording = src.kind === "recording" ? await recordingPlanFor(v, src, src.nodeId) : null;
-        const p = await proposeFromSource(v, { id: src.id, title: src.title, visibility: src.visibility, docNodeId: src.nodeId, header: emailHeader(meta) },
+        const p = await proposeFromSource(v, { id: src.id, title: documentTitleOf(meta, src.title), visibility: src.visibility, docNodeId: src.nodeId, header: emailHeader(meta) },
           r.groups, meta.correspondentsDone ? [] : emailParticipants(meta), recording);
         Object.assign(meta, p);
         if (emailParticipants(meta).length) meta.correspondentsDone = true;

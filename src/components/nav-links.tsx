@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import { AnimatePresence, motion } from "motion/react";
 import { useT } from "@/lib/i18n/client";
+import { recordingsAvailable } from "./nav-recordings";
 import {
-  BookOpen, Brain, Scale, CalendarRange, FileText, FileStack, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, ShieldCheck, Stethoscope, Users, Workflow, X, type LucideIcon,
+  BookOpen, Brain, Mic, Scale, CalendarRange, FileText, FileStack, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, ShieldCheck, Stethoscope, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 
 /**
@@ -26,6 +27,36 @@ function withAdmin(items: NavItem[], adminLabel?: string): NavItem[] {
 /** The clinical workspace, for accounts whose plan includes a practice add-on (the shell decides, on the server). */
 function withPractice(items: NavItem[], practice?: boolean): NavItem[] {
   return practice ? [{ href: "/clinical", key: "clinical", icon: Stethoscope, label: "clinical.nav" }, ...items] : items;
+}
+
+/** Recordings (meetings from Record), once this graph has any recording or the person has connected Record. */
+function withRecordings(items: NavItem[], recordings: boolean): NavItem[] {
+  if (!recordings) return items;
+  const at = items.findIndex((l) => l.href === "/library");
+  const item: NavItem = { href: "/recordings", key: "recordings", icon: Mic, label: "recordings.title" };
+  return at < 0 ? [...items, item] : [...items.slice(0, at + 1), item, ...items.slice(at + 1)];
+}
+
+const g = globalThis as unknown as { __mgNavRecordings?: { at: number; p: Promise<boolean> } };
+
+/**
+ * Whether to show Recordings. The shell may decide on the server (`recordings` prop); otherwise it is asked once per
+ * page load, after the first paint, and the item appears when there is something to open.
+ */
+function useRecordings(given?: boolean): boolean {
+  const [has, setHas] = useState(given ?? false);
+  useEffect(() => {
+    if (given !== undefined) { setHas(given); return; }
+    let live = true;
+    const json = (u: string) => fetch(u, { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    // Shared by the desktop and phone navigation; asked again after a minute (another graph may be open by then).
+    if (!g.__mgNavRecordings || Date.now() - g.__mgNavRecordings.at > 60_000) {
+      g.__mgNavRecordings = { at: Date.now(), p: Promise.all([json("/api/recordings?limit=1"), json("/api/connections")]).then(([r, c]) => recordingsAvailable(r, c)) };
+    }
+    void g.__mgNavRecordings.p.then((x) => { if (live) setHas(x); });
+    return () => { live = false; };
+  }, [given]);
+  return has;
 }
 
 const PRIMARY: NavItem[] = [
@@ -52,9 +83,10 @@ const SECONDARY: NavItem[] = [
 const visible = (role: string) => (l: NavItem) => !l.hideFor?.includes(role);
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(href + "/"));
 
-export function NavLinks({ role, adminLabel, practice }: { role: string; adminLabel?: string; practice?: boolean }) {
+export function NavLinks({ role, adminLabel, practice, recordings }: { role: string; adminLabel?: string; practice?: boolean; recordings?: boolean }) {
   const path = usePathname();
   const t = useT();
+  const rec = useRecordings(recordings);
   const item = (l: NavItem) => {
     const active = isActive(path, l.href);
     const Icon = l.icon;
@@ -72,17 +104,18 @@ export function NavLinks({ role, adminLabel, practice }: { role: string; adminLa
     <nav aria-label={t("shell.nav.main")} className="flex flex-col gap-0.5 px-1">
       {PRIMARY.filter(visible(role)).map(item)}
       <div className="my-2" />
-      {withAdmin(withPractice(SECONDARY.filter(visible(role)), practice), adminLabel).map(item)}
+      {withAdmin(withPractice(withRecordings(SECONDARY.filter(visible(role)), rec), practice), adminLabel).map(item)}
     </nav>
   );
 }
 
 /** Phone navigation: four destinations and a More sheet. */
-export function MobileNav({ role, adminLabel, practice }: { role: string; adminLabel?: string; practice?: boolean }) {
+export function MobileNav({ role, adminLabel, practice, recordings }: { role: string; adminLabel?: string; practice?: boolean; recordings?: boolean }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   const t = useT();
-  const more = withAdmin(withPractice(SECONDARY.filter(visible(role)), practice), adminLabel);
+  const rec = useRecordings(recordings);
+  const more = withAdmin(withPractice(withRecordings(SECONDARY.filter(visible(role)), rec), practice), adminLabel);
   const moreActive = more.some((l) => isActive(path, l.href));
   return (
     <>

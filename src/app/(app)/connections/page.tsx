@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
+import { isPlatformAdmin } from "@/lib/plans";
 import { connectorInfo, listConnections, offeredIn } from "@/lib/connectors";
 import * as gbrain from "@/lib/gbrain";
 import { getT } from "@/lib/i18n";
@@ -16,7 +17,7 @@ export async function generateMetadata(): Promise<Metadata> {
 /**
  * Connections: calendar links and mailboxes that bring outside content into the current graph, as the signed-in
  * person. Only their own connections in this graph are listed. Aula calendar and Aula messages appear only in a
- * family graph; Aula messages is shown as coming soon.
+ * family graph; Aula messages connects through the Connect Aula page. Plugins are offered to the platform admin only.
  */
 export default async function ConnectionsPage() {
   const v = await requireUser();
@@ -28,7 +29,7 @@ export default async function ConnectionsPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader title={t("connections.title")} lead={t("connections.lead", { graph: v.graphName })} />
-      <ConnectionsApp initial={connections} connectors={offeredIn(v.graphKind).map(connectorInfo)}
+      <ConnectionsApp initial={connections} connectors={offeredIn(v.graphKind, isPlatformAdmin(v)).map(connectorInfo)}
         people={people.map((p) => ({ id: p.id, label: p.label })).sort((a, b) => a.label.localeCompare(b.label))}
         family={v.graphKind === "family"} graphName={v.graphName} />
     </div>
