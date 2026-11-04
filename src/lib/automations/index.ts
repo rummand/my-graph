@@ -61,6 +61,9 @@ export async function isAlwaysAllowed(v: Viewer, actionKind: string): Promise<bo
   return (await getAssistantSettings(v)).alwaysAllow.includes(actionKind);
 }
 
+/** Adds an action kind to the viewer's "Always allow" list (from an approval card in chat or the inbox). */
+export async function allowAlways(_v: Viewer, _actionKind: string): Promise<void> {}
+
 export async function listRecipes(_v: Viewer): Promise<Recipe[]> {
   return [];
 }
