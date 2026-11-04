@@ -1,0 +1,3348 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "": {
+      "shouldTranslate": false
+    },
+    "%lld": {
+      "shouldTranslate": false
+    },
+    "%lld changes found in this file": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ændringer fundet i filen"
+          }
+        }
+      }
+    },
+    "%lld connections": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld forbindelser"
+          }
+        }
+      }
+    },
+    "%lld events": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld begivenheder"
+          }
+        }
+      }
+    },
+    "%lld open reminders": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld åbne påmindelser"
+          }
+        }
+      }
+    },
+    "%lld people": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld personer"
+          }
+        }
+      }
+    },
+    "%lld reminders": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld påmindelser"
+          }
+        }
+      }
+    },
+    "%lld to review": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld at se på"
+          }
+        }
+      }
+    },
+    "%lld waiting": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld venter"
+          }
+        }
+      }
+    },
+    "%lld%% sure": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld%% sikker"
+          }
+        }
+      }
+    },
+    "1 connection": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 forbindelse"
+          }
+        }
+      }
+    },
+    "1 event": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 begivenhed"
+          }
+        }
+      }
+    },
+    "1 person": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 person"
+          }
+        }
+      }
+    },
+    "1 reminder": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 påmindelse"
+          }
+        }
+      }
+    },
+    "A notification when a reminder is due. Refreshed when you open the app and now and then in the background.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En besked, når en påmindelse forfalder. Opdateres, når du åbner appen, og en gang imellem i baggrunden."
+          }
+        }
+      }
+    },
+    "A parent can approve it in Settings, under Household members, on their own phone or computer. This screen moves on by itself when they have.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En forælder kan godkende den under Indstillinger og derefter Husstandens medlemmer på sin egen telefon eller computer. Skærmen går selv videre, når det er sket."
+          }
+        }
+      }
+    },
+    "A parent needs to approve this device before you can use My Graph here.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En forælder skal godkende enheden, før du kan bruge My Graph her."
+          }
+        }
+      }
+    },
+    "A short read on what matters today, with a source for every line.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Et kort overblik over det, der betyder noget i dag, med en kilde til hver linje."
+          }
+        }
+      }
+    },
+    "About": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Om"
+          }
+        }
+      }
+    },
+    "About %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Om %@"
+          }
+        }
+      }
+    },
+    "Add": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføj"
+          }
+        }
+      }
+    },
+    "Add fact": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføj oplysning"
+          }
+        }
+      }
+    },
+    "Add letters, photos and scans. The assistant reads them and finds dates, people and things to do.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføj breve, billeder og scanninger. Assistenten læser dem og finder datoer, personer og ting, der skal gøres."
+          }
+        }
+      }
+    },
+    "Add person": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføj person"
+          }
+        }
+      }
+    },
+    "Add reminder": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføj påmindelse"
+          }
+        }
+      }
+    },
+    "Add the people in your life, or upload a letter and the assistant will find them.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføj de mennesker, du har i dit liv, eller upload et brev, så finder assistenten dem."
+          }
+        }
+      }
+    },
+    "Add to the library": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Føj til biblioteket"
+          }
+        }
+      }
+    },
+    "Add wiki note": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføj wikinote"
+          }
+        }
+      }
+    },
+    "Added %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføjet %@"
+          }
+        }
+      }
+    },
+    "Added by hand": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføjet i hånden"
+          }
+        }
+      }
+    },
+    "Added to the graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Føjet til grafen."
+          }
+        }
+      }
+    },
+    "Added. The assistant is reading it now; what it finds shows up on the item.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføjet. Assistenten læser det nu, og det, den finder, dukker op på emnet."
+          }
+        }
+      }
+    },
+    "All": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle"
+          }
+        }
+      }
+    },
+    "All day": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hele dagen"
+          }
+        }
+      }
+    },
+    "Already in the library, so it wasn't added twice.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ligger allerede i biblioteket, så det blev ikke tilføjet to gange."
+          }
+        }
+      }
+    },
+    "Also called": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kaldes også"
+          }
+        }
+      }
+    },
+    "Always allow": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tillad altid"
+          }
+        }
+      }
+    },
+    "Approve": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Godkend"
+          }
+        }
+      }
+    },
+    "Ask": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørg"
+          }
+        }
+      }
+    },
+    "Ask a parent to approve this device": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bed en forælder om at godkende enheden"
+          }
+        }
+      }
+    },
+    "Ask about %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørg om %@"
+          }
+        }
+      }
+    },
+    "Ask about anything in your graph: dates, people, letters. Every answer shows where it came from.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørg om alt i din graf: datoer, personer, breve. Hvert svar viser, hvor det kom fra."
+          }
+        }
+      }
+    },
+    "Ask about anything…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørg om hvad som helst…"
+          }
+        }
+      }
+    },
+    "Ask about this": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørg om det her"
+          }
+        }
+      }
+    },
+    "Ask anything": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørg om hvad som helst"
+          }
+        }
+      }
+    },
+    "Ask anything about your graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørg om alt i din graf"
+          }
+        }
+      }
+    },
+    "Audio": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lyd"
+          }
+        }
+      }
+    },
+    "Birthday": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fødselsdag"
+          }
+        }
+      }
+    },
+    "Birthday coming up": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har snart fødselsdag"
+          }
+        }
+      }
+    },
+    "Can add and edit": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kan tilføje og redigere"
+          }
+        }
+      }
+    },
+    "Can only look": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kan kun se"
+          }
+        }
+      }
+    },
+    "Can't check right now. We'll keep trying.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kan ikke tjekke lige nu. Vi bliver ved med at prøve."
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annuller"
+          }
+        }
+      }
+    },
+    "Care & health": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pleje og sundhed"
+          }
+        }
+      }
+    },
+    "Change in iOS Settings": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skift i iOS-indstillinger"
+          }
+        }
+      }
+    },
+    "Change which My Graph server to use": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skift den My Graph-server, du bruger"
+          }
+        }
+      }
+    },
+    "Changes": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ændringer"
+          }
+        }
+      }
+    },
+    "Changes aren't on this server yet": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ændringer findes ikke på serveren endnu"
+          }
+        }
+      }
+    },
+    "Changing the server signs you out of this one.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skifter du server, bliver du logget ud af den her."
+          }
+        }
+      }
+    },
+    "Close": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Luk"
+          }
+        }
+      }
+    },
+    "Close friends": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nære venner"
+          }
+        }
+      }
+    },
+    "Coming up": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kommende"
+          }
+        }
+      }
+    },
+    "Connected to": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forbundet med"
+          }
+        }
+      }
+    },
+    "Could use some attention": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunne trænge til lidt opmærksomhed"
+          }
+        }
+      }
+    },
+    "Couldn't reach My Graph at that address. Check it and try again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunne ikke nå My Graph på den adresse. Tjek den, og prøv igen."
+          }
+        }
+      }
+    },
+    "Couldn't read it": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kunne ikke læses"
+          }
+        }
+      }
+    },
+    "Current graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuværende graf"
+          }
+        }
+      }
+    },
+    "Delete": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slet"
+          }
+        }
+      }
+    },
+    "Deliver": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gennemfør"
+          }
+        }
+      }
+    },
+    "Delivered": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gennemført"
+          }
+        }
+      }
+    },
+    "Deny": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afvis"
+          }
+        }
+      }
+    },
+    "Document": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokument"
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Færdig"
+          }
+        }
+      }
+    },
+    "Drop": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kassér"
+          }
+        }
+      }
+    },
+    "Dropped": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kasseret"
+          }
+        }
+      }
+    },
+    "Dropped.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kasseret."
+          }
+        }
+      }
+    },
+    "Due %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forfalder %@"
+          }
+        }
+      }
+    },
+    "Due now": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forfalder nu"
+          }
+        }
+      }
+    },
+    "Each graph keeps its own people, files and chats. Switching changes what you see everywhere in the app.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hver graf har sine egne personer, filer og chats. Skifter du, ændrer det, hvad du ser overalt i appen."
+          }
+        }
+      }
+    },
+    "Earlier": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tidligere"
+          }
+        }
+      }
+    },
+    "Email": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "E-mail"
+          }
+        }
+      }
+    },
+    "Email or username": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "E-mail eller brugernavn"
+          }
+        }
+      }
+    },
+    "Enjoy the rest of the day.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nyd resten af dagen."
+          }
+        }
+      }
+    },
+    "Enter your email or username.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skriv din e-mail eller dit brugernavn."
+          }
+        }
+      }
+    },
+    "Enter your password.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skriv din adgangskode."
+          }
+        }
+      }
+    },
+    "Error: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fejl: %@"
+          }
+        }
+      }
+    },
+    "Event": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Begivenhed"
+          }
+        }
+      }
+    },
+    "Events from letters, chats and the calendar appear here, each in the colour of the person it's about.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Begivenheder fra breve, chats og kalenderen vises her, hver i farven på den person, den handler om."
+          }
+        }
+      }
+    },
+    "Everyone": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle"
+          }
+        }
+      }
+    },
+    "Everyone at home": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle derhjemme"
+          }
+        }
+      }
+    },
+    "Fact": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oplysning"
+          }
+        }
+      }
+    },
+    "Facts": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oplysninger"
+          }
+        }
+      }
+    },
+    "Family": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Familie"
+          }
+        }
+      }
+    },
+    "Family rules": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Familieregler"
+          }
+        }
+      }
+    },
+    "Files": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filer"
+          }
+        }
+      }
+    },
+    "Find a person": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Find en person"
+          }
+        }
+      }
+    },
+    "Font licence (SIL Open Font License)": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skrifttypelicens (SIL Open Font License)"
+          }
+        }
+      }
+    },
+    "For example Birgit Jensen": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For eksempel Birgit Jensen"
+          }
+        }
+      }
+    },
+    "Forget": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Glem"
+          }
+        }
+      }
+    },
+    "Forgot your password? Ask the owner of your household to give you a new one.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har du glemt din adgangskode? Bed ejeren af din husstand om at give dig en ny."
+          }
+        }
+      }
+    },
+    "Found %@.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fandt %@."
+          }
+        }
+      }
+    },
+    "Friends & neighbours": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venner og naboer"
+          }
+        }
+      }
+    },
+    "From a chat": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra en chat"
+          }
+        }
+      }
+    },
+    "From a document": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra et dokument"
+          }
+        }
+      }
+    },
+    "From an automation": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra en automatisering"
+          }
+        }
+      }
+    },
+    "From the Brain Keeper": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra Hjernevogteren"
+          }
+        }
+      }
+    },
+    "From the assistant": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra assistenten"
+          }
+        }
+      }
+    },
+    "From the daily check-in": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra det daglige tjek"
+          }
+        }
+      }
+    },
+    "Get a nudge when something is due": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Få et lille puf, når noget forfalder"
+          }
+        }
+      }
+    },
+    "Getting your photos ready…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gør dine billeder klar…"
+          }
+        }
+      }
+    },
+    "Good": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Godt"
+          }
+        }
+      }
+    },
+    "Good afternoon": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "God eftermiddag"
+          }
+        }
+      }
+    },
+    "Good evening": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Godaften"
+          }
+        }
+      }
+    },
+    "Good morning": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Godmorgen"
+          }
+        }
+      }
+    },
+    "Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Graf"
+          }
+        }
+      }
+    },
+    "Graph: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Graf: %@"
+          }
+        }
+      }
+    },
+    "Health": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helbred"
+          }
+        }
+      }
+    },
+    "Hello": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hej"
+          }
+        }
+      }
+    },
+    "Hide the steps": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skjul trinene"
+          }
+        }
+      }
+    },
+    "How they're doing": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvordan det går"
+          }
+        }
+      }
+    },
+    "Includes parents-only items": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indeholder ting kun for forældre"
+          }
+        }
+      }
+    },
+    "Includes private items": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indeholder private ting"
+          }
+        }
+      }
+    },
+    "Inferred": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Udledt"
+          }
+        }
+      }
+    },
+    "It goes to the library. The assistant reads it and suggests dates, people and things to do; nothing is added to your graph until you say so.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det havner i biblioteket. Assistenten læser det og foreslår datoer, personer og ting, der skal gøres. Intet kommer ind i din graf, før du siger ja."
+          }
+        }
+      }
+    },
+    "It's been a while since you were in touch": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det er et stykke tid siden, I har talt sammen"
+          }
+        }
+      }
+    },
+    "It's the first time you've signed in on this iPhone, so a parent needs to say it's OK.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det er første gang, du logger ind på denne iPhone, så en forælder skal lige sige god for det."
+          }
+        }
+      }
+    },
+    "Just you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kun dig"
+          }
+        }
+      }
+    },
+    "Kind": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slags"
+          }
+        }
+      }
+    },
+    "Language": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprog"
+          }
+        }
+      }
+    },
+    "Letters": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Breve"
+          }
+        }
+      }
+    },
+    "Library": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bibliotek"
+          }
+        }
+      }
+    },
+    "Link from %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link fra %@"
+          }
+        }
+      }
+    },
+    "Low": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Langt nede"
+          }
+        }
+      }
+    },
+    "Mark done: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markér som klaret: %@"
+          }
+        }
+      }
+    },
+    "Member": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Medlem"
+          }
+        }
+      }
+    },
+    "Memory": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hukommelse"
+          }
+        }
+      }
+    },
+    "Memory, changes, settings and sign out": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hukommelse, ændringer, indstillinger og log ud"
+          }
+        }
+      }
+    },
+    "Mention %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nævn %@"
+          }
+        }
+      }
+    },
+    "Milestone": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Milepæl"
+          }
+        }
+      }
+    },
+    "More": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mere"
+          }
+        }
+      }
+    },
+    "My Graph can remind you on this iPhone when a reminder is due, like a permission slip or a birthday. Nothing else.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph kan minde dig om det på denne iPhone, når en påmindelse forfalder, fx en samtykkeseddel eller en fødselsdag. Ikke andet."
+          }
+        }
+      }
+    },
+    "My Graph follows your iPhone's language. English and Danish are available.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph følger din iPhones sprog. Engelsk og dansk er tilgængelige."
+          }
+        }
+      }
+    },
+    "My Graph isn't answering right now. Try again in a moment.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph svarer ikke lige nu. Prøv igen om lidt."
+          }
+        }
+      }
+    },
+    "My Graph sent something this app doesn't understand. Try updating the app.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph sendte noget, appen ikke forstår. Prøv at opdatere appen."
+          }
+        }
+      }
+    },
+    "My Graph took too long to answer. Try again in a moment.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph var for længe om at svare. Prøv igen om lidt."
+          }
+        }
+      }
+    },
+    "Name": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navn"
+          }
+        }
+      }
+    },
+    "New chat": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ny chat"
+          }
+        }
+      }
+    },
+    "Next up": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det næste"
+          }
+        }
+      }
+    },
+    "No chats match": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen chats passer"
+          }
+        }
+      }
+    },
+    "No chats yet": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen chats endnu"
+          }
+        }
+      }
+    },
+    "No people yet": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen personer endnu"
+          }
+        }
+      }
+    },
+    "Not added": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikke tilføjet"
+          }
+        }
+      }
+    },
+    "Not now": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikke nu"
+          }
+        }
+      }
+    },
+    "Not set up": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikke sat op"
+          }
+        }
+      }
+    },
+    "Not sure yet": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ved ikke endnu"
+          }
+        }
+      }
+    },
+    "Note": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note"
+          }
+        }
+      }
+    },
+    "Notes": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noter"
+          }
+        }
+      }
+    },
+    "Nothing coming up": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet på vej"
+          }
+        }
+      }
+    },
+    "Nothing here": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet her"
+          }
+        }
+      }
+    },
+    "Nothing here yet": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet her endnu"
+          }
+        }
+      }
+    },
+    "Nothing in the library yet": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet i biblioteket endnu"
+          }
+        }
+      }
+    },
+    "Nothing matches": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet passer"
+          }
+        }
+      }
+    },
+    "Nothing more today.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikke mere i dag."
+          }
+        }
+      }
+    },
+    "Nothing on the calendar for the next seven days.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet i kalenderen de næste syv dage."
+          }
+        }
+      }
+    },
+    "Nothing remembered yet": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet husket endnu"
+          }
+        }
+      }
+    },
+    "Nothing to do in the next two weeks. Reminders you or the assistant add show up here.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet at gøre de næste to uger. Påmindelser, som du eller assistenten tilføjer, vises her."
+          }
+        }
+      }
+    },
+    "Nothing waiting": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet venter"
+          }
+        }
+      }
+    },
+    "Notifications": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifikationer"
+          }
+        }
+      }
+    },
+    "Now: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nu: %@"
+          }
+        }
+      }
+    },
+    "Nudge": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Puf"
+          }
+        }
+      }
+    },
+    "OK": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OK"
+          }
+        }
+      }
+    },
+    "Off": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra"
+          }
+        }
+      }
+    },
+    "Offline. Showing what was here %@.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline. Viser det, der var her %@."
+          }
+        }
+      }
+    },
+    "On": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Til"
+          }
+        }
+      }
+    },
+    "Only you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kun dig"
+          }
+        }
+      }
+    },
+    "Open": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn"
+          }
+        }
+      }
+    },
+    "Open My Graph and sign in first. Then you can save things here from any app.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn My Graph, og log ind først. Så kan du gemme ting her fra enhver app."
+          }
+        }
+      }
+    },
+    "Open My Graph to sign in.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn My Graph for at logge ind."
+          }
+        }
+      }
+    },
+    "Open the original": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn originalen"
+          }
+        }
+      }
+    },
+    "Open the source": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn kilden"
+          }
+        }
+      }
+    },
+    "Opening My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbner My Graph"
+          }
+        }
+      }
+    },
+    "Or type your own answer below.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eller skriv dit eget svar nedenfor."
+          }
+        }
+      }
+    },
+    "Or use your password": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eller brug din adgangskode"
+          }
+        }
+      }
+    },
+    "Others": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Andre"
+          }
+        }
+      }
+    },
+    "Overdue, %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overskredet, %@"
+          }
+        }
+      }
+    },
+    "Owner": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ejer"
+          }
+        }
+      }
+    },
+    "PDFs": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "PDF’er"
+          }
+        }
+      }
+    },
+    "Pack lunch for the zoo trip": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smør madpakke til zooturen"
+          }
+        }
+      }
+    },
+    "Parents": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forældre"
+          }
+        }
+      }
+    },
+    "Parents only": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kun forældre"
+          }
+        }
+      }
+    },
+    "Passkeys need the server's real web address. Use your password for the local server.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adgangsnøgler kræver serverens rigtige webadresse. Brug din adgangskode til den lokale server."
+          }
+        }
+      }
+    },
+    "Password": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adgangskode"
+          }
+        }
+      }
+    },
+    "Pause": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sæt på pause"
+          }
+        }
+      }
+    },
+    "Paused": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "På pause"
+          }
+        }
+      }
+    },
+    "People": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Personer"
+          }
+        }
+      }
+    },
+    "Person": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Person"
+          }
+        }
+      }
+    },
+    "Photo: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Billede: %@"
+          }
+        }
+      }
+    },
+    "Photos": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Billeder"
+          }
+        }
+      }
+    },
+    "Pin": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fastgør"
+          }
+        }
+      }
+    },
+    "Pinned": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fastgjort"
+          }
+        }
+      }
+    },
+    "Place": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sted"
+          }
+        }
+      }
+    },
+    "Please sign in again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ind igen."
+          }
+        }
+      }
+    },
+    "Preferences": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Præferencer"
+          }
+        }
+      }
+    },
+    "Private": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Privat"
+          }
+        }
+      }
+    },
+    "Proposed changes": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foreslåede ændringer"
+          }
+        }
+      }
+    },
+    "Proposed changes from chats, uploads and check-ins show up here. Nothing is added to your graph until you deliver it.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foreslåede ændringer fra chats, uploads og tjek vises her. Intet kommer ind i din graf, før du gennemfører det."
+          }
+        }
+      }
+    },
+    "Question": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørgsmål"
+          }
+        }
+      }
+    },
+    "Read by the assistant": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Læst af assistenten"
+          }
+        }
+      }
+    },
+    "Reading…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Læser…"
+          }
+        }
+      }
+    },
+    "Recent": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Seneste"
+          }
+        }
+      }
+    },
+    "Recently added": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Senest tilføjet"
+          }
+        }
+      }
+    },
+    "Relations": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relationer"
+          }
+        }
+      }
+    },
+    "Remember this": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Husk det her"
+          }
+        }
+      }
+    },
+    "Reminder": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Påmindelse"
+          }
+        }
+      }
+    },
+    "Reminder at %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Påmindelse kl. %@"
+          }
+        }
+      }
+    },
+    "Reminders on this iPhone": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Påmindelser på denne iPhone"
+          }
+        }
+      }
+    },
+    "Resume": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genoptag"
+          }
+        }
+      }
+    },
+    "Review in Changes": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se det under Ændringer"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gem"
+          }
+        }
+      }
+    },
+    "Save to My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gem i My Graph"
+          }
+        }
+      }
+    },
+    "Saved to %@. The assistant is reading it now.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemt i %@. Assistenten læser det nu."
+          }
+        }
+      }
+    },
+    "Scan a document": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan et dokument"
+          }
+        }
+      }
+    },
+    "Scans": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scanninger"
+          }
+        }
+      }
+    },
+    "Schibsted Grotesk": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schibsted Grotesk"
+          }
+        }
+      }
+    },
+    "School & daycare": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skole og dagtilbud"
+          }
+        }
+      }
+    },
+    "Search letters, photos and notes": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Søg i breve, billeder og noter"
+          }
+        }
+      }
+    },
+    "Search your chats": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Søg i dine chats"
+          }
+        }
+      }
+    },
+    "Seems to be having a hard time": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ser ud til at have det svært"
+          }
+        }
+      }
+    },
+    "Send": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send"
+          }
+        }
+      }
+    },
+    "Server": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
+          }
+        }
+      }
+    },
+    "Server address": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serveradresse"
+          }
+        }
+      }
+    },
+    "Server: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server: %@"
+          }
+        }
+      }
+    },
+    "Settings": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indstillinger"
+          }
+        }
+      }
+    },
+    "Show": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vis"
+          }
+        }
+      }
+    },
+    "Show all": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vis alt"
+          }
+        }
+      }
+    },
+    "Show less": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vis mindre"
+          }
+        }
+      }
+    },
+    "Show the steps": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vis trinene"
+          }
+        }
+      }
+    },
+    "Showing the first part. Narrow it down with a person.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Viser første del. Indsnævr med en person."
+          }
+        }
+      }
+    },
+    "Sign in": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ind"
+          }
+        }
+      }
+    },
+    "Sign in to your graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ind på din graf."
+          }
+        }
+      }
+    },
+    "Sign in with a passkey": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ind med en adgangsnøgle"
+          }
+        }
+      }
+    },
+    "Sign out": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ud"
+          }
+        }
+      }
+    },
+    "Signed in": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logget ind"
+          }
+        }
+      }
+    },
+    "Signing in…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logger ind…"
+          }
+        }
+      }
+    },
+    "Skip": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spring over"
+          }
+        }
+      }
+    },
+    "Something went wrong on our side. Please try again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noget gik galt hos os. Prøv igen."
+          }
+        }
+      }
+    },
+    "Something went wrong while answering. Please try again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noget gik galt under svaret. Prøv igen."
+          }
+        }
+      }
+    },
+    "Something went wrong. Please try again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noget gik galt. Prøv igen."
+          }
+        }
+      }
+    },
+    "Source %lld: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kilde %lld: %@"
+          }
+        }
+      }
+    },
+    "Source: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kilde: %@"
+          }
+        }
+      }
+    },
+    "Sources": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kilder"
+          }
+        }
+      }
+    },
+    "Stop": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop"
+          }
+        }
+      }
+    },
+    "Struggling": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har det svært"
+          }
+        }
+      }
+    },
+    "Suggestion": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forslag"
+          }
+        }
+      }
+    },
+    "Swimming": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Svømning"
+          }
+        }
+      }
+    },
+    "Switch to another graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skift til en anden graf"
+          }
+        }
+      }
+    },
+    "Take a photo": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tag et billede"
+          }
+        }
+      }
+    },
+    "Taken back": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortrudt"
+          }
+        }
+      }
+    },
+    "Text": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tekst"
+          }
+        }
+      }
+    },
+    "That doesn't look like a web address.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det ligner ikke en webadresse."
+          }
+        }
+      }
+    },
+    "The assistant can't be reached right now. Everything else still works.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assistenten kan ikke nås lige nu. Alt andet virker stadig."
+          }
+        }
+      }
+    },
+    "The assistant couldn't be reached, so this answer only lists what was found.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assistenten kunne ikke nås, så svaret viser kun det, der blev fundet."
+          }
+        }
+      }
+    },
+    "The assistant is still reading this. Pull down to check again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assistenten læser stadig. Træk ned for at tjekke igen."
+          }
+        }
+      }
+    },
+    "The next three things today in your current graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "De næste tre ting i dag i din nuværende graf."
+          }
+        }
+      }
+    },
+    "There's nothing here My Graph can save. Try a photo, a PDF, some text or a link.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der er intet her, My Graph kan gemme. Prøv et billede, en PDF, noget tekst eller et link."
+          }
+        }
+      }
+    },
+    "This file couldn't be read.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filen kunne ikke læses."
+          }
+        }
+      }
+    },
+    "This iPhone can't use a passkey for this server yet. Sign in with your password.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denne iPhone kan ikke bruge en adgangsnøgle til serveren endnu. Log ind med din adgangskode."
+          }
+        }
+      }
+    },
+    "This isn't here any more.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det er her ikke længere."
+          }
+        }
+      }
+    },
+    "This week": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denne uge"
+          }
+        }
+      }
+    },
+    "Thriving": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har det rigtig godt"
+          }
+        }
+      }
+    },
+    "Timeline": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tidslinje"
+          }
+        }
+      }
+    },
+    "To-dos": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gøremål"
+          }
+        }
+      }
+    },
+    "Today": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I dag"
+          }
+        }
+      }
+    },
+    "Tomorrow": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I morgen"
+          }
+        }
+      }
+    },
+    "Too many attempts. Wait a few minutes and try again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For mange forsøg. Vent et par minutter, og prøv igen."
+          }
+        }
+      }
+    },
+    "Topic": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Emne"
+          }
+        }
+      }
+    },
+    "Try again": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prøv igen"
+          }
+        }
+      }
+    },
+    "Try other words, or start a new chat.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prøv andre ord, eller start en ny chat."
+          }
+        }
+      }
+    },
+    "Try other words.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prøv andre ord."
+          }
+        }
+      }
+    },
+    "Turn on reminders": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slå påmindelser til"
+          }
+        }
+      }
+    },
+    "Type @ to mention a person, place or event": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skriv @ for at nævne en person, et sted eller en begivenhed"
+          }
+        }
+      }
+    },
+    "Type @ to point at a person, place or event. Every answer shows where it came from.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skriv @ for at pege på en person, et sted eller en begivenhed. Hvert svar viser, hvor det kom fra."
+          }
+        }
+      }
+    },
+    "Unconfirmed": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikke bekræftet"
+          }
+        }
+      }
+    },
+    "Undo": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortryd"
+          }
+        }
+      }
+    },
+    "Unpin": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Frigør"
+          }
+        }
+      }
+    },
+    "Unread": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ulæst"
+          }
+        }
+      }
+    },
+    "Uploading %lld files…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uploader %lld filer…"
+          }
+        }
+      }
+    },
+    "Uploading “%@”…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uploader “%@”…"
+          }
+        }
+      }
+    },
+    "Use the default server": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brug standardserveren"
+          }
+        }
+      }
+    },
+    "Use the local development server": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brug den lokale udviklingsserver"
+          }
+        }
+      }
+    },
+    "Version": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        }
+      }
+    },
+    "Waiting": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venter"
+          }
+        }
+      }
+    },
+    "Waiting for a parent": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venter på en forælder"
+          }
+        }
+      }
+    },
+    "Waiting for you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venter på dig"
+          }
+        }
+      }
+    },
+    "Waiting for you to look it over. Nothing is added until you say so.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venter på, at du kigger det igennem. Intet bliver tilføjet, før du siger ja."
+          }
+        }
+      }
+    },
+    "Waiting for your passkey…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venter på din adgangsnøgle…"
+          }
+        }
+      }
+    },
+    "Welcome back": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Velkommen tilbage"
+          }
+        }
+      }
+    },
+    "Were in touch": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Har talt sammen"
+          }
+        }
+      }
+    },
+    "What do we need to remember for the weekend?": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvad skal vi huske til weekenden?"
+          }
+        }
+      }
+    },
+    "What was learned": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det blev lært"
+          }
+        }
+      }
+    },
+    "What's happening": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det sker"
+          }
+        }
+      }
+    },
+    "What's happening this week?": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvad sker der i denne uge?"
+          }
+        }
+      }
+    },
+    "When is the next school trip?": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvornår er den næste skoletur?"
+          }
+        }
+      }
+    },
+    "When the assistant proposes changes to your graph, you'll review and deliver them here. Your server needs an update first.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Når assistenten foreslår ændringer i din graf, ser du dem igennem og gennemfører dem her. Din server skal opdateres først."
+          }
+        }
+      }
+    },
+    "When you tell the assistant something to keep in mind, like “reminders the evening before”, it shows up here.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Når du beder assistenten om at huske noget, fx “påmindelser aftenen før”, vises det her."
+          }
+        }
+      }
+    },
+    "Where this came from": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvor det kom fra"
+          }
+        }
+      }
+    },
+    "Where your household runs My Graph. Most families use the default.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvor jeres husstand kører My Graph. De fleste familier bruger standarden."
+          }
+        }
+      }
+    },
+    "Who can see it": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvem kan se det"
+          }
+        }
+      }
+    },
+    "Who can see them": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvem kan se dem"
+          }
+        }
+      }
+    },
+    "Who they are": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvem de er"
+          }
+        }
+      }
+    },
+    "Whole family": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hele familien"
+          }
+        }
+      }
+    },
+    "Wiki note": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wikinote"
+          }
+        }
+      }
+    },
+    "Work": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbejde"
+          }
+        }
+      }
+    },
+    "Worked for %llds, %lld steps": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbejdede i %lld s, %lld trin"
+          }
+        }
+      }
+    },
+    "Worked for %llds, 1 step": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbejdede i %lld s, 1 trin"
+          }
+        }
+      }
+    },
+    "Working… %llds": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbejder… %lld s"
+          }
+        }
+      }
+    },
+    "Worth a look": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Værd at kigge på"
+          }
+        }
+      }
+    },
+    "Write a new brief": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skriv et nyt overblik"
+          }
+        }
+      }
+    },
+    "Write today's brief": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skriv dagens overblik"
+          }
+        }
+      }
+    },
+    "Writing today's brief…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skriver dagens overblik…"
+          }
+        }
+      }
+    },
+    "Writing… %llds": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skriver… %lld s"
+          }
+        }
+      }
+    },
+    "Yesterday": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I går"
+          }
+        }
+      }
+    },
+    "You": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dig"
+          }
+        }
+      }
+    },
+    "You don't have access to this.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du har ikke adgang til det her."
+          }
+        }
+      }
+    },
+    "You're offline.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du er offline."
+          }
+        }
+      }
+    },
+    "You're offline. Check your connection and try again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du er offline. Tjek din forbindelse, og prøv igen."
+          }
+        }
+      }
+    },
+    "You're offline. Showing what was saved on this iPhone.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du er offline. Viser det, der er gemt på denne iPhone."
+          }
+        }
+      }
+    },
+    "You're signed out.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du er logget ud."
+          }
+        }
+      }
+    },
+    "You: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dig: %@"
+          }
+        }
+      }
+    },
+    "Your brief": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dit overblik"
+          }
+        }
+      }
+    },
+    "Your graphs": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dine grafer"
+          }
+        }
+      }
+    },
+    "and %lld more": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "og %lld mere"
+          }
+        }
+      }
+    },
+    "by %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "af %@"
+          }
+        }
+      }
+    },
+    "https://mygraph.example.com": {
+      "shouldTranslate": false
+    },
+    "“%@”": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”"
+          }
+        }
+      }
+    },
+    "•": {
+      "shouldTranslate": false
+    }
+  },
+  "version": "1.0"
+}
