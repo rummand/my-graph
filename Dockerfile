@@ -10,7 +10,7 @@ FROM node:22-slim AS builder
 WORKDIR /app
 # Lint runs in local checks; skipping it here keeps the build inside small builders' memory.
 ENV NEXT_TELEMETRY_DISABLED=1 \
-    NODE_OPTIONS=--max-old-space-size=1024
+    NODE_OPTIONS=--max-old-space-size=4096
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx next build --no-lint
