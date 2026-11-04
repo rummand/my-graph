@@ -27,7 +27,7 @@ export function NodePill({ id, type, label, href, onClick, className }: {
   const person = type === "person";
   const cls = clsx("inline-flex max-w-full items-center gap-1.5 rounded-full py-0.5 pl-2 pr-2.5 text-sm transition-[background-color,filter] duration-150",
     person ? "font-medium" : "bg-surface-2 text-fg", (href || onClick) && (person ? "hover:brightness-95" : "hover:bg-line"), className);
-  const style = person ? { ...personStyle(id), background: "var(--person-tint)", color: "var(--person)" } as CSSProperties : undefined;
+  const style = person ? { ...personStyle(id), background: "var(--person-tint)", color: "var(--person-ink)" } as CSSProperties : undefined;
   const body = <><NodeMark id={id} type={type} size={7} /><span className="truncate">{label}</span></>;
   if (onClick) return <button type="button" onClick={onClick} className={cls} style={style}>{body}</button>;
   if (href) return <Link href={href} className={cls} style={style}>{body}</Link>;

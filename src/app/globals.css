@@ -38,7 +38,7 @@
   --c-family: #2a78d6; --c-close: #e0622e; --c-school: #1a9e70; --c-care: #d59200; --c-social: #d8689a; --c-work: #3f7d1e; --c-other: #858d88;
   --wb-good: #2a8a3e; --wb-neutral: #858d88; --wb-warn: #c23b3b; --wb-none: var(--line);
   /* Person tints are computed from these: hsl(var(--h) var(--person-s) var(--person-l)). */
-  --person-s: 62%; --person-l: 42%; --person-tint-s: 70%; --person-tint-l: 92%;
+  --person-s: 62%; --person-l: 42%; --person-tint-s: 70%; --person-tint-l: 92%; --person-ink-l: 28%;
   color-scheme: light;
 }
 /* Dark: follows the system unless the person chose a theme in Settings (data-theme on <html>). */
@@ -52,7 +52,7 @@
     --t-organization: #6fbac7; --t-project: #d98cb6; --t-thing: #b4b97a;
     --c-family: #4f95e8; --c-close: #e5784a; --c-school: #36b487; --c-care: #dca52d; --c-social: #e086ad; --c-work: #6aa846; --c-other: #858d88;
     --wb-good: #5cbf6e; --wb-neutral: #99a39d; --wb-warn: #ee7a73;
-    --person-s: 60%; --person-l: 68%; --person-tint-s: 30%; --person-tint-l: 22%;
+    --person-s: 60%; --person-l: 68%; --person-tint-s: 30%; --person-tint-l: 22%; --person-ink-l: 74%;
     color-scheme: dark;
   }
 }
@@ -65,7 +65,7 @@
   --t-organization: #6fbac7; --t-project: #d98cb6; --t-thing: #b4b97a;
   --c-family: #4f95e8; --c-close: #e5784a; --c-school: #36b487; --c-care: #dca52d; --c-social: #e086ad; --c-work: #6aa846; --c-other: #858d88;
   --wb-good: #5cbf6e; --wb-neutral: #99a39d; --wb-warn: #ee7a73;
-  --person-s: 60%; --person-l: 68%; --person-tint-s: 30%; --person-tint-l: 22%;
+  --person-s: 60%; --person-l: 68%; --person-tint-s: 30%; --person-tint-l: 22%; --person-ink-l: 74%;
   color-scheme: dark;
 }
 :root[data-theme="light"] { color-scheme: light; }
@@ -101,4 +101,12 @@ body {
 ::selection { background: var(--accent-tint); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}
+/* Cobalt links in running text also carry a quiet underline, so they don't rely on colour alone (WCAG 1.4.1). */
+@layer base {
+  :where(p, li, dd, td, span, div) > a.text-accent:not(.no-underline) {
+    text-decoration-line: underline; text-decoration-thickness: 1px; text-underline-offset: 3px;
+    text-decoration-color: color-mix(in oklab, currentColor 35%, transparent);
+  }
+  :where(p, li, dd, td, span, div) > a.text-accent:not(.no-underline):hover { text-decoration-color: currentColor; }
 }

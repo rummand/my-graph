@@ -5,6 +5,8 @@ const messages: MessageTree = {
     product: "My Graph",
     triggerCompact: "Du arbejder i {name}. Skift graf",
     trigger: "My Graph. Du arbejder i {name}. Skift graf",
+    workingIn: "Du arbejder i",
+    switchGraph: "Skift graf",
     dialog: "Skift graf",
     mine: "Mine",
     sharedWithMe: "Delt med mig",

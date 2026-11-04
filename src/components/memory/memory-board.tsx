@@ -189,7 +189,7 @@ function PendingPreview({ m }: { m: MemoryView }) {
 }
 
 function FilterChip({ on, onClick, personId, children }: { on: boolean; onClick: () => void; personId?: string; children: React.ReactNode }) {
-  const style = personId ? { ...personStyle(personId), ...(on ? { background: "var(--person-tint)", color: "var(--person)" } : {}) } as React.CSSProperties : undefined;
+  const style = personId ? { ...personStyle(personId), ...(on ? { background: "var(--person-tint)", color: "var(--person-ink)" } : {}) } as React.CSSProperties : undefined;
   return (
     <button type="button" aria-pressed={on} onClick={onClick} style={style}
       className={clsx("inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",

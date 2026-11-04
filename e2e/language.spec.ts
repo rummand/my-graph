@@ -8,6 +8,10 @@ const ENGLISH = [/\bToday\b/, /\bSettings\b/, /\bSign out\b/, /\bWaiting for you
   /\bNothing yet\b/, /\bSomething went wrong\b/, /\bLoading\b/, /\bSearch\b/, /\bShow more\b/, /\bAdd person\b/, /\bRun now\b/,
   /\bAsk anything\b/, /\bWhat changed\b/, /\bThis week\b/, /\bCancel\b/, /\bSave\b/, /\bClose\b/, /\bBack\b/];
 
+// Stored content that is English on purpose: web page titles, and suggestions written before runs used the owner's
+// language (stored text is shown as it was written).
+const CONTENT = [/ · [a-z0-9.-]+\.[a-z]{2,}$/, /^Open Today$/];
+
 const PAGES = ["/", "/chat", "/people", "/timeline", "/library", "/wiki", "/artifacts", "/graph", "/connections", "/changes",
   "/history", "/memory", "/automations", "/graphs", "/settings"];
 
@@ -36,7 +40,7 @@ for (const graph of ["Family", "Work"]) {
       const chrome = await chromeText(page);
       const body = await page.locator("body").innerText();
       expect(rawKeys(body), "raw keys").toEqual([]);
-      const leftovers = chrome.split("\n").filter((line) => ENGLISH.some((re) => re.test(line))).map((l) => l.slice(0, 120));
+      const leftovers = chrome.split("\n").filter((line) => ENGLISH.some((re) => re.test(line)) && !CONTENT.some((re) => re.test(line.trim()))).map((l) => l.slice(0, 120));
       expect(leftovers, `English in the chrome of ${path}`).toEqual([]);
     });
   }

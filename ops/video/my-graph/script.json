@@ -1,0 +1,2659 @@
+{
+  "title": "My Graph, explained",
+  "out": "my-graph-explained",
+  "voice": "af_heart",
+  "speed": 0.9,
+  "model": "mlx-community/Kokoro-82M-bf16",
+  "poster": {
+    "seg": "00-title",
+    "at": 3.0
+  },
+  "sayAs": {
+    "Aula": "Owla",
+    "Bellahøj": "Bella-hoy",
+    "mux": "mucks",
+    "Skagen": "Skayen",
+    "Oakwood": "Oak-wood",
+    "iPhone": "eye-phone",
+    "LUFS": "loofs"
+  },
+  "segments": [
+    {
+      "id": "00-title",
+      "scene": "title",
+      "sub": "A private place for a family's life, with a source for every fact.",
+      "say": "This is My Graph: | a private place for a family's life. | The people in it, what's coming up, | and where every fact came from. | In the next fifteen minutes, we'll walk through all of it, with the demo family: | Anna and Mikkel, and their children, Emma and Noah."
+    },
+    {
+      "id": "01-chapter",
+      "scene": "chapter",
+      "chapter": "what",
+      "title": "What My Graph is",
+      "sub": "A private brain per graph, with a source for every fact.",
+      "say": "First, what My Graph is."
+    },
+    {
+      "id": "01-facts",
+      "scene": "screen",
+      "chapter": "what",
+      "shot": "node-emma",
+      "url": "My Graph  /node/emma",
+      "title": "Every fact has a source.",
+      "points": [
+        {
+          "t": "People, places, events, documents",
+          "sync": "the people in your life"
+        },
+        {
+          "t": "A small number marks each source",
+          "sync": "small cobalt number"
+        },
+        {
+          "t": "The exact words, and how sure",
+          "sync": "exact words"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Here is Emma's page",
+          "view": [
+            260,
+            40,
+            900
+          ]
+        },
+        {
+          "sync": "every line is a fact",
+          "view": [
+            250,
+            170,
+            900
+          ],
+          "box": [
+            286,
+            256,
+            738,
+            156
+          ]
+        },
+        {
+          "sync": "school letter",
+          "box": [
+            376,
+            306,
+            545,
+            32
+          ]
+        }
+      ],
+      "say": "My Graph keeps a graph: | the people in your life, the places, the events and the documents, | and how they connect. | Here is Emma's page. | Under What we know, every line is a fact, | and every fact carries a small cobalt number: its source. | Emma is Anna's child, | and the source is a line in a school letter. | Open a fact, and you see the exact words, | the document they came from, | and how sure the assistant was."
+    },
+    {
+      "id": "01-who",
+      "scene": "screen",
+      "chapter": "what",
+      "shot": "node-emma",
+      "url": "My Graph  /node/emma",
+      "title": "Who said so, and what changed.",
+      "points": [
+        {
+          "t": "Where she came from",
+          "sync": "Where Emma came from"
+        },
+        {
+          "t": "Everyone who told the graph about her",
+          "sync": "Who said so"
+        },
+        {
+          "t": "Every change, with its proposal",
+          "sync": "What changed"
+        }
+      ],
+      "start": [
+        600,
+        40,
+        900
+      ],
+      "moves": [
+        {
+          "sync": "Where Emma came from",
+          "view": [
+            960,
+            190,
+            560
+          ],
+          "box": [
+            1066,
+            222,
+            334,
+            142
+          ]
+        },
+        {
+          "sync": "Who said so",
+          "view": [
+            960,
+            350,
+            560
+          ],
+          "box": [
+            1060,
+            378,
+            340,
+            180
+          ]
+        },
+        {
+          "sync": "What changed",
+          "view": [
+            960,
+            530,
+            560
+          ],
+          "box": [
+            1060,
+            556,
+            340,
+            200
+          ]
+        }
+      ],
+      "say": "On the right, Where Emma came from tells you how she entered the graph: | added by hand, as a family member. | Who said so lists everyone and everything that told the graph about her, | and how often. | And What changed keeps her history, | each change linked to the proposal it came from."
+    },
+    {
+      "id": "01-brain",
+      "scene": "statement",
+      "chapter": "what",
+      "lines": [
+        "One private brain per graph.",
+        "*A source for every fact."
+      ],
+      "sub": {
+        "t": "A fact the assistant only inferred is marked as a guess, and stays a guess until a person confirms it.",
+        "sync": "only inferred"
+      },
+      "say": "Each graph is its own private brain, kept in the family's own database. | Nothing in it is guessed silently. | A fact the assistant only inferred is marked as a guess, | and it stays a guess until a person confirms it."
+    },
+    {
+      "id": "02-chapter",
+      "scene": "chapter",
+      "chapter": "graphs",
+      "title": "Graphs and sharing",
+      "sub": "Family, Work, a graph for two, and things that live in more than one.",
+      "say": "Graphs, and sharing."
+    },
+    {
+      "id": "02-graphs",
+      "scene": "screen",
+      "chapter": "graphs",
+      "shot": "graphs",
+      "url": "My Graph  /graphs",
+      "title": "Separate graphs, for separate parts of life.",
+      "points": [
+        {
+          "t": "Family: the household's graph",
+          "sync": "Family is"
+        },
+        {
+          "t": "Work and Personal: just Anna",
+          "sync": "Work is"
+        },
+        {
+          "t": "For Sara: shared with one person",
+          "sync": "For Sara"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Anna has four graphs",
+          "view": [
+            270,
+            90,
+            1000
+          ],
+          "box": [
+            288,
+            150,
+            302,
+            310
+          ]
+        },
+        {
+          "sync": "four people work in it",
+          "view": [
+            600,
+            150,
+            840
+          ],
+          "box": [
+            636,
+            340,
+            764,
+            295
+          ]
+        },
+        {
+          "sync": "For Sara",
+          "view": [
+            260,
+            100,
+            820
+          ],
+          "box": [
+            288,
+            300,
+            302,
+            64
+          ]
+        },
+        {
+          "sync": "nothing from the others",
+          "view": null
+        }
+      ],
+      "say": "Anna has four graphs. | Family is the household's graph: | four people work in it, | and each person's private things stay their own. | Work is hers alone, and so is Personal. | For Sara is a graph she shares with one other person. | Share a graph, and the other person sees that graph, | and nothing from the others."
+    },
+    {
+      "id": "02-switch",
+      "scene": "screen",
+      "chapter": "graphs",
+      "shot": "switcher",
+      "url": "My Graph  /",
+      "title": "One switch, and everything follows.",
+      "points": [
+        {
+          "t": "The switcher, top left",
+          "sync": "The switcher"
+        },
+        {
+          "t": "Today, people, library and chats follow",
+          "sync": "Everything follows"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "The switcher",
+          "view": [
+            0,
+            0,
+            800
+          ],
+          "box": [
+            12,
+            86,
+            322,
+            324
+          ]
+        },
+        {
+          "sync": "Everything follows",
+          "view": null
+        }
+      ],
+      "say": "The switcher at the top of the left rail moves between them. | Everything follows: | Today, the people, the library, the conversations and the assistant | all work inside the graph you have open."
+    },
+    {
+      "id": "02-work",
+      "scene": "screen",
+      "chapter": "graphs",
+      "shot": "work-people",
+      "url": "My Graph  /people",
+      "title": "Each graph starts from its own template.",
+      "points": [
+        {
+          "t": "Colleagues and managers, not family",
+          "sync": "colleagues"
+        },
+        {
+          "t": "Questions that fit the graph",
+          "sync": "different questions"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "its people",
+          "view": [
+            240,
+            80,
+            1000
+          ]
+        }
+      ],
+      "say": "Here is Anna's work graph. | A work graph starts from its own template, | so its people are colleagues and managers, not family. | The assistant asks different questions here too, | like what you're still waiting for on a project."
+    },
+    {
+      "id": "02-also",
+      "scene": "screen",
+      "chapter": "graphs",
+      "shot": "share-dialog",
+      "url": "My Graph  /node/emma",
+      "title": "One thing, in more than one graph.",
+      "points": [
+        {
+          "t": "Share a copy, with the details you tick",
+          "sync": "share a person"
+        },
+        {
+          "t": "Or connect it with the same one",
+          "sync": "connect it"
+        },
+        {
+          "t": "Changes on one side are proposed on the other",
+          "sync": "the other side gets a proposal"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Under Also in",
+          "view": [
+            820,
+            420,
+            620
+          ],
+          "box": [
+            1076,
+            660,
+            330,
+            236
+          ]
+        }
+      ],
+      "say": "Some things belong in more than one graph. | Under Also in, you can share a person or a place into another graph, | choosing which details go with it, | or connect it with the same one that's already there. | When a ticked detail changes on one side, | the other side gets a proposal, | and only people who are in both graphs see the link."
+    },
+    {
+      "id": "03-chapter",
+      "scene": "chapter",
+      "chapter": "today",
+      "title": "Today",
+      "sub": "What needs you, and the week ahead.",
+      "say": "Today."
+    },
+    {
+      "id": "03-today",
+      "scene": "screen",
+      "chapter": "today",
+      "shot": "today",
+      "url": "My Graph  /",
+      "title": "The first screen of the day.",
+      "points": [
+        {
+          "t": "How the assistant works, in plain words",
+          "sync": "the first time"
+        },
+        {
+          "t": "This week: a row per person",
+          "sync": "This week"
+        },
+        {
+          "t": "Whose day is busy, at a glance",
+          "sync": "at a glance"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "the first time",
+          "view": [
+            260,
+            100,
+            1160
+          ],
+          "box": [
+            288,
+            125,
+            1112,
+            543
+          ]
+        },
+        {
+          "sync": "This week",
+          "view": [
+            260,
+            640,
+            1160
+          ],
+          "box": [
+            288,
+            706,
+            1112,
+            290
+          ]
+        },
+        {
+          "sync": "at a glance",
+          "view": [
+            260,
+            640,
+            1160
+          ]
+        }
+      ],
+      "say": "Today is the first screen. | The first time, it explains how the assistant works in this graph: | it answers with a link to where each answer came from, | and it never changes the graph without asking. | Below is This week: | a row per person, in their own colour, | with events and to-dos day by day. | A parent sees at a glance | whose week is busy."
+    },
+    {
+      "id": "03-today2",
+      "scene": "screen",
+      "chapter": "today",
+      "shot": "today",
+      "url": "My Graph  /",
+      "title": "Ready when you are.",
+      "points": [
+        {
+          "t": "Today's brief, with a source on every line",
+          "sync": "Today's brief"
+        },
+        {
+          "t": "Proposed changes and what needs you",
+          "sync": "Proposed changes"
+        },
+        {
+          "t": "To-dos, by day",
+          "sync": "To do"
+        }
+      ],
+      "start": [
+        260,
+        640,
+        1160
+      ],
+      "moves": [
+        {
+          "sync": "Today's brief",
+          "view": [
+            260,
+            940,
+            1160
+          ],
+          "box": [
+            288,
+            1028,
+            639,
+            130
+          ]
+        },
+        {
+          "sync": "questions that fit the week",
+          "box": [
+            288,
+            1194,
+            639,
+            308
+          ]
+        },
+        {
+          "sync": "proposed changes",
+          "box": [
+            958,
+            1033,
+            442,
+            132
+          ]
+        },
+        {
+          "sync": "what needs you",
+          "box": [
+            958,
+            1203,
+            442,
+            121
+          ]
+        },
+        {
+          "sync": "To do",
+          "view": [
+            260,
+            1490,
+            1160
+          ],
+          "box": [
+            288,
+            1540,
+            639,
+            520
+          ]
+        }
+      ],
+      "say": "Today's brief is a few lines on what's coming up: | what to pack, sign or book, | with a link to where each point came from. | Ready when you are | offers questions that fit the week. | On the right: proposed changes, | and what needs you, like possible duplicates. | And To do lists every reminder by day, | each with the person it's for."
+    },
+    {
+      "id": "04-chapter",
+      "scene": "chapter",
+      "chapter": "ask",
+      "title": "Ask, the assistant",
+      "sub": "Answers from your own graph, with their sources.",
+      "say": "Ask: the assistant."
+    },
+    {
+      "id": "04-ask",
+      "scene": "screen",
+      "chapter": "ask",
+      "shot": "ask-empty",
+      "url": "My Graph  /chat",
+      "title": "Ask about anything you've saved.",
+      "points": [
+        {
+          "t": "From anywhere: press /",
+          "sync": "press the slash key"
+        },
+        {
+          "t": "Questions that fit this family",
+          "sync": "fit this family"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "press the slash key",
+          "view": [
+            0,
+            40,
+            700
+          ],
+          "box": [
+            12,
+            94,
+            222,
+            40
+          ]
+        },
+        {
+          "sync": "fit this family",
+          "view": [
+            580,
+            180,
+            760
+          ],
+          "box": [
+            622,
+            372,
+            450,
+            220
+          ]
+        }
+      ],
+      "say": "Ask is the assistant. | You can ask from anywhere: press the slash key, | or type into Ask anything, at the top of the rail. | An empty conversation starts with questions that fit this family, | like what's coming up for Emma this week, | or which permission slips still need a signature."
+    },
+    {
+      "id": "04-steps",
+      "scene": "screen",
+      "chapter": "ask",
+      "shot": "ask-teacher",
+      "url": "My Graph  /chat",
+      "title": "It shows its work, and its sources.",
+      "points": [
+        {
+          "t": "What it did, step by step",
+          "sync": "what the assistant did"
+        },
+        {
+          "t": "A number for each source",
+          "sync": "is its source"
+        },
+        {
+          "t": "Which model answered",
+          "sync": "which model"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Every answer shows",
+          "view": [
+            600,
+            120,
+            760
+          ],
+          "box": [
+            628,
+            205,
+            180,
+            26
+          ]
+        },
+        {
+          "sync": "is its source",
+          "box": [
+            628,
+            240,
+            696,
+            125
+          ]
+        },
+        {
+          "sync": "which model",
+          "box": [
+            628,
+            388,
+            500,
+            30
+          ]
+        }
+      ],
+      "say": "Every answer shows what the assistant did. | Here, asked who Emma's teacher is, | it worked for eleven seconds, in seven steps: | it searched the graph and read the documents. | The number after Ms. Karen Hansen is its source: | the second school letter. | Underneath, you see which model answered, | through mux, the household's own model gateway."
+    },
+    {
+      "id": "04-approve",
+      "scene": "screen",
+      "chapter": "ask",
+      "shot": "ask-approve",
+      "url": "My Graph  /chat",
+      "title": "It asks before it changes anything.",
+      "points": [
+        {
+          "t": "Approve, always allow, or deny",
+          "sync": "Approve it"
+        },
+        {
+          "t": "Nothing is added until you say so",
+          "sync": "Nothing is added"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "This card",
+          "view": [
+            590,
+            250,
+            780
+          ],
+          "box": [
+            632,
+            410,
+            680,
+            206
+          ]
+        }
+      ],
+      "say": "When the assistant wants to change something, it asks first. | This card proposes a reminder. | Approve it, deny it, | or always allow reminders from now on. | Nothing is added until you say so."
+    },
+    {
+      "id": "04-web",
+      "scene": "screen",
+      "chapter": "ask",
+      "shot": "ask-web",
+      "url": "My Graph  /chat",
+      "title": "When you ask, it reads the web too.",
+      "points": [
+        {
+          "t": "Each web page listed as a source",
+          "sync": "listed as a source"
+        },
+        {
+          "t": "Tied to what the graph already knows",
+          "sync": "already planned"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "it reads the web",
+          "view": [
+            600,
+            0,
+            780
+          ]
+        },
+        {
+          "sync": "listed as a source",
+          "view": [
+            600,
+            330,
+            780
+          ],
+          "box": [
+            628,
+            680,
+            696,
+            92
+          ]
+        },
+        {
+          "sync": "already planned",
+          "view": [
+            600,
+            330,
+            780
+          ],
+          "box": [
+            628,
+            548,
+            696,
+            82
+          ]
+        }
+      ],
+      "say": "Ask it to look something up, and it reads the web too. | Here it found the zoo's opening hours, | the address, and how to get there, | with each web page listed as a source. | And it tied that to the zoo trip that's already planned for Saturday."
+    },
+    {
+      "id": "04-clarify",
+      "scene": "screen",
+      "chapter": "ask",
+      "shot": "ask-clarify",
+      "url": "My Graph  /chat",
+      "title": "When it isn't sure, it asks.",
+      "points": [
+        {
+          "t": "A question back, not a guess",
+          "sync": "asks"
+        },
+        {
+          "t": "Then a proposal to approve",
+          "sync": "proposes"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Here",
+          "view": [
+            600,
+            100,
+            780
+          ],
+          "box": [
+            628,
+            196,
+            696,
+            124
+          ]
+        },
+        {
+          "sync": "proposes",
+          "view": [
+            600,
+            250,
+            780
+          ],
+          "box": [
+            632,
+            440,
+            680,
+            206
+          ]
+        }
+      ],
+      "say": "When a request isn't clear, it asks instead of guessing. | Here, asked to add a reminder for the trip, | it found only a reminder for Thursday, | and asked whether you want one for today, and at what time. | Then it proposes the reminder, for you to approve or deny."
+    },
+    {
+      "id": "04-sessions",
+      "scene": "screen",
+      "chapter": "ask",
+      "shot": "ask-teacher",
+      "url": "My Graph  /chat",
+      "title": "Conversations are kept.",
+      "points": [
+        {
+          "t": "Grouped by day, pinned, searchable",
+          "sync": "grouped by day"
+        },
+        {
+          "t": "Long ones compact into a summary",
+          "sync": "compacted"
+        },
+        {
+          "t": "Private to the person who asked",
+          "sync": "private"
+        }
+      ],
+      "start": [
+        0,
+        0,
+        1440
+      ],
+      "moves": [
+        {
+          "sync": "grouped by day",
+          "view": [
+            240,
+            0,
+            760
+          ],
+          "box": [
+            284,
+            40,
+            224,
+            830
+          ]
+        },
+        {
+          "sync": "compacted",
+          "view": null
+        }
+      ],
+      "say": "Conversations are kept on the left, grouped by day, | so you can come back to an answer and its sources. | Pin the ones that matter, rename them, or search them. | A long conversation can be compacted into a summary. | And conversations are private to the person who asked."
+    },
+    {
+      "id": "05-chapter",
+      "scene": "chapter",
+      "chapter": "highlights",
+      "title": "Live highlights and the model",
+      "sub": "It sees what you mean as you type, and learns how your world fits together.",
+      "say": "Live highlights, mentions, and how a graph sees the world."
+    },
+    {
+      "id": "05-highlights",
+      "scene": "screen",
+      "chapter": "highlights",
+      "shot": "highlights",
+      "url": "My Graph  /chat",
+      "title": "It reads along as you type.",
+      "points": [
+        {
+          "t": "Known things link to the graph",
+          "sync": "already knows"
+        },
+        {
+          "t": "New ones are proposed",
+          "sync": "New people"
+        },
+        {
+          "t": "Your message is the source",
+          "sync": "as the source"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "As you type",
+          "view": [
+            580,
+            560,
+            780
+          ],
+          "box": [
+            645,
+            744,
+            600,
+            40
+          ]
+        },
+        {
+          "sync": "already knows",
+          "box": [
+            645,
+            744,
+            50,
+            40
+          ]
+        },
+        {
+          "sync": "New people",
+          "box": [
+            1044,
+            744,
+            112,
+            40
+          ]
+        },
+        {
+          "sync": "as the source",
+          "box": [
+            640,
+            796,
+            664,
+            36
+          ]
+        }
+      ],
+      "say": "As you type, the composer reads along and highlights what it recognises: | Emma, Bellahøj Pool, Grandma Birgit. | Things the graph already knows link to it. | New people, places and facts are marked as new, | and when you send, | they're added with your message as the source. | You can untick anything you don't want added."
+    },
+    {
+      "id": "05-mention",
+      "scene": "screen",
+      "chapter": "highlights",
+      "shot": "mention",
+      "url": "My Graph  /chat",
+      "title": "Type @ to mention something.",
+      "points": [
+        {
+          "t": "People, places and pages",
+          "sync": "people, places"
+        },
+        {
+          "t": "Works in chat, memory and the wiki",
+          "sync": "the wiki"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "the at sign",
+          "view": [
+            560,
+            330,
+            820
+          ],
+          "box": [
+            636,
+            537,
+            296,
+            236
+          ]
+        }
+      ],
+      "say": "Type the at sign to mention something by name. | The menu finds people, places and pages in this graph, | and a mention links the question, the memory or the wiki page to them, | so it shows up on their page too."
+    },
+    {
+      "id": "05-model",
+      "scene": "screen",
+      "chapter": "highlights",
+      "shot": "model",
+      "url": "My Graph  /people/model",
+      "title": "How this graph sees the world.",
+      "points": [
+        {
+          "t": "Kinds and relations, from a template",
+          "sync": "family template"
+        },
+        {
+          "t": "New ones proposed, with evidence",
+          "sync": "with where it saw"
+        },
+        {
+          "t": "Or describe your world in a few sentences",
+          "sync": "a few sentences"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Each graph",
+          "view": [
+            240,
+            40,
+            1000
+          ]
+        },
+        {
+          "sync": "with where it saw",
+          "view": [
+            240,
+            240,
+            900
+          ],
+          "box": [
+            285,
+            290,
+            750,
+            172
+          ]
+        },
+        {
+          "sync": "a few sentences",
+          "view": [
+            240,
+            460,
+            900
+          ],
+          "box": [
+            285,
+            505,
+            750,
+            226
+          ]
+        }
+      ],
+      "say": "Each graph also has its own idea of the world. | How this graph sees the world lists the kinds of things it knows, | and the relations between them. | Family started from the family template. | When the assistant reads something that doesn't fit, | it proposes a new kind or relation, with where it saw them, | and you decide. | You can also describe part of your world in a few sentences, | and it proposes what's missing."
+    },
+    {
+      "id": "06-chapter",
+      "scene": "chapter",
+      "chapter": "people",
+      "title": "People",
+      "sub": "Everyone around you, and how they know you.",
+      "say": "People."
+    },
+    {
+      "id": "06-circles",
+      "scene": "screen",
+      "chapter": "people",
+      "shot": "people",
+      "url": "My Graph  /people",
+      "title": "Everyone around you, in circles.",
+      "points": [
+        {
+          "t": "Family in the middle, then outward",
+          "sync": "family in the middle"
+        },
+        {
+          "t": "Bigger means more contact lately",
+          "sync": "grows"
+        },
+        {
+          "t": "Needs you: the people to look in on",
+          "sync": "Needs you"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "family in the middle",
+          "view": [
+            300,
+            270,
+            760
+          ],
+          "box": [
+            580,
+            470,
+            200,
+            180
+          ]
+        },
+        {
+          "sync": "grows",
+          "view": [
+            290,
+            250,
+            780
+          ]
+        },
+        {
+          "sync": "Needs you",
+          "view": "needs",
+          "box": [
+            1090,
+            125,
+            320,
+            350
+          ]
+        }
+      ],
+      "say": "People shows everyone around you, in circles: | family in the middle, | then close friends, school and daycare, care and health, | friends and neighbours. | A dot grows with recent contact, | and a dashed ring means it's been longer than usual since you were in touch. | On the right, Needs you: | Noah is feeling low, | and it's three months since Anna spoke to Sofie."
+    },
+    {
+      "id": "06-profile",
+      "scene": "screen",
+      "chapter": "people",
+      "shot": "person-emma",
+      "url": "My Graph  /people/emma",
+      "title": "One person, brought together.",
+      "points": [
+        {
+          "t": "How they've been",
+          "sync": "how they've been"
+        },
+        {
+          "t": "Keeping in touch, in one click",
+          "sync": "in one click"
+        },
+        {
+          "t": "Relationships, each with a source",
+          "sync": "Relationships"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "how they've been",
+          "view": [
+            260,
+            60,
+            860
+          ]
+        },
+        {
+          "sync": "in one click",
+          "view": [
+            260,
+            560,
+            860
+          ],
+          "box": [
+            284,
+            732,
+            752,
+            120
+          ]
+        },
+        {
+          "sync": "Relationships",
+          "view": [
+            900,
+            300,
+            600
+          ],
+          "box": [
+            1076,
+            385,
+            328,
+            395
+          ]
+        }
+      ],
+      "say": "A profile brings one person together: | how they've been, | when you were last in touch, their next birthday, | and who can see them. | Log a call, a visit or a message in one click. | Relationships are grouped, family, school, care, | and each one shows where it came from."
+    },
+    {
+      "id": "06-self",
+      "scene": "screen",
+      "chapter": "people",
+      "shot": "person-anna",
+      "url": "My Graph  /people/anna",
+      "title": "You are in every graph.",
+      "points": [
+        {
+          "t": "Your own page, at the centre",
+          "sync": "Anna's own page"
+        },
+        {
+          "t": "Everyone else relates to you",
+          "sync": "relates to you"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Anna's own page",
+          "view": [
+            260,
+            40,
+            1000
+          ]
+        },
+        {
+          "sync": "relates to you",
+          "view": [
+            700,
+            200,
+            760
+          ],
+          "box": [
+            1076,
+            404,
+            328,
+            220
+          ]
+        }
+      ],
+      "say": "You are in every graph yourself. | Anna's own page is the centre of her circles: | everyone else relates to you, | so the graph can say Emma's grandparent, or your manager, | instead of a list of names."
+    },
+    {
+      "id": "06-new",
+      "scene": "screen",
+      "chapter": "people",
+      "shot": "person-new",
+      "url": "My Graph  /people/new",
+      "title": "How do they know you?",
+      "points": [
+        {
+          "t": "A relation, or your own words",
+          "sync": "your own words"
+        },
+        {
+          "t": "Who can see them",
+          "sync": "who can see"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "the question that matters",
+          "view": [
+            440,
+            120,
+            820
+          ],
+          "box": [
+            504,
+            270,
+            680,
+            166
+          ]
+        }
+      ],
+      "say": "Adding someone starts with the question that matters: | how do they know you? | Pick a relation, or describe it in your own words, | and choose who can see them. | What you enter by hand is saved as a confirmed fact, added by you."
+    },
+    {
+      "id": "07-chapter",
+      "scene": "chapter",
+      "chapter": "library",
+      "title": "Library",
+      "sub": "Letters, photos, recordings and mail, each read for people and dates.",
+      "say": "The library."
+    },
+    {
+      "id": "07-library",
+      "scene": "screen",
+      "chapter": "library",
+      "shot": "library",
+      "url": "My Graph  /library",
+      "title": "Drop it in, or paste it.",
+      "points": [
+        {
+          "t": "Letters, scans, photos, voice memos, mail",
+          "sync": "every letter"
+        },
+        {
+          "t": "Paste straight from the clipboard",
+          "sync": "paste"
+        },
+        {
+          "t": "Choose who sees it first",
+          "sync": "who can see it"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Drop files in",
+          "view": [
+            260,
+            100,
+            900
+          ],
+          "box": [
+            300,
+            165,
+            560,
+            170
+          ]
+        },
+        {
+          "sync": "who can see it",
+          "view": [
+            880,
+            100,
+            560
+          ],
+          "box": [
+            1030,
+            176,
+            324,
+            130
+          ]
+        }
+      ],
+      "say": "The library holds every letter, scan, photo, voice memo and email the family adds. | Drop files in, choose them, | or paste straight from the clipboard. | Before anything is added, you choose who can see it: | only you, the parents, or the whole family, | and you can mark it sensitive."
+    },
+    {
+      "id": "07-item",
+      "scene": "screen",
+      "chapter": "library",
+      "shot": "library-dentist",
+      "url": "My Graph  /library/dentist",
+      "title": "Kept as it was, then read.",
+      "points": [
+        {
+          "t": "The original, unchanged",
+          "sync": "exactly as it was"
+        },
+        {
+          "t": "A document keeps its own date",
+          "sync": "its own date"
+        },
+        {
+          "t": "What it found is proposed",
+          "sync": "proposed"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "exactly as it was",
+          "view": [
+            260,
+            40,
+            1180
+          ]
+        },
+        {
+          "sync": "its own date",
+          "view": [
+            260,
+            60,
+            760
+          ],
+          "box": [
+            282,
+            110,
+            460,
+            32
+          ]
+        },
+        {
+          "sync": "proposed",
+          "view": [
+            960,
+            150,
+            480
+          ],
+          "box": [
+            1012,
+            168,
+            400,
+            330
+          ]
+        }
+      ],
+      "say": "Each file is kept exactly as it was, | then read for the people, places and dates in it. | A letter keeps its own date: | Noah's dentist letter sits on the timeline on the day it was written, | not the day it was uploaded. | What the reading finds is proposed, | never added straight away.",
+      "start": [
+        260,
+        40,
+        1180
+      ]
+    },
+    {
+      "id": "07-mail",
+      "scene": "screen",
+      "chapter": "library",
+      "shot": "sara-library",
+      "url": "My Graph  /library",
+      "title": "Mail, filed by conversation.",
+      "points": [
+        {
+          "t": "Single emails, a mailbox, or a zip",
+          "sync": "a mailbox file"
+        },
+        {
+          "t": "Filed with its conversation",
+          "sync": "its conversation"
+        },
+        {
+          "t": "Each at its own date",
+          "sync": "March"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Sara's school mailbox",
+          "view": [
+            260,
+            300,
+            900
+          ],
+          "box": [
+            735,
+            489,
+            218,
+            226
+          ]
+        },
+        {
+          "sync": "its conversation",
+          "box": [
+            284,
+            489,
+            218,
+            226
+          ]
+        },
+        {
+          "sync": "March",
+          "box": [
+            509,
+            489,
+            218,
+            210
+          ]
+        }
+      ],
+      "say": "Mail comes in as single emails, a mailbox file, or a zip of emails. | Here is Sara's school mailbox: | all three messages imported. | Each message is filed with the rest of its conversation, | so a back and forth with the school reads as one thread. | And every document keeps its own date: | this letter was written in March 2024, | so that's where it sits on the timeline."
+    },
+    {
+      "id": "08-chapter",
+      "scene": "chapter",
+      "chapter": "timeline",
+      "title": "Timeline",
+      "sub": "What happened and what's coming, a lane per person.",
+      "say": "The timeline."
+    },
+    {
+      "id": "08-timeline",
+      "scene": "screen",
+      "chapter": "timeline",
+      "shot": "timeline",
+      "url": "My Graph  /timeline",
+      "title": "A lane per person.",
+      "points": [
+        {
+          "t": "Events, reminders and documents in time",
+          "sync": "Events, reminders"
+        },
+        {
+          "t": "Filter by person or topic",
+          "sync": "Filter"
+        },
+        {
+          "t": "From a week to everything",
+          "sync": "a week to everything"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "a lane per person",
+          "view": [
+            280,
+            330,
+            1160
+          ]
+        },
+        {
+          "sync": "Filter",
+          "view": [
+            280,
+            120,
+            900
+          ],
+          "box": [
+            288,
+            222,
+            860,
+            104
+          ]
+        },
+        {
+          "sync": "a week to everything",
+          "view": [
+            280,
+            120,
+            900
+          ],
+          "box": [
+            288,
+            130,
+            360,
+            40
+          ]
+        }
+      ],
+      "say": "The timeline puts it all in time: | a lane per person, in their colour. | Events, reminders and documents sit where they belong, | with today as a line down the middle. | Filter by person or by topic, | and zoom from a week to everything."
+    },
+    {
+      "id": "08-year",
+      "scene": "screen",
+      "chapter": "timeline",
+      "shot": "timeline-year",
+      "url": "My Graph  /timeline",
+      "title": "The shape of the year.",
+      "points": [
+        {
+          "t": "School, trips, birthdays, deadlines",
+          "sync": "school starts"
+        },
+        {
+          "t": "Click anything for its sources",
+          "sync": "Click anything"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Zoom out",
+          "view": [
+            280,
+            330,
+            1160
+          ]
+        }
+      ],
+      "say": "Zoom out to a year, and the shape of the family's year appears: | school starts, trips, birthdays, deadlines. | Click anything to see where it came from."
+    },
+    {
+      "id": "09-chapter",
+      "scene": "chapter",
+      "chapter": "wiki",
+      "title": "Wiki and co-writing",
+      "sub": "The family's own pages, written together with the assistant.",
+      "say": "The wiki, and writing together."
+    },
+    {
+      "id": "09-wiki",
+      "scene": "screen",
+      "chapter": "wiki",
+      "shot": "wiki-page",
+      "url": "My Graph  /wiki/museum-trip-packing",
+      "title": "The family's own pages.",
+      "points": [
+        {
+          "t": "Plans, how-tos, notes",
+          "sync": "plans, how-tos"
+        },
+        {
+          "t": "@mentions put a page on a profile",
+          "sync": "at sign"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "plans, how-tos",
+          "view": [
+            240,
+            20,
+            1100
+          ]
+        },
+        {
+          "sync": "at sign",
+          "view": [
+            440,
+            120,
+            900
+          ],
+          "box": [
+            650,
+            228,
+            84,
+            36
+          ]
+        }
+      ],
+      "say": "The wiki is for the family's own pages: | plans, how-tos, notes from school and the doctor. | Pages are set in a reading type, because they're read, not scanned. | Mention someone with the at sign, | and the page shows up on their profile."
+    },
+    {
+      "id": "09-cowrite",
+      "scene": "screen",
+      "chapter": "wiki",
+      "shot": "wiki-cowrite",
+      "url": "My Graph  /wiki/museum-trip-packing",
+      "title": "Ask the assistant to write.",
+      "points": [
+        {
+          "t": "A new section, a rewrite, or the whole page",
+          "sync": "a new section"
+        },
+        {
+          "t": "It cites what it used",
+          "sync": "cites"
+        },
+        {
+          "t": "Only a draft until you accept",
+          "sync": "until you accept"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Ask the assistant",
+          "view": [
+            300,
+            180,
+            900
+          ],
+          "box": [
+            330,
+            322,
+            712,
+            246
+          ]
+        },
+        {
+          "sync": "until you accept",
+          "view": [
+            280,
+            520,
+            900
+          ],
+          "box": [
+            312,
+            666,
+            760,
+            216
+          ]
+        }
+      ],
+      "say": "Pages are written together. | Ask the assistant to write a new section, | rewrite what you selected, or update the whole page. | It reads only what you can see in this graph, and cites it. | Its text is highlighted, and stays a draft until you accept it. | Every edit is versioned and attributed, | and an earlier version is one click away."
+    },
+    {
+      "id": "10-chapter",
+      "scene": "chapter",
+      "chapter": "changes",
+      "title": "Changes and History",
+      "sub": "Agents propose, people decide.",
+      "say": "Changes, and history."
+    },
+    {
+      "id": "10-changes",
+      "scene": "screen",
+      "chapter": "changes",
+      "shot": "changes",
+      "url": "My Graph  /changes",
+      "title": "Proposals wait for you.",
+      "points": [
+        {
+          "t": "From the assistant, the library, the web, connections",
+          "sync": "web research"
+        },
+        {
+          "t": "Like a branch in git",
+          "sync": "branch"
+        },
+        {
+          "t": "Each says where it came from",
+          "sync": "where it came from"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Nothing reaches",
+          "view": [
+            400,
+            30,
+            900
+          ]
+        },
+        {
+          "sync": "where it came from",
+          "view": [
+            420,
+            200,
+            900
+          ],
+          "box": [
+            460,
+            249,
+            768,
+            382
+          ]
+        }
+      ],
+      "say": "Nothing reaches the graph without a person. | What the assistant, the library, web research and connections want to change | waits under Changes, as a change set, | much like a branch in git. | Each one says where it came from, | and what it would add."
+    },
+    {
+      "id": "10-review",
+      "scene": "screen",
+      "chapter": "changes",
+      "shot": "change-skovtur",
+      "url": "My Graph  /changes/skovtur",
+      "title": "Review, deliver, or drop.",
+      "points": [
+        {
+          "t": "Evidence on every change",
+          "sync": "evidence"
+        },
+        {
+          "t": "Untick what isn't ready",
+          "sync": "Untick"
+        },
+        {
+          "t": "Deliver the rest, or drop it all",
+          "sync": "drop the whole thing"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Open one",
+          "view": [
+            400,
+            20,
+            900
+          ]
+        },
+        {
+          "sync": "evidence",
+          "view": [
+            420,
+            140,
+            860
+          ],
+          "box": [
+            460,
+            230,
+            767,
+            156
+          ]
+        },
+        {
+          "sync": "Untick",
+          "view": [
+            420,
+            140,
+            860
+          ],
+          "box": [
+            460,
+            180,
+            690,
+            24
+          ]
+        },
+        {
+          "sync": "drop the whole thing",
+          "view": [
+            420,
+            420,
+            860
+          ],
+          "box": [
+            460,
+            744,
+            170,
+            44
+          ]
+        }
+      ],
+      "say": "Open one to review it. | Here, the library read a note about the class's forest trip. | Every change shows its evidence: | the quote, the document, and how sure the reading was. | Untick what isn't ready, and deliver the rest. | Or drop the whole thing, and nothing in it reaches the graph."
+    },
+    {
+      "id": "10-history",
+      "scene": "screen",
+      "chapter": "changes",
+      "shot": "history",
+      "url": "My Graph  /history",
+      "title": "Everything that changed.",
+      "points": [
+        {
+          "t": "Who changed what, newest first",
+          "sync": "newest first"
+        },
+        {
+          "t": "Linked to its proposal",
+          "sync": "the proposal"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "History is the log",
+          "view": [
+            300,
+            20,
+            800
+          ]
+        },
+        {
+          "sync": "who changed what",
+          "view": [
+            300,
+            180,
+            800
+          ],
+          "box": [
+            323,
+            268,
+            680,
+            90
+          ]
+        },
+        {
+          "sync": "the proposal it came from",
+          "box": [
+            345,
+            318,
+            100,
+            22
+          ]
+        },
+        {
+          "sync": "Who said so",
+          "view": null
+        }
+      ],
+      "say": "History is the log: | everything that changed in the graph, newest first: | who changed what, from what to what, | and the proposal it came from. | On every page, Who said so answers the same question for one thing."
+    },
+    {
+      "id": "10-time",
+      "scene": "screen",
+      "chapter": "changes",
+      "shot": "history-compare",
+      "url": "My Graph  /history",
+      "title": "Go back in time.",
+      "points": [
+        {
+          "t": "Compare two moments",
+          "sync": "Compare two moments"
+        },
+        {
+          "t": "Bring back how things were, as a proposal",
+          "sync": "as a proposal"
+        },
+        {
+          "t": "Checkpoints before big changes",
+          "sync": "Checkpoints"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Compare two moments",
+          "view": [
+            880,
+            120,
+            560
+          ],
+          "box": [
+            1025,
+            150,
+            335,
+            345
+          ]
+        },
+        {
+          "sync": "as a proposal",
+          "box": [
+            1036,
+            400,
+            316,
+            36
+          ]
+        },
+        {
+          "sync": "Checkpoints",
+          "view": [
+            880,
+            460,
+            560
+          ],
+          "box": [
+            1025,
+            532,
+            335,
+            226
+          ]
+        }
+      ],
+      "say": "Compare two moments to see what changed between them, | and bring back how things were: | as a proposal, of course. | Checkpoints name a moment, like before a big import, | so you can come back to it. | History is never rewritten."
+    },
+    {
+      "id": "10-motto",
+      "scene": "statement",
+      "chapter": "changes",
+      "lines": [
+        "Agents propose.",
+        "*People decide."
+      ],
+      "sub": {
+        "t": "The assistant, imports, web research, connections and check-ins all propose. Only a person delivers.",
+        "sync": "Only a person"
+      },
+      "say": "That's the rule everywhere in My Graph. | Agents propose. People decide. | The assistant, imports, web research, connections and check-ins all propose. | Only a person delivers."
+    },
+    {
+      "id": "11-chapter",
+      "scene": "chapter",
+      "chapter": "memory",
+      "title": "Memory and the Brain Keeper",
+      "sub": "What the assistant keeps in mind, and who looks after it.",
+      "say": "Memory, and the Brain Keeper."
+    },
+    {
+      "id": "11-memory",
+      "scene": "screen",
+      "chapter": "memory",
+      "shot": "memory",
+      "url": "My Graph  /memory",
+      "title": "What the assistant remembers.",
+      "points": [
+        {
+          "t": "Family rules, preferences, notes",
+          "sync": "family rules"
+        },
+        {
+          "t": "The Brain Keeper tidies it",
+          "sync": "Brain Keeper"
+        },
+        {
+          "t": "Documents wait for a parent",
+          "sync": "waits for a parent"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Memory is",
+          "view": [
+            260,
+            20,
+            1100
+          ]
+        },
+        {
+          "sync": "nut-free",
+          "view": [
+            260,
+            1300,
+            1000
+          ],
+          "box": [
+            287,
+            1503,
+            812,
+            225
+          ]
+        },
+        {
+          "sync": "Brain Keeper",
+          "view": [
+            260,
+            120,
+            1000
+          ],
+          "box": [
+            287,
+            178,
+            812,
+            412
+          ]
+        },
+        {
+          "sync": "waits for a parent",
+          "view": [
+            260,
+            640,
+            1000
+          ],
+          "box": [
+            287,
+            707,
+            812,
+            300
+          ]
+        }
+      ],
+      "say": "Memory is what the assistant keeps in mind between chats: | family rules, preferences and notes. | Packed lunch must be nut-free on trip days. | The Brain Keeper looks after it: | when there's something new, it decides what's worth keeping, | merges repeats, and retires what's no longer true. | Anything found only in a document, a web page or an email | waits for a parent to confirm it. | The assistant never follows instructions written in a document."
+    },
+    {
+      "id": "12-chapter",
+      "scene": "chapter",
+      "chapter": "automations",
+      "title": "Automations, check-ins and recipes",
+      "sub": "What the assistant does on its own, and only ever suggests.",
+      "say": "Automations, check-ins and recipes."
+    },
+    {
+      "id": "12-checkins",
+      "scene": "screen",
+      "chapter": "automations",
+      "shot": "automations",
+      "url": "My Graph  /automations",
+      "title": "It checks in, and only suggests.",
+      "points": [
+        {
+          "t": "Every hour, seven to eight",
+          "sync": "every hour"
+        },
+        {
+          "t": "Stricter when nobody is watching",
+          "sync": "Stricter"
+        },
+        {
+          "t": "At most five suggestions a day",
+          "sync": "five suggestions"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "A check-in",
+          "view": [
+            260,
+            260,
+            1000
+          ],
+          "box": [
+            288,
+            336,
+            732,
+            410
+          ]
+        },
+        {
+          "sync": "Stricter",
+          "view": [
+            260,
+            400,
+            880
+          ],
+          "box": [
+            304,
+            564,
+            702,
+            122
+          ]
+        }
+      ],
+      "say": "Automations is what the assistant does on its own. | A check-in runs every hour, here from seven until eight. | It looks at new files, reminders due soon, birthdays this week, | and people you haven't been in touch with. | It's stricter when nobody is watching: | it never adds facts, shares anything, or messages anyone. | It only suggests, at most five suggestions a day."
+    },
+    {
+      "id": "12-recipes",
+      "scene": "screen",
+      "chapter": "automations",
+      "shot": "automations",
+      "url": "My Graph  /automations",
+      "title": "Automations and recipes.",
+      "points": [
+        {
+          "t": "On a schedule, or when something happens",
+          "sync": "on a schedule"
+        },
+        {
+          "t": "Recipes: instructions you run again",
+          "sync": "Recipes"
+        },
+        {
+          "t": "Runs as you, sees only what you see",
+          "sync": "runs as you"
+        }
+      ],
+      "start": [
+        260,
+        700,
+        1100
+      ],
+      "moves": [
+        {
+          "sync": "on a schedule",
+          "view": [
+            260,
+            740,
+            1000
+          ],
+          "box": [
+            288,
+            828,
+            732,
+            264
+          ]
+        },
+        {
+          "sync": "Recipes",
+          "view": [
+            260,
+            1080,
+            1000
+          ],
+          "box": [
+            288,
+            1182,
+            732,
+            381
+          ]
+        },
+        {
+          "sync": "Waiting for you",
+          "view": [
+            260,
+            120,
+            1000
+          ],
+          "box": [
+            288,
+            178,
+            732,
+            80
+          ]
+        }
+      ],
+      "say": "Automations run on a schedule, | or when something happens, | like when a document mentions a vaccination. | Recipes are saved instructions you run again and again, | like a weekly family summary. | Each one runs as you, sees only what you can see, | and lands its suggestions in Waiting for you."
+    },
+    {
+      "id": "13-chapter",
+      "scene": "chapter",
+      "chapter": "connections",
+      "title": "Connections",
+      "sub": "Calendars and mail that arrive by themselves. Aula's messages are next.",
+      "say": "Connections."
+    },
+    {
+      "id": "13-connections",
+      "scene": "screen",
+      "chapter": "connections",
+      "shot": "connections",
+      "url": "My Graph  /connections",
+      "title": "Dates and letters, by themselves.",
+      "points": [
+        {
+          "t": "A calendar link",
+          "sync": "a calendar link"
+        },
+        {
+          "t": "A mailbox, from the folders you choose",
+          "sync": "a mailbox"
+        },
+        {
+          "t": "Aula's calendar today; messages next",
+          "sync": "Aula"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Connections bring",
+          "view": [
+            380,
+            0,
+            1000
+          ],
+          "box": [
+            460,
+            35,
+            560,
+            110
+          ]
+        },
+        {
+          "sync": "a mailbox",
+          "view": [
+            380,
+            480,
+            1000
+          ],
+          "box": [
+            460,
+            762,
+            768,
+            187
+          ]
+        },
+        {
+          "sync": "Aula, the school",
+          "box": [
+            460,
+            572,
+            768,
+            188
+          ]
+        },
+        {
+          "sync": "coming next",
+          "view": [
+            380,
+            880,
+            1000
+          ],
+          "box": [
+            460,
+            1122,
+            768,
+            314
+          ]
+        }
+      ],
+      "say": "Connections bring dates and letters in by themselves: | a calendar link, a mailbox from the folders you choose, | and Aula, the school platform, | through the two calendar links Aula gives every parent. | What they bring is read as data, never as instructions, | and what's found waits for your approval. | Reading Aula's messages is coming next."
+    },
+    {
+      "id": "14-chapter",
+      "scene": "chapter",
+      "chapter": "documents",
+      "title": "Documents and design sets",
+      "sub": "Reports, slides and briefs drafted from the graph, with a source on every claim.",
+      "say": "Documents, and design sets."
+    },
+    {
+      "id": "14-docs",
+      "scene": "screen",
+      "chapter": "documents",
+      "shot": "artifact-deck",
+      "url": "My Graph  /artifacts/emma-deck",
+      "title": "Documents from your graph.",
+      "points": [
+        {
+          "t": "Reports, one-pagers, slides, briefs, profiles",
+          "sync": "reports"
+        },
+        {
+          "t": "A source on every claim",
+          "sync": "every claim"
+        },
+        {
+          "t": "Shared only when you publish",
+          "sync": "publish"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Documents are",
+          "view": [
+            260,
+            20,
+            1140
+          ]
+        },
+        {
+          "sync": "each line carries",
+          "view": [
+            260,
+            100,
+            820
+          ],
+          "box": [
+            294,
+            384,
+            490,
+            30
+          ]
+        },
+        {
+          "sync": "take shape",
+          "view": [
+            700,
+            40,
+            720
+          ],
+          "box": [
+            811,
+            128,
+            588,
+            333
+          ]
+        },
+        {
+          "sync": "publish",
+          "view": [
+            700,
+            20,
+            720
+          ],
+          "box": [
+            879,
+            72,
+            520,
+            36
+          ]
+        }
+      ],
+      "say": "Documents are reports, one-pagers, slides, briefs and profiles | that the assistant drafts from what's in the graph, | with a source on every claim. | Here is a slide deck about Emma's autumn: | each line carries the number of its source, | and the slides take shape on the right. | Nothing is shared until you publish it."
+    },
+    {
+      "id": "14-design",
+      "scene": "screen",
+      "chapter": "documents",
+      "shot": "design-sets",
+      "url": "My Graph  /artifacts/design-sets",
+      "title": "Design sets decide how they look.",
+      "points": [
+        {
+          "t": "Type, colour and layout",
+          "sync": "the colours"
+        },
+        {
+          "t": "Slides export to PowerPoint",
+          "sync": "PowerPoint"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "A design set",
+          "view": [
+            360,
+            40,
+            1000
+          ],
+          "box": [
+            396,
+            240,
+            896,
+            252
+          ]
+        }
+      ],
+      "say": "A design set decides how documents look: | the type, the colours and the layout. | Use the built-in one, or make your own. | Slides can be exported to PowerPoint, | so a deck made here can go to a meeting."
+    },
+    {
+      "id": "15-chapter",
+      "scene": "chapter",
+      "chapter": "settings",
+      "title": "Settings, languages and themes",
+      "sub": "English and Danish, light and dark, and who is in the family.",
+      "say": "Settings, languages, and themes."
+    },
+    {
+      "id": "15-settings",
+      "scene": "screen",
+      "chapter": "settings",
+      "shot": "settings",
+      "url": "My Graph  /settings",
+      "title": "Your own settings.",
+      "points": [
+        {
+          "t": "English or Danish",
+          "sync": "English or Danish"
+        },
+        {
+          "t": "Light, dark, or like your device",
+          "sync": "light or dark"
+        },
+        {
+          "t": "Your time zone",
+          "sync": "time zone"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Each person",
+          "view": [
+            260,
+            20,
+            1140
+          ]
+        },
+        {
+          "sync": "English or Danish",
+          "view": [
+            500,
+            300,
+            940
+          ],
+          "box": [
+            536,
+            370,
+            864,
+            128
+          ]
+        },
+        {
+          "sync": "light or dark",
+          "view": [
+            500,
+            520,
+            940
+          ],
+          "box": [
+            536,
+            772,
+            864,
+            96
+          ]
+        },
+        {
+          "sync": "time zone",
+          "box": [
+            536,
+            574,
+            864,
+            134
+          ]
+        }
+      ],
+      "say": "Each person has their own settings. | Choose English or Danish, | light or dark, or follow the device, | and your time zone. | Dates are shown in your own language and time."
+    },
+    {
+      "id": "15-danish",
+      "scene": "screen",
+      "chapter": "settings",
+      "shot": "people-da",
+      "url": "My Graph  /people",
+      "title": "Every screen, in Danish too.",
+      "points": [
+        {
+          "t": "The whole app, in both languages",
+          "sync": "whole app"
+        },
+        {
+          "t": "Text it writes, in yours",
+          "sync": "writes"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "whole app",
+          "view": [
+            0,
+            0,
+            1440
+          ]
+        },
+        {
+          "sync": "writes",
+          "view": [
+            1060,
+            100,
+            380
+          ],
+          "box": [
+            1100,
+            128,
+            300,
+            285
+          ]
+        }
+      ],
+      "say": "Here is Mikkel's view, in Danish. | The whole app is in both languages, | and the text the assistant writes for you, | briefs, summaries and suggestions, | is written in yours."
+    },
+    {
+      "id": "15-dark",
+      "scene": "screen",
+      "chapter": "settings",
+      "shot": "today-dark",
+      "url": "My Graph  /",
+      "title": "Light and dark.",
+      "points": [
+        {
+          "t": "Same colours for the same people",
+          "sync": "same colour"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "same colour",
+          "view": [
+            260,
+            640,
+            1160
+          ],
+          "box": [
+            288,
+            706,
+            1112,
+            290
+          ]
+        }
+      ],
+      "say": "And in the dark, everything keeps its meaning: | each person keeps the same colour, | and sources stay cobalt."
+    },
+    {
+      "id": "15-family",
+      "scene": "screen",
+      "chapter": "settings",
+      "shot": "settings-family",
+      "url": "My Graph  /settings/family",
+      "title": "Who is in the family.",
+      "points": [
+        {
+          "t": "Owner, parents, children, guests",
+          "sync": "Owner"
+        },
+        {
+          "t": "Parents look after children's accounts",
+          "sync": "children's accounts"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Family settings",
+          "view": [
+            500,
+            20,
+            940
+          ]
+        },
+        {
+          "sync": "Owner, parent",
+          "view": [
+            500,
+            20,
+            940
+          ],
+          "box": [
+            816,
+            153,
+            584,
+            324
+          ]
+        },
+        {
+          "sync": "children's accounts",
+          "view": [
+            500,
+            300,
+            940
+          ],
+          "box": [
+            836,
+            585,
+            214,
+            40
+          ]
+        }
+      ],
+      "say": "Family settings is where the household is set up. | Owner, parent, child or guest: | each role sees and does what fits. | Parents look after the children's accounts, | and a guest's access can end on a date."
+    },
+    {
+      "id": "16-chapter",
+      "scene": "chapter",
+      "chapter": "iphone",
+      "title": "The iPhone app",
+      "sub": "Today, Ask, People, Timeline and Library, in your pocket.",
+      "say": "The iPhone app."
+    },
+    {
+      "id": "16-phone",
+      "scene": "phones",
+      "chapter": "iphone",
+      "title": "The same graph, in your pocket.",
+      "points": [
+        {
+          "t": "Today, with decisions waiting",
+          "sync": "Today"
+        },
+        {
+          "t": "Ask, with steps and sources",
+          "sync": "Ask works"
+        },
+        {
+          "t": "People and their relations",
+          "sync": "relations"
+        }
+      ],
+      "phones": [
+        {
+          "src": "ios/today.jpg"
+        },
+        {
+          "src": "ios/ask.jpg",
+          "sync": "Ask works"
+        },
+        {
+          "src": "ios/person.jpg",
+          "sync": "relations"
+        }
+      ],
+      "say": "My Graph has a native iPhone app, | signed in to the same graph. | Today shows what's waiting for a decision: approve, always allow, or deny. | Ask works as on the web, with its steps, sources and approval cards. | And People shows each person with their relations, and where each came from."
+    },
+    {
+      "id": "16-phone2",
+      "scene": "phones",
+      "chapter": "iphone",
+      "title": "Timeline, memory, and a widget.",
+      "points": [
+        {
+          "t": "The timeline, coming up and earlier",
+          "sync": "timeline"
+        },
+        {
+          "t": "Save to My Graph from any app",
+          "sync": "Share"
+        },
+        {
+          "t": "Next up, on the home screen",
+          "sync": "widget"
+        }
+      ],
+      "phones": [
+        {
+          "src": "ios/timeline.jpg"
+        },
+        {
+          "src": "ios/memory.jpg",
+          "sync": "memory"
+        },
+        {
+          "src": "ios/widget.jpg",
+          "sync": "widget"
+        }
+      ],
+      "say": "The timeline shows what's coming up and what came before, | and memory shows the family's rules, each with its source. | From any app, Share and then Save to My Graph | sends a letter or a photo to the library. | A widget shows what's next up on the home screen."
+    },
+    {
+      "id": "17-chapter",
+      "scene": "chapter",
+      "chapter": "privacy",
+      "title": "Privacy and trust",
+      "sub": "Built for a family's own data, children's included.",
+      "say": "Finally, privacy and trust."
+    },
+    {
+      "id": "17-privacy",
+      "scene": "statement",
+      "chapter": "privacy",
+      "lines": [
+        "Private by design."
+      ],
+      "rows": [
+        {
+          "k": "Who sees what",
+          "t": "Only me, parents, or the whole household, on every item",
+          "sync": "every item"
+        },
+        {
+          "k": "Graphs",
+          "t": "Someone you share one with sees nothing from the others",
+          "sync": "nothing from the others"
+        },
+        {
+          "k": "Sign-in",
+          "t": "Passkeys, and parents approve new devices",
+          "sync": "Passkeys"
+        },
+        {
+          "k": "Models",
+          "t": "Every call through the household's own gateway",
+          "sync": "own gateway"
+        },
+        {
+          "k": "Sensitive",
+          "t": "Private topics stay on local models",
+          "sync": "local models"
+        },
+        {
+          "k": "Instructions",
+          "t": "Never taken from a document, page or email",
+          "sync": "never taken"
+        }
+      ],
+      "say": "My Graph is private by design. | Every item says who can see it: | only you, the parents, or the whole household. | Someone you share a graph with sees nothing from the others. | Sign-in uses passkeys, and parents approve new devices. | Every model call goes through the household's own gateway, | and a private topic stays on local models. | And instructions are never taken from a document, a web page or an email."
+    },
+    {
+      "id": "17-security",
+      "scene": "screen",
+      "chapter": "privacy",
+      "shot": "settings",
+      "url": "My Graph  /settings",
+      "title": "See who signed in, and from where.",
+      "points": [
+        {
+          "t": "Passkeys and devices",
+          "sync": "passkeys"
+        },
+        {
+          "t": "An audit of what happened",
+          "sync": "audit"
+        }
+      ],
+      "moves": [
+        {
+          "sync": "Security",
+          "view": [
+            260,
+            20,
+            720
+          ],
+          "box": [
+            288,
+            183,
+            200,
+            27
+          ]
+        },
+        {
+          "sync": "audit log",
+          "view": [
+            260,
+            180,
+            720
+          ],
+          "box": [
+            288,
+            462,
+            200,
+            27
+          ]
+        },
+        {
+          "sync": "only ever sees",
+          "view": [
+            260,
+            20,
+            1140
+          ]
+        }
+      ],
+      "say": "Security settings show your passkeys and the devices signed in, | and the audit log records what happened, and who did it. | The assistant only ever sees what the person asking is allowed to see."
+    },
+    {
+      "id": "18-close",
+      "scene": "close",
+      "line": "My Graph",
+      "sub": "Agents propose, people decide. Every fact has a source.",
+      "say": "That's My Graph. | A private brain for each part of your life, | where the assistant proposes and people decide, | and where every fact can tell you where it came from. | Thanks for watching."
+    }
+  ]
+}

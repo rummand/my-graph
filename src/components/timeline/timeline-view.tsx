@@ -267,7 +267,7 @@ function PersonToggle({ id, label, on, onClick }: { id: string; label: string; o
   return (
     <button type="button" aria-pressed={on} onClick={onClick} style={personStyle(id) as CSSProperties}
       className={clsx("inline-flex h-7 items-center gap-1.5 rounded-full pl-2 pr-2.5 text-sm transition-colors active:scale-[0.97]",
-        on ? "bg-[var(--person-tint)] font-medium text-[var(--person)] ring-1 ring-inset ring-[var(--person)]" : "bg-surface-2 text-fg hover:bg-line")}>
+        on ? "bg-[var(--person-tint)] font-medium text-[var(--person-ink)] ring-1 ring-inset ring-[var(--person)]" : "bg-surface-2 text-fg hover:bg-line")}>
       <span className="size-2 rounded-full bg-[var(--person)]" aria-hidden="true" />
       {label}
     </button>

@@ -6,7 +6,7 @@ import { clsx } from "clsx";
 import { AnimatePresence, motion } from "motion/react";
 import { useT } from "@/lib/i18n/client";
 import {
-  Brain, CalendarRange, FileText, FileStack, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, Users, Workflow, X, type LucideIcon,
+  BookOpen, Brain, CalendarRange, FileText, FileStack, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 
 /** `key` is the label under shell.nav.* (or `label`, a full message key, for items whose copy lives in their own namespace). */
@@ -29,6 +29,7 @@ const SECONDARY: NavItem[] = [
   { href: "/automations", key: "automations", icon: Workflow, hideFor: ["guest", "child"] },
   { href: "/graphs", key: "graphs", icon: Layers },
   { href: "/settings", key: "settings", icon: Settings },
+  { href: "/docs", key: "docs", icon: BookOpen, label: "docs.nav" },
 ];
 
 const visible = (role: string) => (l: NavItem) => !l.hideFor?.includes(role);

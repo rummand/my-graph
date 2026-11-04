@@ -166,14 +166,14 @@ function ItemMark({ item, withDot = false }: { item: StripItem; withDot?: boolea
   const cls = clsx(
     "flex h-6 min-w-0 items-center gap-1.5 rounded-[4px] px-1.5 text-xs font-medium transition-[filter] hover:brightness-95",
     item.overdue ? "bg-warn-tint text-warn"
-      : item.kind === "event" ? "bg-[var(--person-tint)] text-[var(--person)]"
-        : "text-[var(--person)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--person)_55%,transparent)]",
+      : item.kind === "event" ? "bg-[var(--person-tint)] text-[var(--person-ink)]"
+        : "text-[var(--person-ink)] shadow-[inset_0_0_0_1px_color-mix(in_oklab,var(--person)_55%,transparent)]",
   );
   const title = `${item.label}${item.time ? `, ${item.time}` : ""}${item.overdue ? `, ${t("today.week.overdue")}` : ""}`;
   const body = (
     <>
       {withDot && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-[var(--person)]" />}
-      {item.time && <span className="shrink-0 tabular-nums opacity-80">{item.time}</span>}
+      {item.time && <span className="shrink-0 tabular-nums">{item.time}</span>}
       <span className="truncate">{item.label}</span>
     </>
   );

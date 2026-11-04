@@ -6,6 +6,8 @@ const messages: MessageTree = {
     product: "My Graph",
     triggerCompact: "Working in {name}. Switch graph",
     trigger: "My Graph. Working in {name}. Switch graph",
+    workingIn: "Working in",
+    switchGraph: "Switch graph",
     dialog: "Switch graph",
     mine: "Mine",
     sharedWithMe: "Shared with me",

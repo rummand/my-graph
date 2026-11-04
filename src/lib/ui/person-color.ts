@@ -24,6 +24,8 @@ export function personStyle(id: string): Record<string, string> {
     "--h": String(h),
     "--person": `hsl(${h} var(--person-s) var(--person-l))`,
     "--person-tint": `hsl(${h} var(--person-tint-s) var(--person-tint-l))`,
+    // For text in the person's colour: darker (light theme) or lighter (dark theme) so it reads at 4.5:1 on white and on the tint.
+    "--person-ink": `hsl(${h} var(--person-s) var(--person-ink-l))`,
   };
 }
 

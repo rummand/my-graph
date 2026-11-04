@@ -300,7 +300,7 @@ export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false
               </p>
               <p className="mt-1 text-sm text-muted sm:hidden">{t("library.upload.leadPhone")}</p>
               <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-                <input ref={inputRef} id={inputId} type="file" multiple accept={ACCEPT_ATTR} className="sr-only" tabIndex={-1}
+                <input ref={inputRef} id={inputId} type="file" multiple accept={ACCEPT_ATTR} className="sr-only" tabIndex={-1} aria-label={t("library.upload.choose")}
                   onChange={(e) => { void start(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
                 <Button type="button" onClick={() => inputRef.current?.click()}>{t("library.upload.choose")}</Button>
                 <Button type="button" variant="secondary" onClick={() => void pasteButton()}>

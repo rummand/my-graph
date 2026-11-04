@@ -133,7 +133,7 @@ export function Tabs<T extends string>({ items, value, onSelect, className }: { 
 export function Avatar({ id, name, size = 32, className }: { id: string; name: string; size?: number; className?: string }) {
   return (
     <span aria-hidden className={clsx("inline-flex shrink-0 items-center justify-center rounded-full font-semibold", className)}
-      style={{ ...personStyle(id), width: size, height: size, fontSize: Math.max(10, Math.round(size * 0.38)), background: "var(--person-tint)", color: "var(--person)" } as CSSProperties}>
+      style={{ ...personStyle(id), width: size, height: size, fontSize: Math.max(10, Math.round(size * 0.38)), background: "var(--person-tint)", color: "var(--person-ink)" } as CSSProperties}>
       {initials(name)}
     </span>
   );
@@ -142,7 +142,7 @@ export function Avatar({ id, name, size = 32, className }: { id: string; name: s
 /** A person as a chip: their dot and name, in their colour. */
 export function PersonChip({ id, name, href, className }: { id: string; name: string; href?: string; className?: string }) {
   const cls = clsx("inline-flex max-w-full items-center gap-1.5 rounded-full py-0.5 pl-1 pr-2.5 text-sm font-medium", href && "hover:brightness-95", className);
-  const style = { ...personStyle(id), background: "var(--person-tint)", color: "var(--person)" } as CSSProperties;
+  const style = { ...personStyle(id), background: "var(--person-tint)", color: "var(--person-ink)" } as CSSProperties;
   const body = <><span className="size-2 shrink-0 rounded-full bg-current ml-1" /><span className="truncate">{name}</span></>;
   return href ? <a href={href} className={cls} style={style}>{body}</a> : <span className={cls} style={style}>{body}</span>;
 }

@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>My Graph film scenes</title>
+<!-- One scene of "My Graph, explained" per load: scenes.html?seg=<id>. window.seek(t) draws the scene at second t,
+     deterministically, so render.mjs can shoot it frame by frame (after Blip's ops/video/scenes.html). Look: DESIGN.md:
+     lichen ground, ink, cobalt as the one chrome hue, Schibsted Grotesk, the people's own colours. Screens are real
+     screenshots (build/shots, from shots.mjs) in a drawn browser; the camera zooms to the part being explained and a
+     cobalt box marks it. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&display=block">
+<style>
+  :root{
+    --bg:#F1F3EF; --surface:#FFFFFF; --surface2:#E7EAE5; --fg:#17201C; --muted:#5B6660; --line:#DCE0DA;
+    --accent:#2F4BB0; --tint:#E6EAFA; --warn:#9a5a00; --inferred:#7a4fa0;
+    --sans:"Schibsted Grotesk",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;width:1920px;height:1080px;overflow:hidden;background:var(--bg);color:var(--fg);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  #stage{position:absolute;inset:0}
+  .a{will-change:transform,opacity}
+  h1{font-weight:600;letter-spacing:-.02em;margin:0;line-height:1.08;text-wrap:balance}
+  .mark{display:inline-block;vertical-align:middle}
+  .brand{position:absolute;left:96px;top:56px;display:flex;align-items:center;gap:14px;font-size:24px;font-weight:600;letter-spacing:-.01em}
+  .brand small{display:block;font-weight:400;font-size:17px;color:var(--muted);letter-spacing:0;margin-top:1px}
+  /* left column of a screen scene */
+  .col{position:absolute;left:96px;top:150px;width:420px}
+  .eyebrow{display:flex;align-items:center;gap:12px;font-size:22px;color:var(--muted)}
+  .eyebrow i{width:10px;height:10px;border-radius:50%;background:var(--accent);display:inline-block}
+  .col h1{font-size:50px;margin:22px 0 34px}
+  .pt{display:flex;gap:16px;align-items:baseline;font-size:26px;line-height:1.3;margin:0 0 20px;color:var(--fg)}
+  .pt::before{content:"";flex:none;width:14px;height:3px;border-radius:2px;background:var(--accent);transform:translateY(-7px)}
+  .prog{position:absolute;left:96px;bottom:150px;display:flex;gap:5px}
+  .prog span{width:18px;height:4px;border-radius:2px;background:var(--line)}
+  .prog span.on{background:var(--accent)} .prog span.done{background:#b9c0bb}
+  /* the drawn browser */
+  .browser{position:absolute;border-radius:14px;overflow:hidden;background:var(--surface);box-shadow:0 30px 70px -28px rgba(23,32,28,.32),0 0 0 1px rgba(23,32,28,.08)}
+  .bar{height:40px;background:var(--surface2);display:flex;align-items:center;gap:8px;padding:0 16px}
+  .bar i{width:12px;height:12px;border-radius:50%;background:#cdd2cc;display:block}
+  .bar span{margin-left:16px;font-size:15px;color:var(--muted);background:var(--bg);border-radius:7px;padding:4px 14px;min-width:420px}
+  .view{position:relative;overflow:hidden;background:var(--bg)}
+  .page{position:absolute;left:0;top:0;transform-origin:0 0}
+  .page img{display:block;width:100%}
+  .box{position:absolute;border-radius:10px;border:3px solid var(--accent);box-shadow:0 0 0 4000px rgba(23,32,28,.20);opacity:0}
+  .demo{position:absolute;right:80px;bottom:126px;font-size:16px;color:var(--muted)}
+  /* phones */
+  .phone{position:absolute;border-radius:58px;background:#101512;padding:12px;box-shadow:0 34px 70px -30px rgba(23,32,28,.45)}
+  .phone .scr{overflow:hidden;border-radius:47px;background:var(--bg)}
+  .phone img{display:block;width:100%}
+  /* title, chapter, statement, close */
+  .center{position:absolute;left:0;right:0;text-align:center}
+  .title-h{font-size:132px;letter-spacing:-.035em;font-weight:600}
+  .title-sub{font-size:40px;color:var(--muted);line-height:1.35}
+  .dots{display:flex;gap:18px;justify-content:center}
+  .dots b{width:22px;height:22px;border-radius:50%;display:block}
+  .chap{position:absolute;left:180px;top:0;bottom:0;width:1500px;display:flex;flex-direction:column;justify-content:center;padding-bottom:90px}
+  .chap .k{font-size:26px;color:var(--muted);display:flex;align-items:center;gap:14px}
+  .chap .k i{width:12px;height:12px;border-radius:50%;background:var(--accent)}
+  .chap h1{font-size:124px;letter-spacing:-.03em;margin:22px 0 26px}
+  .chap .sub{font-size:40px;color:var(--muted);max-width:1300px;line-height:1.3}
+  .chap .prog{position:static;margin-top:60px}
+  .chap .prog span{width:44px;height:6px;border-radius:3px}
+  .statement{position:absolute;left:180px;top:0;bottom:0;width:1560px;display:flex;flex-direction:column;justify-content:center;gap:36px;padding-bottom:90px}
+  .statement h1{font-size:112px;letter-spacing:-.03em}
+  .statement h1 span{display:block}
+  .statement h1 span.c{color:var(--accent)}
+  .statement .sub{font-size:38px;color:var(--muted);max-width:1300px;line-height:1.35}
+  .rows{margin-top:10px;border-top:1px solid var(--line);width:1400px}
+  .row{display:flex;gap:30px;align-items:baseline;padding:18px 0;border-bottom:1px solid var(--line);font-size:34px}
+  .row b{flex:none;width:330px;font-weight:600}
+  .row span{color:var(--muted)}
+  /* captions */
+  #cap{position:absolute;left:0;right:0;bottom:40px;display:flex;justify-content:center;pointer-events:none}
+  #cap span{max-width:1560px;background:rgba(23,32,28,.9);color:#F1F3EF;font:500 34px/1.3 var(--sans);padding:11px 26px;border-radius:12px;text-align:center}
+  #cap.off{display:none}
+</style></head>
+<body><div id="stage"></div><div id="cap" class="off"><span></span></div>
+<script>
+const q = new URLSearchParams(location.search);
+const SEG = q.get("seg");
+const stage = document.getElementById("stage"), capEl = document.getElementById("cap"), capText = capEl.querySelector("span");
+const esc = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+const el = (tag, cls, html, parent = stage) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; parent.appendChild(e); return e; };
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const ease = (x) => 1 - Math.pow(1 - clamp(x), 3);
+const inout = (x) => { x = clamp(x); return x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2; };
+const tracks = [], drifts = [], anims = [];
+const enter = (e, at, o = {}) => { e.classList.add("a"); tracks.push({ el: e, at, dur: o.dur ?? .8, y: o.y ?? 24, x: o.x ?? 0, s: o.s ?? 1, out: o.out, outDur: o.outDur ?? .5 }); return e; };
+// People's colours (personHue of the demo family's ids; DESIGN.md: saturated only for a person's own dot or lane).
+const PEOPLE = { Anna: 135, Mikkel: 213, Emma: 193, Noah: 348 };
+const personColor = (h) => `hsl(${h} 62% 42%)`;
+const MARK = (size, inv = false) => `<svg class="mark" width="${size}" height="${size}" viewBox="0 0 28 28"><rect width="28" height="28" rx="8" fill="${inv ? "#F1F3EF" : "#17201C"}"/><path d="M9 18.5 14 9l5 9.5" fill="none" stroke="${inv ? "#17201C" : "#F1F3EF"}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="14" cy="9" r="2.6" fill="#2F4BB0" stroke="${inv ? "#F1F3EF" : "#17201C"}" stroke-width="1.2"/><circle cx="9" cy="18.5" r="2.6" fill="${inv ? "#17201C" : "#F1F3EF"}"/><circle cx="19" cy="18.5" r="2.6" fill="${inv ? "#17201C" : "#F1F3EF"}"/></svg>`;
+
+let SEGMENT, LEAD, D, PLAN, CHAPTERS;
+const capAt = (key) => {   // the scene time the voice reaches a phrase
+  key = key.toLowerCase();
+  const c = SEGMENT.caps.find((c) => c.t.toLowerCase().includes(key));
+  if (!c) throw new Error(`no caption has "${key}" in ${SEGMENT.id}`);
+  // inside the caption, by the phrase's share of its letters
+  const k = c.t.toLowerCase().indexOf(key) / Math.max(1, c.t.length);
+  return LEAD + c.a + (c.b - c.a) * k;
+};
+const when = (item, fallback) => item.sync ? capAt(item.sync) - .1 : (item.at != null ? LEAD + item.at * SEGMENT.audio : fallback);
+
+function progress(parent, cls = "prog") {
+  const p = el("div", cls, null, parent);
+  const i = CHAPTERS.indexOf(SEGMENT.chapter);
+  CHAPTERS.forEach((_, k) => el("span", k === i ? "on" : k < i ? "done" : "", null, p));
+  return p;
+}
+function brand() { el("div", "brand", `${MARK(44)}<div>My Graph<small>explained</small></div>`); }
+function column(seg) {
+  const col = el("div", "col");
+  const chap = PLAN.segments.find((s) => s.scene === "chapter" && s.chapter === seg.chapter);
+  enter(el("div", "eyebrow", `<i></i>${esc(chap?.title ?? "")}`, col), .15, { y: 10 });
+  enter(el("h1", "", esc(seg.title), col), .3, { y: 20, dur: .9 });
+  (seg.points || []).forEach((p) => enter(el("div", "pt", `<span>${esc(p.t)}</span>`, col), when(p, LEAD + 1), { y: 16, dur: .7 }));
+  return col;
+}
+
+async function loadShot(name) {
+  const meta = await (await fetch(`build/shots/${name}.json`)).json();
+  return meta;
+}
+// A view [x, y, w] in the page's CSS pixels; h follows the window's shape.
+function viewFor(spec, meta, aspect, pad = 56) {
+  if (!spec) return [0, 0, meta.w];
+  let r = spec;
+  if (typeof spec === "string") { r = meta.marks[spec]; if (!r) throw new Error(`no mark ${spec} in ${SEGMENT.shot}`); }
+  if (r.length === 3) return fit(r, meta, aspect);
+  const [x, y, w, h] = r;
+  const W = Math.min(meta.w, Math.max(640, w + 2 * pad, (h + 2 * pad) / aspect));
+  return fit([x + w / 2 - W / 2, y + h / 2 - W * aspect / 2, W], meta, aspect);
+}
+function fit([x, y, w], meta, aspect) {
+  w = Math.min(w, meta.w);
+  return [clamp(x, 0, meta.w - w), clamp(y, 0, Math.max(0, meta.h - w * aspect)), w];
+}
+const rectOf = (spec, meta) => typeof spec === "string" ? meta.marks[spec] : spec;
+
+async function browserShot(name, X, Y, W, H, url, moves, startView) {
+  const meta = await loadShot(name);
+  const b = el("div", "browser"); Object.assign(b.style, { left: X + "px", top: Y + "px", width: W + "px" });
+  el("div", "bar", `<i></i><i></i><i></i><span>${esc(url)}</span>`, b);
+  const v = el("div", "view", null, b); Object.assign(v.style, { width: W + "px", height: H + "px" });
+  const page = el("div", "page", null, v); Object.assign(page.style, { width: meta.w + "px", height: meta.h + "px" });
+  const img = el("img", null, null, page); img.src = `build/shots/${name}.png`; await img.decode();
+  const aspect = H / W;
+  // keyframes of the camera, and boxes
+  const keys = [{ t: -1, v: viewFor(startView, meta, aspect) }];
+  const boxes = [];
+  (moves || []).forEach((m, i) => {
+    const t = when(m, LEAD + 1 + i * 3);
+    if (m.view !== undefined) keys.push({ t, v: m.view === null ? [0, 0, meta.w] : viewFor(m.view, meta, aspect, m.pad) });
+    if (m.box) {
+      const r = rectOf(m.box, meta); if (!r) throw new Error(`no mark ${m.box} in ${name}`);
+      const bx = el("div", "box", null, page);
+      const p = m.boxPad ?? 8;
+      Object.assign(bx.style, { left: r[0] - p + "px", top: r[1] - p + "px", width: r[2] + 2 * p + "px", height: r[3] + 2 * p + "px" });
+      boxes.push({ el: bx, at: t + (m.view !== undefined ? .7 : 0) });
+    }
+  });
+  // a box goes when the next move starts
+  const starts = (moves || []).map((m, i) => when(m, LEAD + 1 + i * 3));
+  boxes.forEach((bx) => { const nxt = starts.find((s) => s > bx.at + .3); bx.until = nxt ?? D + 5; });
+  anims.push((t) => {
+    let k = 0; while (k + 1 < keys.length && keys[k + 1].t <= t + .0001) k++;
+    // where the camera is at time tt, heading for key kk (a move that starts mid-move starts from where it is)
+    const pos = (kk, tt) => {
+      if (kk === 0) return keys[0].v;
+      const from = pos(kk - 1, keys[kk].t), f = inout((tt - keys[kk].t) / 1.4);
+      return from.map((x, i) => x + (keys[kk].v[i] - x) * f);
+    };
+    const cur = pos(k, t);
+    // a slow drift so no frame is ever frozen: 2% closer over the scene
+    const z = 1 - .02 * (t / D);
+    const [x, y, w] = cur, nw = w * z;
+    const nx = x + (w - nw) / 2, ny = y + (w - nw) * aspect / 2;
+    const s = W / nw;
+    page.style.transform = `translate(${-nx * s}px, ${-ny * s}px) scale(${s})`;
+    for (const bx of boxes) {
+      bx.el.style.opacity = Math.min(ease((t - bx.at) / .5), 1 - ease((t - bx.until + .1) / .4));
+      bx.el.style.borderWidth = 3 / s + "px"; bx.el.style.borderRadius = 10 / s + "px";
+    }
+  });
+  return b;
+}
+
+const builders = {
+  async title(seg) {
+    const m = el("div", "center", MARK(150)); m.style.top = "250px"; enter(m, .3, { y: 0, s: .94, dur: 1.2 });
+    const h = el("div", "center title-h", "My Graph, explained."); h.style.top = "440px"; enter(h, .8, { y: 26, dur: 1.1 });
+    const s = el("div", "center title-sub", esc(seg.sub)); s.style.top = "630px"; enter(s, 1.4, { y: 16, dur: 1 });
+    const d = el("div", "center dots"); d.style.top = "740px";
+    Object.entries(PEOPLE).forEach(([n, hue], i) => { const b = el("b", "", null, d); b.style.background = personColor(hue); b.title = n; enter(b, 2.0 + i * .18, { y: 0, s: .2, dur: .6 }); });
+  },
+  chapter(seg) {
+    const c = el("div", "chap");
+    enter(el("div", "k", `<i></i>Chapter ${CHAPTERS.indexOf(seg.chapter) + 1} of ${CHAPTERS.length}`, c), .2, { y: 10 });
+    enter(el("h1", "", esc(seg.title), c), .35, { y: 30, dur: 1 });
+    enter(el("div", "sub", esc(seg.sub), c), .8, { y: 18, dur: .9 });
+    enter(progress(c), 1.0, { y: 0 });
+    drifts.push({ el: c, fn: (t) => `translateY(${-8 * inout(t / D)}px)` });
+  },
+  statement(seg) {
+    brand();
+    const box = el("div", "statement");
+    const h = el("h1", "", "", box);
+    seg.lines.forEach((l, i) => enter(el("span", l.startsWith("*") ? "c" : "", esc(l.replace(/^\*/, "")), h), l.sync ? when(l) : .4 + i * .5, { y: 30, dur: 1 }));
+    if (seg.sub) enter(el("div", "sub", esc(seg.sub.t ?? seg.sub), box), seg.sub.sync ? when(seg.sub) : 1.6, { y: 16 });
+    if (seg.rows) {
+      const rows = el("div", "rows", null, box);
+      seg.rows.forEach((r) => enter(el("div", "row", `<b>${esc(r.k)}</b><span>${esc(r.t)}</span>`, rows), when(r, LEAD + 1), { y: 14, dur: .7 }));
+    }
+    drifts.push({ el: box, fn: (t) => `translateY(${-8 * inout(t / D)}px)` });
+  },
+  async screen(seg) {
+    brand(); column(seg); progress(stage);
+    const b = await browserShot(seg.shot, 560, 96, 1272, 795, seg.url, seg.moves, seg.start);
+    enter(b, .1, { y: 40, dur: 1.0 });
+    enter(el("div", "demo", "Demo family, fictional data"), .6, { y: 0 });
+  },
+  async phones(seg) {
+    brand(); column(seg); progress(stage);
+    const n = seg.phones.length, H = 820, Wp = H * 1206 / 2622;
+    const gap = 56, total = n * (Wp + 24) + (n - 1) * gap, x0 = 560 + (1272 - total) / 2;
+    for (const [i, p] of seg.phones.entries()) {
+      const ph = el("div", "phone"); Object.assign(ph.style, { left: x0 + i * (Wp + 24 + gap) + "px", top: (70 + (i % 2) * 24) + "px" });
+      const sc = el("div", "scr", null, ph); Object.assign(sc.style, { width: Wp + "px", height: H + "px" });
+      const img = el("img", null, null, sc); img.src = p.src; await img.decode();
+      enter(ph, i === 0 ? .2 : when(p, .2 + i * .5), { y: 50, dur: 1.1 });
+      drifts.push({ el: ph, fn: (t) => `translateY(${(i % 2 ? 1 : -1) * 8 * Math.sin((t / D) * Math.PI)}px)` });
+    }
+    enter(el("div", "demo", "Demo family, fictional data"), .6, { y: 0 });
+  },
+  close(seg) {
+    const m = el("div", "center", MARK(120)); m.style.top = "270px"; enter(m, .3, { y: 0, s: .94, dur: 1.1 });
+    const h = el("div", "center title-h", esc(seg.line)); h.style.top = "430px"; h.style.fontSize = "110px"; enter(h, .7, { y: 24, dur: 1 });
+    const s = el("div", "center title-sub", esc(seg.sub)); s.style.top = "600px"; enter(s, 1.3, { y: 14, dur: 1 });
+    const d = el("div", "center dots"); d.style.top = "720px";
+    Object.values(PEOPLE).forEach((hue, i) => { const b = el("b", "", null, d); b.style.background = personColor(hue); enter(b, 1.8 + i * .15, { y: 0, s: .2, dur: .6 }); });
+  },
+};
+
+window.seek = (t) => {
+  const fin = .4, fout = .5;
+  stage.style.opacity = Math.min(ease(t / fin), 1 - inout((t - (D - fout)) / fout));
+  for (const tr of tracks) {
+    const x = ease((t - tr.at) / tr.dur);
+    let o = x; if (tr.out != null) o *= 1 - inout((t - tr.out) / tr.outDur);
+    tr.el.style.opacity = o;
+    const base = `translate(${tr.x * (1 - x)}px, ${tr.y * (1 - x)}px) scale(${tr.s + (1 - tr.s) * x})`;
+    tr.el.dataset.base = base;
+    if (!drifts.some((d) => d.el === tr.el)) tr.el.style.transform = base;
+  }
+  for (const d of drifts) d.el.style.transform = (d.el.dataset.base || "") + " " + d.fn(t);
+  for (const a of anims) a(t);
+  const lt = t - LEAD, caps = SEGMENT.caps;
+  let cur = null;
+  for (let i = 0; i < caps.length; i++) {
+    const end = i + 1 < caps.length && caps[i + 1].a - caps[i].b < .5 ? caps[i + 1].a : caps[i].b + .25;
+    if (lt >= caps[i].a - .05 && lt < end) { cur = caps[i]; break; }
+  }
+  if (cur) { capEl.classList.remove("off"); if (capText.textContent !== cur.t) capText.textContent = cur.t; } else capEl.classList.add("off");
+};
+
+window.ready = (async () => {
+  PLAN = await (await fetch("build/plan.json")).json();
+  const timing = await (await fetch("build/timing.json")).json();
+  CHAPTERS = PLAN.segments.filter((s) => s.scene === "chapter").map((s) => s.chapter);
+  SEGMENT = PLAN.segments.find((s) => s.id === SEG);
+  ({ lead: LEAD, duration: D } = timing[SEG]);
+  await document.fonts.load("600 50px 'Schibsted Grotesk'"); await document.fonts.load("400 26px 'Schibsted Grotesk'"); await document.fonts.load("500 34px 'Schibsted Grotesk'");
+  await builders[SEGMENT.scene](SEGMENT);
+  await document.fonts.ready;
+  window.seek(0);
+  return { lead: LEAD, duration: D };
+})();
+</script></body></html>

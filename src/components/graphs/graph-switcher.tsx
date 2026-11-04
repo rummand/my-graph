@@ -101,7 +101,7 @@ export function GraphSwitcher({ graphs, youId, compact = false }: { graphs: Grap
         </button>
       ) : (
         <button ref={trigger} type="button" data-graph-switcher onClick={() => setOpen((o) => !o)}
-          aria-expanded={open} aria-haspopup="dialog" aria-label={t("graphs.switcher.trigger", { name: current.name })}
+          aria-expanded={open} aria-haspopup="dialog"
           className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/70">
           <span className="relative shrink-0">
             <Mark size={30} />
@@ -109,8 +109,10 @@ export function GraphSwitcher({ graphs, youId, compact = false }: { graphs: Grap
           </span>
           <span className="min-w-0 flex-1 leading-tight">
             <span className="block text-xs text-muted">{t("graphs.switcher.product")}</span>
-            <span className="block truncate text-[15px] font-semibold">{current.name}</span>
+            {/* The name comes from the visible text (so voice control can say what it sees), plus these hidden words. */}
+            <span className="block truncate text-[15px] font-semibold"><span className="sr-only">{t("graphs.switcher.workingIn")} </span>{current.name}</span>
             {hint && <span className="mt-0.5 block truncate text-xs text-muted">{hint}</span>}
+            <span className="sr-only">. {t("graphs.switcher.switchGraph")}</span>
           </span>
           <ChevronsUpDown size={15} className="shrink-0 text-muted transition-colors group-hover:text-fg" aria-hidden />
         </button>

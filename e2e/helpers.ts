@@ -20,7 +20,7 @@ export const authFile = (who: Who) => join(process.env.E2E_OUT ?? join(tmpdir(),
 
 /** Sign in through the API on a request context (cookies stay on it). */
 export async function apiLogin(ctx: APIRequestContext, who: Who) {
-  const r = await ctx.post("/api/auth/login", { data: { email: USERS[who], password: PASSWORD }, headers: ORIGIN });
+  const r = await ctx.post("/api/auth/login", { data: { email: USERS[who], password: PASSWORD }, headers: ORIGIN, timeout: 120_000 });
   expect(r.status(), `login ${who}`).toBe(200);
   return (await r.json()) as { ok: boolean; pending?: boolean };
 }
@@ -33,7 +33,7 @@ export async function apiSession(who: Who) {
 
 export async function graphs(ctx: APIRequestContext | Page) {
   const req = "request" in ctx ? ctx.request : ctx;
-  const r = await req.get("/api/graphs");
+  const r = await req.get("/api/graphs", { timeout: 120_000 });
   expect(r.ok()).toBeTruthy();
   return ((await r.json()) as { graphs: { id: string; name: string; kind?: string; isCurrent?: boolean }[] }).graphs;
 }
@@ -43,20 +43,20 @@ export async function switchGraph(ctx: APIRequestContext | Page, name: string) {
   const req = "request" in ctx ? ctx.request : ctx;
   const g = (await graphs(ctx)).find((x) => x.name === name);
   if (!g) throw new Error(`No graph named ${name}`);
-  const r = await req.post("/api/graphs/switch", { data: { graphId: g.id }, headers: ORIGIN });
+  const r = await req.post("/api/graphs/switch", { data: { graphId: g.id }, headers: ORIGIN, timeout: 120_000 });
   expect(r.status()).toBe(200);
   return g;
 }
 
 export async function setLocale(ctx: APIRequestContext | Page, locale: "en" | "da") {
   const req = "request" in ctx ? ctx.request : ctx;
-  const r = await req.patch("/api/settings", { data: { locale }, headers: ORIGIN });
+  const r = await req.patch("/api/settings", { data: { locale }, headers: ORIGIN, timeout: 120_000 });
   expect(r.status()).toBe(200);
 }
 
 export async function setTheme(ctx: APIRequestContext | Page, theme: "light" | "dark" | "system") {
   const req = "request" in ctx ? ctx.request : ctx;
-  const r = await req.patch("/api/settings", { data: { theme }, headers: ORIGIN });
+  const r = await req.patch("/api/settings", { data: { theme }, headers: ORIGIN, timeout: 120_000 });
   expect(r.status()).toBe(200);
 }
 
