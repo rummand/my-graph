@@ -30,6 +30,16 @@ mux's own GBrain is unrelated — do not use it.
 filters; every write records a `provenance` row (source, chunk, locator, quote, activity, agent, confidence).
 Facts the assistant inferred are `status: "inferred"` and never silently promoted.
 
+**Graphs.** A person can have several graphs (Family, Personal, Work, one shared with a partner …): tables `graphs`,
+`graph_members`, `graph_invites`, and a required `graph_id` on every content table. The current graph comes from the
+`mg_graph` cookie (validated against membership) and is on the `Viewer` (`graphId`, `graphRole`, `graphKind` …).
+Every read and write is scoped to the current graph; nothing may reference across graphs. Rules live in
+`src/lib/graphs` (`scopeOf(viewer)`). A cross-graph leak is a blocker.
+
+## Design
+
+`DESIGN.md` is the design system (tokens, type, people colours, motion, copy). Design skills are in `.claude/skills`.
+
 **Graphs** (`src/lib/graphs`): a person can have several separate graphs (Family, Work, one built for and shared with a
 partner, …). Every content row carries `graph_id`; the viewer carries the current graph (`mg_graph` cookie, checked
 against `graph_members` on every request). All reads and writes go through `scopeOf(viewer)` and pin `graph_id`;

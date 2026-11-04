@@ -136,7 +136,7 @@ function GraphDetail({ graph, all, youId, detail, focusInvite }: { graph: GraphV
       </header>
       {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
 
-      <p className="mt-6 flex max-w-[72ch] gap-3 rounded-lg bg-[var(--g-tint)] px-4 py-3 text-[15px]">
+      <p className="mt-6 flex max-w-[72ch] gap-3 rounded-lg bg-surface-2 px-4 py-3 text-[15px]">
         <EyeOff size={17} className="mt-[3px] shrink-0 text-muted" aria-hidden />
         <span>{whoSeesWhat(graph, all, youId)}</span>
       </p>
