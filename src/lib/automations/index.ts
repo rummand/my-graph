@@ -197,7 +197,7 @@ export async function allowAlways(v: Viewer, actionKind: string): Promise<void> 
 
 export async function listRecipes(v: Viewer): Promise<Recipe[]> {
   const { listRecipesFor } = await import("@/lib/recipes");
-  return (await listRecipesFor(v)).map(({ id, name, description, prompt, ownerId, visibility }) => ({ id, name, description, prompt, ownerId, visibility }));
+  return (await listRecipesFor(v, { seed: true })).map(({ id, name, description, prompt, ownerId, visibility }) => ({ id, name, description, prompt, ownerId, visibility }));
 }
 
 /** Starts the in-process scheduler (called once from instrumentation). Safe to call more than once. */

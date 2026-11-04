@@ -2,7 +2,7 @@
  * Recipes: saved prompts the family writes ("Weekly family summary"), usable from chat, Today or as an automation.
  * Server-only. Scoped to the viewer's graph and the recipe's visibility; only the person who wrote one may change it.
  */
-import { and, asc, desc, eq, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { assistantActivity, recipeRuns, recipes } from "@/db/schema";
 import type { Citation } from "@/db/schema";
@@ -12,7 +12,7 @@ import { runTask } from "@/lib/assistant/run";
 import { logActivity } from "@/lib/automations";
 import { canCreateAssistantWork, canUseAssistantTools } from "@/lib/automations/policy";
 import { AutomationError } from "@/lib/automations/store";
-import { canEditRecipe, fillRecipe, recipePlaceholders, starterRecipesFor, type RecipeVisibility } from "./pure";
+import { canEditRecipe, fillRecipe, recipePlaceholders, STARTER_RECIPES, starterRecipesFor, type RecipeVisibility } from "./pure";
 
 export { recipePlaceholders, fillRecipe, STARTER_RECIPES, starterRecipesFor } from "./pure";
 
@@ -49,6 +49,23 @@ function toDTO(v: Viewer, r: Row, last?: typeof recipeRuns.$inferSelect): Recipe
   };
 }
 
+/**
+ * Graphs seeded before starters followed the template got the family ones ("Weekly family summary") whatever their
+ * kind. In a non-family graph, swap each family starter nobody has edited for the template's starter in the same place.
+ */
+async function replaceUntouchedFamilyStarters(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], v: Viewer): Promise<void> {
+  const fresh = starterRecipesFor(v.graphKind);
+  if (fresh === STARTER_RECIPES) return;
+  const rows = await tx.select({ id: recipes.id, name: recipes.name, prompt: recipes.prompt }).from(recipes)
+    .where(and(eq(recipes.graphId, v.graphId), inArray(recipes.name, STARTER_RECIPES.map((r) => r.name))));
+  for (const row of rows) {
+    const i = STARTER_RECIPES.findIndex((r) => r.name === row.name && r.prompt === row.prompt);
+    const to = fresh[i];
+    if (i < 0 || !to) continue;
+    await tx.update(recipes).set({ name: to.name, description: to.description, prompt: to.prompt, updatedAt: new Date() }).where(eq(recipes.id, row.id));
+  }
+}
+
 /** The starter recipes for the graph's template, once per graph (the first time someone who may add recipes opens the list). */
 async function seedStarters(v: Viewer): Promise<void> {
   if (!canCreateAssistantWork(v)) return;
@@ -56,7 +73,7 @@ async function seedStarters(v: Viewer): Promise<void> {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`mg:recipes-seed:${v.graphId}`}))`);
     const [done] = await tx.select({ id: assistantActivity.id }).from(assistantActivity)
       .where(and(eq(assistantActivity.graphId, v.graphId), eq(assistantActivity.action, "seeded_recipes"))).limit(1);
-    if (done) return;
+    if (done) { await replaceUntouchedFamilyStarters(tx, v); return; }
     await tx.insert(recipes).values(starterRecipesFor(v.graphKind).map((r) => ({ graphId: v.graphId, ownerId: v.id, name: r.name, description: r.description, prompt: r.prompt, visibility: "household" as const })));
     await tx.insert(assistantActivity).values({ graphId: v.graphId, userId: v.id, actor: "automation", action: "seeded_recipes", summary: "Added the starter recipes", visibility: "household" });
   });

@@ -54,15 +54,21 @@ test.describe("Ask @slow", () => {
     await switchGraph(page, "Family");
     const tag = uid();
     await page.goto("/chat"); await settled(page);
+    await page.getByRole("button", { name: "New conversation" }).first().click().catch(() => {});
     const box = page.locator("#chat-input");
     await box.click();
-    await box.fill(`Remind me to buy birthday candles ${tag} tomorrow at 9.`);
+    await box.fill(`Add a reminder for me: buy birthday candles ${tag}, tomorrow at 09:00.`);
     await box.press("Enter");
     await waitForAnswer(page);
     const approve = page.getByRole("button", { name: "Approve", exact: true }).last();
-    await expect(approve).toBeVisible();
-    await approve.click();
-    await expect(page.getByText(/^Saved/).first()).toBeVisible();
+    const auto = page.getByText(/Saved automatically/).last();
+    await expect(approve.or(auto)).toBeVisible();
+    if (await approve.isVisible()) {
+      await approve.click();
+      await expect(page.getByRole("status").filter({ hasText: /Reminder added|Saved/ }).last()).toBeVisible();
+    } else {
+      test.info().annotations.push({ type: "note", description: "Reminders are on always-allow for Anna, so there was nothing to approve." });
+    }
   });
 });
 
@@ -150,10 +156,11 @@ test("People: add a person with how they know you", async ({ page }) => {
   await switchGraph(page, "Work");
   const name = `Test Person ${uid()}`;
   await page.goto("/people"); await settled(page);
-  await page.getByRole("button", { name: /^Add (a )?person$/ }).or(page.getByRole("link", { name: /^Add (a )?person$/ })).first().click();
-  await page.getByLabel("Name", { exact: true }).fill(name);
-  await expect(page.getByText("How do they know you?")).toBeVisible();
-  await page.getByRole("button", { name: "Colleague", exact: true }).or(page.getByRole("radio", { name: "Colleague" })).first().click();
+  await page.getByRole("link", { name: "Add person" }).first().click();
+  await expect(page).toHaveURL(/\/people\/new/);
+  await page.getByRole("textbox", { name: "Name" }).fill(name);
+  const how = page.getByRole("group", { name: "How do they know you?" });
+  await how.getByRole("button", { name: "Colleague", exact: true }).click();
   await page.getByRole("button", { name: "Add person", exact: true }).click();
   await expect(page).toHaveURL(/\/people\/[0-9a-f-]{36}/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText(name);
@@ -164,8 +171,9 @@ test("Wiki: create a page and edit it", async ({ page }) => {
   await switchGraph(page, "Family");
   const title = `E2E page ${uid()}`;
   await page.goto("/wiki"); await settled(page);
-  await page.getByRole("link", { name: "New page" }).or(page.getByRole("button", { name: "New page" })).first().click();
-  await page.getByLabel(/title/i).first().fill(title);
+  await page.getByRole("link", { name: "New page" }).first().click();
+  await expect(page).toHaveURL(/\/wiki\/new/);
+  await page.getByRole("textbox", { name: "Title" }).fill(title);
   await page.getByRole("button", { name: "Create and start writing" }).click();
   await expect(page).toHaveURL(/\/wiki\/[^/]+/);
   const editor = page.locator('[contenteditable="true"]').first();
@@ -208,11 +216,12 @@ test.describe("Documents @slow", () => {
     test.setTimeout(420_000);
     await switchGraph(page, "Work");
     await page.goto("/artifacts"); await settled(page);
-    await page.getByRole("link", { name: "New document" }).or(page.getByRole("button", { name: "New document" })).first().click();
-    await page.getByRole("button", { name: /One-pager/ }).or(page.getByRole("radio", { name: /One-pager/ })).first().click();
+    await page.getByRole("link", { name: "New document" }).first().click();
+    await expect(page).toHaveURL(/\/artifacts\/new/);
+    await page.getByRole("radio", { name: /^One-pager/ }).check({ force: true });
     const title = `E2E one-pager ${uid()}`;
-    await page.getByLabel("Title").fill(title);
-    await page.getByLabel("Who or what is it about?").fill("The Data Mesh project: status and open risks");
+    await page.getByRole("textbox", { name: /^Title/ }).fill(title);
+    await page.getByRole("combobox", { name: /^Who or what is it about\?/ }).fill("The Data Mesh project: status and open risks");
     await page.getByRole("button", { name: "Draft it" }).click();
     await expect(page).toHaveURL(/\/artifacts\/[0-9a-f-]{36}/, { timeout: 60_000 });
     await expect(page.getByText(title).first()).toBeVisible();
@@ -226,11 +235,11 @@ test.describe("Documents @slow", () => {
 
 test("Settings: theme switch applies to the page", async ({ page }) => {
   await page.goto("/settings"); await settled(page);
-  await page.getByRole("radio", { name: "Dark" }).or(page.getByRole("button", { name: "Dark", exact: true })).first().click();
+  await page.locator("label", { has: page.getByRole("radio", { name: /^Dark/ }) }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.reload();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await page.getByRole("radio", { name: "Light" }).or(page.getByRole("button", { name: "Light", exact: true })).first().click();
+  await page.locator("label", { has: page.getByRole("radio", { name: /^Light/ }) }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   const r = await page.request.patch("/api/settings", { data: { theme: "light" }, headers: ORIGIN });
   expect(r.ok()).toBeTruthy();

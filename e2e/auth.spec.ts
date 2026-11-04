@@ -41,7 +41,9 @@ test.describe("graph switching", () => {
       await expect(dialog).toBeVisible({ timeout: 2000 });
     }).toPass();
     await dialog.getByRole("button", { name: /^Work/ }).click();
+    await expect.poll(async () => (await (await page.request.get("/api/auth/me")).json()).me?.graph?.name).toBe("Work");
+    await page.reload();
     await expect(page.getByRole("button", { name: /Working in Work/ }).first()).toBeVisible();
-    await expect.poll(async () => (await (await page.request.get("/api/auth/me")).json()).graph?.name).toBe("Work");
+    await expect.poll(async () => (await (await page.request.get("/api/auth/me")).json()).me?.graph?.name).toBe("Work");
   });
 });

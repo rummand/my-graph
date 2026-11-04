@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { expect, request, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
 
 export const BASE = process.env.E2E_BASE_URL ?? "http://localhost:3917";
@@ -13,7 +15,8 @@ export const USERS = {
 } as const;
 export type Who = keyof typeof USERS;
 
-export const authFile = (who: Who) => `e2e/.auth/${who}.json`;
+/** Signed-in storage state per user, kept outside the project for the same reason as the results (see the config). */
+export const authFile = (who: Who) => join(process.env.E2E_OUT ?? join(tmpdir(), "my-graph-e2e"), "auth", `${who}.json`);
 
 /** Sign in through the API on a request context (cookies stay on it). */
 export async function apiLogin(ctx: APIRequestContext, who: Who) {

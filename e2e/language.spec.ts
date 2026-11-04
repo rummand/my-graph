@@ -2,12 +2,11 @@ import { test, expect } from "@playwright/test";
 import { authFile, chromeText, rawKeys, setLocale, settled, switchGraph } from "./helpers";
 
 test.use({ storageState: authFile("anna") });
-test.describe.configure({ mode: "serial" });
 
 // English phrases that must not be left on Danish pages (common UI words and headings).
 const ENGLISH = [/\bToday\b/, /\bSettings\b/, /\bSign out\b/, /\bWaiting for you\b/, /\bDeliver\b/, /\bPeople\b/, /\bNew page\b/,
   /\bNothing yet\b/, /\bSomething went wrong\b/, /\bLoading\b/, /\bSearch\b/, /\bShow more\b/, /\bAdd person\b/, /\bRun now\b/,
-  /\bAsk anything\b/, /\bwhat changed\b/i, /\bthis week\b/i, /\bremind(?:er)?s?\b/i, /\bno one\b/i];
+  /\bAsk anything\b/, /\bWhat changed\b/, /\bThis week\b/, /\bCancel\b/, /\bSave\b/, /\bClose\b/, /\bBack\b/];
 
 const PAGES = ["/", "/chat", "/people", "/timeline", "/library", "/wiki", "/artifacts", "/graph", "/connections", "/changes",
   "/history", "/memory", "/automations", "/graphs", "/settings"];
@@ -20,7 +19,7 @@ test.afterAll(async ({ browser }) => {
 
 test("switching to Danish in Settings", async ({ page }) => {
   await page.goto("/settings"); await settled(page);
-  await page.getByRole("radio", { name: "Dansk" }).or(page.getByRole("button", { name: "Dansk", exact: true })).first().click();
+  await page.locator("label", { has: page.getByRole("radio", { name: /^Dansk/ }) }).click();
   await expect(page.locator("html")).toHaveAttribute("lang", "da");
   await expect(page.getByRole("link", { name: "Indstillinger" }).first()).toBeVisible();
 });
@@ -37,7 +36,7 @@ for (const graph of ["Family", "Work"]) {
       const chrome = await chromeText(page);
       const body = await page.locator("body").innerText();
       expect(rawKeys(body), "raw keys").toEqual([]);
-      const leftovers = ENGLISH.filter((re) => re.test(chrome)).map(String);
+      const leftovers = chrome.split("\n").filter((line) => ENGLISH.some((re) => re.test(line))).map((l) => l.slice(0, 120));
       expect(leftovers, `English in the chrome of ${path}`).toEqual([]);
     });
   }

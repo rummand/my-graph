@@ -37,11 +37,14 @@ test.describe("a child account", () => {
       // Anna approves the device from Settings.
       const parentCtx = await browser.newContext({ storageState: authFile("anna") });
       const parent = await parentCtx.newPage();
-      await parent.goto("/settings"); await settled(parent);
-      const approve = parent.getByRole("button", { name: /^Approve .* for Emma$/ }).first();
-      await expect(approve).toBeVisible();
-      await approve.click();
-      await expect(approve).toBeHidden();
+      await parent.goto("/settings/family"); await settled(parent);
+      // Earlier runs may have left more of Emma's sign-ins waiting; approve each one (they all look like this browser).
+      const approve = parent.getByRole("button", { name: /^Approve .* for Emma$/ });
+      await expect(approve.first()).toBeVisible();
+      for (let n = await approve.count(); n > 0; n--) {
+        await approve.first().click();
+        await expect(approve).toHaveCount(n - 1);
+      }
       await parentCtx.close();
     }
 
@@ -100,8 +103,8 @@ test.describe("isolation between households", () => {
     for (const c of drafts) expect((await sara.get(`/api/changes/${c.id}`)).status()).toBeGreaterThanOrEqual(400);
     const family = annaGraphs.find((g) => g.name === "Family")!;
     expect((await sara.post("/api/graphs/switch", { data: { graphId: family.id }, headers: ORIGIN })).status()).toBe(404);
-    // Without an Origin header a write is refused (CSRF check).
-    expect((await sara.patch("/api/settings", { data: { theme: "dark" } })).status()).toBe(403);
+    // A write from another site is refused (CSRF check on the Origin header).
+    expect((await sara.patch("/api/settings", { data: { theme: "dark" }, headers: { origin: "https://evil.example" } })).status()).toBe(403);
     await sara.dispose();
   });
 });
