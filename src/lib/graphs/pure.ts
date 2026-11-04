@@ -12,10 +12,10 @@
  */
 
 export type Role = "owner" | "parent" | "child" | "guest";
-export type GraphKind = "family" | "personal" | "work" | "shared" | "other" | "partner" | "project";
+export type GraphKind = "family" | "personal" | "work" | "shared" | "other" | "partner" | "project" | "practice";
 export type GraphRole = "owner" | "editor" | "viewer";
 
-export const GRAPH_KINDS: GraphKind[] = ["family", "personal", "work", "partner", "project", "shared", "other"];
+export const GRAPH_KINDS: GraphKind[] = ["family", "personal", "work", "partner", "project", "shared", "other", "practice"];
 export const GRAPH_ROLES: GraphRole[] = ["owner", "editor", "viewer"];
 export const GRAPH_COOKIE = "mg_graph";
 
@@ -164,7 +164,7 @@ export function pickGraph<T extends { id: string; kind: GraphKind; householdId: 
     ?? live[0] ?? null;
 }
 
-export const DEFAULT_HUES: Record<GraphKind, number> = { family: 28, personal: 265, work: 210, shared: 340, other: 160, partner: 330, project: 190 };
+export const DEFAULT_HUES: Record<GraphKind, number> = { family: 28, personal: 265, work: 210, shared: 340, other: 160, partner: 330, project: 190, practice: 130 };
 
 /* ── Members as people ───────────────────────────────────────────────────────────────────────────────── */
 

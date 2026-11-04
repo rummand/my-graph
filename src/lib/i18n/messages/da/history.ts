@@ -23,6 +23,7 @@ const messages: MessageTree = {
     other: "{who}: {kind}",
   },
   field: {
+    rulesApproved: "de godkendte regler", rulesDropped: "de droppede regler",
     label: "navnet", summary: "beskrivelsen", aliases: "de andre navne", visibility: "hvem der kan se det", sensitive: "følsomheden",
     kind: "typen", startAt: "datoen", endAt: "slutdatoen", status: "status", confidence: "hvor sikre vi er", relation: "forbindelsen",
     type: "slagsen", mergedInto: "hvad det blev lagt sammen med", timePrecision: "hvor præcis datoen er", fromId: "hvor den starter", toId: "hvor den ender",

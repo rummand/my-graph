@@ -23,6 +23,8 @@ const messages: MessageTree = {
     label: "Ask about anything in your graph",
     placeholder: "Ask anything…",
     placeholderShort: "Ask anything",
+    openPanel: "Open the assistant",
+    shortcut: "Open the assistant with ⌘J or Ctrl+J",
   },
   homeLabel: "Today",
   signOut: "Sign out",

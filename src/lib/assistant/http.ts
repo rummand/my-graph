@@ -1,6 +1,7 @@
 /** Helpers for the /api/chat route handlers (server-only). */
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { pageContextSchema } from "./page-context";
 
 export function jsonError(status: number, error: string, extra: Record<string, unknown> = {}) {
   return NextResponse.json({ error, ...extra }, { status });
@@ -35,6 +36,13 @@ export function firstIssue(e: z.ZodError): string {
 export const chatRequestSchema = z.object({
   conversationId: z.uuid("Unknown conversation").nullish(),
   question: z.string({ message: "Type a question first." }).trim().min(1, "Type a question first.").max(4000, "Keep the question under 4,000 characters."),
+  /** What is open in the app when asked from the Ask panel (re-read as the viewer before use). */
+  page: pageContextSchema.nullish(),
+}).strict();
+
+/** PUT /api/chat/active: make a saved session active, or null for a new conversation. */
+export const activeSessionSchema = z.object({
+  conversationId: z.uuid("Unknown conversation").nullable(),
 }).strict();
 
 export const conversationIdSchema = z.uuid("Unknown conversation");

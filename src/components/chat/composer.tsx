@@ -17,6 +17,7 @@ import type { MetaKind, MetaModel } from "@/lib/meta/types";
 import { useT } from "@/lib/i18n/client";
 import type { TFn } from "@/lib/i18n/core";
 import { tagWords } from "./words";
+import { Dictation } from "./dictation";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 const PAUSE_MS = 900;
@@ -45,7 +46,7 @@ function writePref(on: boolean) {
  * Project", "new kind: Department"). The strip above Send says what Send will add, and each item can be changed,
  * merged with something that exists, or removed. @ opens a typeahead over the graph. Highlights can be switched off.
  */
-export function Composer({ value, onChange, onSend, onStop, streaming, stopping = false, sensitive, empty, inputRef }: {
+export function Composer({ value, onChange, onSend, onStop, streaming, stopping = false, sensitive, empty, inputRef, top, inputId = "chat-input" }: {
   value: string;
   onChange: (v: string) => void;
   onSend: (payload: ComposerSend) => void;
@@ -55,6 +56,9 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
   sensitive: boolean;
   empty: boolean;
   inputRef: RefObject<HTMLTextAreaElement | null>;
+  /** Shown above the text (the Ask panel's "About: Bo Madsen" chip). */
+  top?: React.ReactNode;
+  inputId?: string;
 }) {
   const t = useT();
   const [mentions, setMentions] = useState<PickedMention[]>([]);
@@ -197,7 +201,8 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
   return (
     <form onSubmit={(e) => { e.preventDefault(); send(); }}
       className="relative rounded-lg bg-surface shadow-float ring-1 ring-transparent transition-shadow focus-within:ring-accent/50">
-      <label htmlFor="chat-input" className="sr-only">{t("chat.composer.label")}</label>
+      {top}
+      <label htmlFor={inputId} className="sr-only">{t("chat.composer.label")}</label>
       {ta.open && (
         <MentionMenu id={menuId} items={ta.items} active={ta.active} onPick={ta.pick} onHover={ta.setActive} loading={ta.loading} query={ta.query}
           className="absolute bottom-full left-2 mb-2" />
@@ -221,7 +226,7 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
           </div>
         </div>
         <textarea
-          id="chat-input"
+          id={inputId}
           ref={inputRef}
           rows={1}
           value={value}
@@ -267,6 +272,7 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
             <span className="hidden sm:inline">{t("chat.composer.hintAnswers")} <Kbd>@</Kbd> {t("chat.composer.hintMention")} <Kbd>Shift</Kbd> <Kbd>Enter</Kbd> {t("chat.composer.hintNewLine")}</span>
           )}
         </p>
+        <Dictation value={value} onChange={onChange} />
         <button type="button" onClick={toggle} aria-pressed={on} title={on ? t("chat.composer.highlightsOffTitle") : t("chat.composer.highlightsOnTitle")}
           className={clsx("inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs transition-colors", on ? "text-fg hover:bg-surface-2" : "text-muted hover:bg-surface-2 hover:text-fg")}>
           <Highlighter aria-hidden className="size-3.5" />

@@ -17,6 +17,12 @@ struct ChatView: View {
         _composer = State(initialValue: c)
     }
 
+    /// The Ask tab's always-active session: the model is owned by the tab, so it can follow the server's choice.
+    init(model: ChatModel) {
+        self.autoAsk = nil
+        _model = State(initialValue: model)
+    }
+
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {

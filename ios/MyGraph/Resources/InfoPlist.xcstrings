@@ -33,6 +33,38 @@
           }
         }
       }
+    },
+    "NSMicrophoneUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speak your question in Ask instead of typing it."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sig dit spørgsmål i Spørg i stedet for at skrive det."
+          }
+        }
+      }
+    },
+    "NSSpeechRecognitionUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Turn what you say in Ask into text. When the iPhone can, this happens on the iPhone itself."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gør det, du siger i Spørg, til tekst. Når iPhonen kan, sker det på selve iPhonen."
+          }
+        }
+      }
     }
   }
 }

@@ -66,6 +66,9 @@ struct ComposerView: View {
     let send: (String) -> Void
     let stop: () -> Void
     @FocusState private var focused: Bool
+    @State private var dictation = Dictation()
+    /// What was in the field when listening started; what is heard goes after it.
+    @State private var beforeDictation = ""
 
     var body: some View {
         VStack(spacing: 0) {
@@ -96,6 +99,11 @@ struct ComposerView: View {
                 .padding(.horizontal, 12).padding(.bottom, 6)
                 .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
+            if dictation.isListening || dictation.state != .idle {
+                dictationBar
+                    .padding(.horizontal, 12).padding(.top, 6)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
             HStack(alignment: .bottom, spacing: 8) {
                 TextField("Ask about anything…", text: $model.text, axis: .vertical)
                     .lineLimit(1...6)
@@ -106,6 +114,8 @@ struct ComposerView: View {
                     .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color.mgLine))
                     .accessibilityLabel(Text("Question"))
                     .accessibilityHint(Text("Type @ to mention a person, place or event"))
+                    .accessibilityIdentifier("composer.field")
+                if !streaming { micButton }
                 if streaming {
                     Button(action: stop) {
                         Image(systemName: "stop.fill").font(.system(size: 14, weight: .bold))
@@ -114,6 +124,7 @@ struct ComposerView: View {
                     .accessibilityLabel(Text("Stop"))
                 } else {
                     Button {
+                        if dictation.isListening { dictation.stop() }
                         let t = model.markup()
                         guard !t.isEmpty else { return }
                         send(t)
@@ -131,5 +142,66 @@ struct ComposerView: View {
         }
         .background(Color.mgBg.opacity(0.96))
         .animation(.easeOut(duration: 0.15), value: model.suggestions)
+        .animation(.easeOut(duration: 0.15), value: dictation.state)
+        .onDisappear { dictation.stop() }
+    }
+
+    private var micButton: some View {
+        Button {
+            if dictation.isListening { dictation.stop(); return }
+            dictation.dismissError()
+            beforeDictation = model.text
+            Task { await dictation.start { heard in model.text = Dictation.join(beforeDictation, heard) } }
+        } label: {
+            Image(systemName: dictation.isListening ? "mic.fill" : "mic")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(dictation.isListening ? Color.mgBg : Color.mgFg)
+                .frame(width: 40, height: 40)
+                .background(Circle().fill(dictation.isListening ? Color.mgDanger : Color.mgSurface))
+                .overlay(Circle().stroke(dictation.isListening ? .clear : Color.mgLine))
+                .symbolEffect(.pulse, isActive: dictation.isListening)
+        }
+        .accessibilityLabel(dictation.isListening ? Text("Stop listening") : Text("Speak your question"))
+        .accessibilityHint(Text("Listens in \(dictation.language.name)"))
+        .accessibilityIdentifier("composer.mic")
+        .contextMenu {
+            Picker("Language", selection: $dictation.language) {
+                ForEach(Dictation.Language.allCases) { l in Text(l.name).tag(l) }
+            }
+        }
+    }
+
+    /// While listening: what's happening, the DA/EN toggle and Done.
+    private var dictationBar: some View {
+        HStack(spacing: 10) {
+            switch dictation.state {
+            case .failed(let e):
+                Image(systemName: "mic.slash").foregroundStyle(Color.mgDanger).accessibilityHidden(true)
+                Text(e).mgFont(.meta).foregroundStyle(Color.mgDanger).frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("dictation.error")
+                Button { dictation.dismissError() } label: { Image(systemName: "xmark").font(.system(size: 12, weight: .bold)) }
+                    .foregroundStyle(Color.mgMuted)
+                    .accessibilityLabel(Text("Close"))
+            default:
+                Image(systemName: "waveform").foregroundStyle(Color.mgDanger)
+                    .symbolEffect(.variableColor.iterative, isActive: dictation.state == .listening)
+                    .accessibilityHidden(true)
+                Text(dictation.state == .starting ? String(localized: "Starting…") : dictation.onDevice ? String(localized: "Listening on this iPhone…") : String(localized: "Listening…"))
+                    .mgFont(.meta).foregroundStyle(Color.mgMuted)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityIdentifier("dictation.status")
+                Picker("Language", selection: $dictation.language) {
+                    ForEach(Dictation.Language.allCases) { l in Text(l.short).tag(l).accessibilityLabel(Text(l.name)) }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 92)
+                .accessibilityIdentifier("dictation.language")
+                Button { dictation.stop() } label: { Text("Done").mgFont(.secondaryStrong) }
+                    .accessibilityIdentifier("dictation.done")
+            }
+        }
+        .padding(.horizontal, 12).padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.mgSurface))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.mgLine))
     }
 }

@@ -6,6 +6,8 @@ import { z } from "zod";
 import { defineManifest, type Manifest } from "./manifest";
 import { aulaCalendarConnector, icsConnector } from "./ics/connector";
 import { imapConnector } from "./imap/connector";
+import { mcpConnector } from "./mcp/connector";
+import { recordConnector } from "./record/connector";
 import type { Connector } from "./types";
 
 export const aulaManifest = defineManifest({
@@ -29,10 +31,15 @@ const aulaConnector: Connector = { manifest: aulaManifest };
 /** In the order the gallery shows them. */
 export const CONNECTORS: Connector[] = [
   aulaCalendarConnector as unknown as Connector,
+  recordConnector as unknown as Connector,
   imapConnector as unknown as Connector,
   icsConnector as unknown as Connector,
+  mcpConnector as unknown as Connector,
   aulaConnector,
 ];
+
+/** Connectors that talk MCP (their config is McpConfig and they sign in with a key or OAuth). */
+export const MCP_CONNECTORS = new Set(["mcp", "record"]);
 
 export function connectorById(id: string): Connector | null {
   return CONNECTORS.find((c) => c.manifest.id === id) ?? null;

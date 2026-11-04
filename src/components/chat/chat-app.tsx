@@ -1,8 +1,11 @@
 "use client";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type MutableRefObject, type ReactNode } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
+import { clsx } from "clsx";
 import { Archive, ChevronRight, Lock, MailOpen, Mail, PanelLeft, Pencil, Pin, PinOff, SquarePen, Trash2, X } from "lucide-react";
+import type { PageContext } from "@/lib/assistant/page-context";
+import { ASK_EVENT, type AskDetail } from "@/components/assistant/events";
 import { useFormatDate, useT } from "@/lib/i18n/client";
 import type { TFn } from "@/lib/i18n/core";
 import { GraphKindContext } from "./graph-kind";
@@ -31,7 +34,13 @@ async function errorOf(res: Response, fallback: string): Promise<string> {
   return typeof body.error === "string" ? body.error : fallback;
 }
 
-export function ChatApp({ conversations: initialList, conversation, mux, canFix, starters, graphKind = "other", initialQuestion }: {
+/** Tell the server which conversation is the active session (fire and forget: the next question also sets it). */
+function setActiveSession(conversationId: string | null) {
+  void fetch("/api/chat/active", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ conversationId }) }).catch(() => {});
+}
+
+export function ChatApp({ conversations: initialList, conversation, mux, canFix, starters, graphKind = "other", initialQuestion, startedNew = false,
+  variant = "page", pageContext = null, askRef, onBusy, onActive, onOpenSession, panelActions }: {
   conversations: ConversationSummary[];
   conversation: ConversationView | null;
   mux: MuxStatus;
@@ -41,7 +50,23 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
   graphKind?: string;
   /** From /chat?q=…: asked once, as a new conversation, then removed from the URL. */
   initialQuestion?: string | null;
+  /** /chat?new=1: a new conversation was asked for; it becomes the active session. */
+  startedNew?: boolean;
+  /** "page": /chat, full size. "panel": the Ask panel beside every page (scrolls itself, no URL changes). */
+  variant?: "page" | "panel";
+  /** Panel: what is open on the page (sent with each question while its chip is kept). */
+  pageContext?: PageContext | null;
+  /** Lets the shell's "Ask anything" put a question to this session. */
+  askRef?: MutableRefObject<((q: string) => void) | null>;
+  onBusy?: (busy: boolean) => void;
+  /** The active conversation changed (a new one started, or one was cleared). */
+  onActive?: (id: string | null) => void;
+  /** Panel: reopen a saved session in place. */
+  onOpenSession?: (id: string) => void;
+  /** Panel: buttons for the panel header (open full size, close). */
+  panelActions?: ReactNode;
 }) {
+  const panel = variant === "panel";
   const t = useT();
   const [list, setList] = useState(initialList);
   const [conversationId, setConversationId] = useState<string | null>(conversation?.id ?? null);
@@ -71,23 +96,69 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
 
   const current = list.find((c) => c.id === conversationId) ?? null;
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  /** The page scrolls the window; the panel scrolls its own body. */
+  const toBottom = useCallback((smooth: boolean) => {
+    const el = scrollRef.current;
+    if (panel && el) { el.scrollTo({ top: el.scrollHeight, behavior: smooth ? "smooth" : "auto" }); return; }
+    if (!panel) bottomRef.current?.scrollIntoView({ block: "end", behavior: smooth ? "smooth" : "auto" });
+  }, [panel]);
+
   // Follow the answer while it streams, unless the reader scrolled up to read.
   useEffect(() => {
+    const el = panel ? scrollRef.current : null;
     const onScroll = () => {
-      stickRef.current = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160;
+      stickRef.current = el
+        ? el.scrollTop + el.clientHeight >= el.scrollHeight - 160
+        : window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 160;
     };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
+    const target: HTMLElement | Window = el ?? window;
+    target.addEventListener("scroll", onScroll, { passive: true });
+    return () => target.removeEventListener("scroll", onScroll);
+  }, [panel]);
   useLayoutEffect(() => {
     if (!stickRef.current || !messages.length) return;
-    bottomRef.current?.scrollIntoView({ block: "end" });
-    const t = window.setTimeout(() => { if (stickRef.current) bottomRef.current?.scrollIntoView({ block: "end", behavior: "smooth" }); }, 260);
+    toBottom(false);
+    const t = window.setTimeout(() => { if (stickRef.current) toBottom(true); }, 260);
     return () => window.clearTimeout(t);
-  }, [messages]);
+  }, [messages, toBottom]);
   useLayoutEffect(() => {
-    if (conversation?.messages.length) window.scrollTo({ top: document.documentElement.scrollHeight });
-  }, [conversation]);
+    if (!conversation?.messages.length) return;
+    if (panel) toBottom(false); else window.scrollTo({ top: document.documentElement.scrollHeight });
+  }, [conversation, panel, toBottom]);
+
+  useEffect(() => { onBusy?.(streaming); }, [streaming, onBusy]);
+
+  // "Ask anything" in the shell asks in this session.
+  useEffect(() => {
+    if (!askRef) return;
+    askRef.current = (q: string) => submit(q);
+    return () => { askRef.current = null; };
+  });
+
+  // On /chat, "Ask anything" asks here (elsewhere the Ask panel takes it).
+  useEffect(() => {
+    if (panel) return;
+    const onAsk = (e: Event) => {
+      const d = (e as CustomEvent<AskDetail>).detail;
+      d.handled = true;
+      if (d.question) submit(d.question); else inputRef.current?.focus();
+    };
+    window.addEventListener(ASK_EVENT, onAsk);
+    return () => window.removeEventListener(ASK_EVENT, onAsk);
+  });
+
+  // /chat?new=1 (a new conversation opened in its own tab): that is now the active session.
+  useEffect(() => {
+    if (!startedNew || panel) return;
+    setActiveSession(null);
+    window.history.replaceState(null, "", "/chat");
+  }, [startedNew, panel]);
+
+  // The page's chip: kept until removed, and back when another page is opened.
+  const [pageOff, setPageOff] = useState(false);
+  useEffect(() => { setPageOff(false); }, [pageContext?.path]);
+  const page = panel && pageContext && !pageOff ? pageContext : null;
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -171,7 +242,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ conversationId: activeIdRef.current, question }),
+        body: JSON.stringify({ conversationId: activeIdRef.current, question, ...(page ? { page } : {}) }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
@@ -189,7 +260,8 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
             setTitle(nt);
             setStartedAt(now);
             setList((l) => [{ id, title: nt, createdAt: now, updatedAt: now, pinned: false, unread: false, sensitivity: "normal" }, ...l.filter((c) => c.id !== id)]);
-            window.history.replaceState(null, "", `/chat/${id}`);
+            if (!panel) window.history.replaceState(null, "", `/chat/${id}`);
+            onActive?.(id);
           }
         } else if (ev.event === "step") {
           const step = data.step as AssistantStep;
@@ -368,8 +440,14 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
     setNoticeHref(null);
     setInput("");
     setDrawer(false);
-    if (how === "push") window.history.pushState(null, "", url); else window.history.replaceState(null, "", url);
-    window.scrollTo({ top: 0 });
+    setActiveSession(null);
+    onActive?.(null);
+    if (panel) {
+      scrollRef.current?.scrollTo({ top: 0 });
+    } else {
+      if (how === "push") window.history.pushState(null, "", url); else window.history.replaceState(null, "", url);
+      window.scrollTo({ top: 0 });
+    }
     inputRef.current?.focus({ preventScroll: true });
   }
 
@@ -386,6 +464,139 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
   const empty = messages.length === 0;
   const lastAnswerId = [...messages].reverse().find((m) => m.role === "assistant")?.uid;
   const listProps = { list, activeId: conversationId, onNew: startNew, onRename: rename, onDelete: remove, onPin: pin, busy: streaming };
+
+  const threadBar = (
+    <ThreadBar
+      title={empty ? null : title}
+      startedAt={startedAt}
+      sensitive={sensitive}
+      level={level}
+      canEdit={!!conversationId && !empty}
+      busy={streaming}
+      pinned={!!current?.pinned}
+      unread={!!current?.unread}
+      compacting={compacting}
+      canCompact={messages.filter((m) => !m.id.startsWith("local-")).length > 5}
+      onOpenList={() => setDrawer(true)}
+      onNew={startNew}
+      onRename={(t) => (conversationId ? rename(conversationId, t) : Promise.resolve(false))}
+      onDelete={() => (conversationId ? remove(conversationId) : Promise.resolve(false))}
+      onPin={() => conversationId && void pin(conversationId, !current?.pinned)}
+      onUnread={() => conversationId && void markUnread(conversationId, !current?.unread)}
+      onCompact={() => void compact()}
+      panel={panel}
+      extra={panelActions}
+    />
+  );
+
+  const thread = (
+    <div className={panel ? "pb-6" : "flex-1 pb-10"} aria-live="polite" aria-busy={streaming}>
+      {empty ? (
+        <ChatEmpty starters={starters} onPick={(q) => submit(q)} />
+      ) : (
+        messages.map((m, i) => (
+          <div key={m.uid}>
+            {m.role === "user"
+              ? <Question m={m} first={i === 0 && !panel} />
+              : <Answer m={m} conversationId={conversationId} onDecided={decided} onFeedback={feedback}
+                  canClarify={!streaming && m.uid === lastAnswerId} onClarify={(t) => submit(t)} />}
+            {summary && m.id === summary.upTo && <SummaryDivider text={summary.text} />}
+          </div>
+        ))
+      )}
+      <div ref={bottomRef} />
+    </div>
+  );
+
+  const chip = page?.title ? (
+    <div className="flex items-center gap-1.5 px-3 pt-2.5">
+      <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-accent-tint py-0.5 pl-2.5 pr-1 text-xs text-accent">
+        <span className="shrink-0 font-medium">{t("chat.session.about")}</span>
+        <span className="truncate">{page.title}</span>
+        <button type="button" onClick={() => setPageOff(true)} aria-label={t("chat.session.aboutRemove", { title: page.title })} title={t("chat.session.aboutRemove", { title: page.title })}
+          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-accent/15"><X aria-hidden className="size-3" /></button>
+      </span>
+    </div>
+  ) : panel && pageOff && pageContext?.title ? (
+    <div className="px-3 pt-2.5">
+      <button type="button" onClick={() => setPageOff(false)} className="rounded-full px-2 py-0.5 text-xs text-muted ring-1 ring-inset ring-line hover:text-fg">
+        {t("chat.session.aboutAdd", { title: pageContext.title })}
+      </button>
+    </div>
+  ) : null;
+
+  const footer = (
+    <>
+      <AnimatePresence>
+        {error && (
+          <motion.div key="err" role="alert" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: EASE }}
+            className="mb-2 flex items-start gap-3 rounded-lg bg-danger-tint px-4 py-3 text-sm text-danger">
+            <p className="min-w-0 flex-1">{error}</p>
+            <button type="button" onClick={() => setError(null)} aria-label={t("chat.dismissMessage")} className="-m-1 rounded p-1 hover:bg-surface/50"><X aria-hidden className="size-4" /></button>
+          </motion.div>
+        )}
+        {notice && !error && (
+          <motion.div key="notice" role="status" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: EASE }}
+            className="mb-2 flex items-start gap-3 rounded-lg bg-surface px-4 py-3 text-sm">
+            <p className="min-w-0 flex-1">
+              {notice}
+              {noticeHref && <> <Link href={noticeHref} className="text-accent underline-offset-4 hover:underline">{t("chat.notice.review")}</Link></>}
+            </p>
+            <button type="button" onClick={() => { setNotice(null); setNoticeHref(null); }} aria-label={t("chat.dismiss")} className="-m-1 rounded p-1 text-muted hover:bg-surface-2"><X aria-hidden className="size-4" /></button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <AnimatePresence initial={false}>
+        {queue.length > 0 && (
+          <motion.ul key="queue" aria-label={t("chat.queue.label")} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: EASE }} className="mb-2 space-y-1 overflow-hidden">
+            {queue.map((q, i) => (
+              <li key={q.id} className="flex items-center gap-2 rounded-md bg-surface-2 py-1.5 pl-3 pr-1 text-sm">
+                <span className="shrink-0 text-xs text-muted">{i === 0 ? t("chat.queue.next") : t("chat.queue.then")}</span>
+                <span className="min-w-0 flex-1 truncate">{q.text}</span>
+                <button type="button" aria-label={t("chat.queue.drop", { text: q.text })} onClick={() => setQueue((x) => x.filter((y) => y.id !== q.id))}
+                  className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted hover:bg-surface hover:text-fg"><X aria-hidden className="size-3.5" /></button>
+              </li>
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
+      <Composer value={input} onChange={setInput} onSend={(p) => void sendFromComposer(p)} onStop={() => void stop()}
+        streaming={streaming} stopping={stopping} sensitive={sensitive} empty={empty} inputRef={inputRef}
+        top={chip} inputId={panel ? "assistant-input" : "chat-input"} />
+    </>
+  );
+
+  if (panel) {
+    return (
+      <GraphKindContext.Provider value={graphKind}>
+        <div className="relative flex h-full min-h-0 flex-col">
+          <div className="shrink-0 px-4 pt-3">{threadBar}</div>
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4">
+            <MuxBanner initial={mux} canFix={canFix} />
+            {thread}
+          </div>
+          <div className="shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-2">{footer}</div>
+          <AnimatePresence>
+            {drawer && (
+              <motion.div key="sessions" role="dialog" aria-label={t("chat.session.saved")}
+                className="absolute inset-0 z-20 flex flex-col bg-bg px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3"
+                initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }} transition={{ duration: 0.2, ease: EASE }}>
+                <div className="mb-2 flex justify-end">
+                  <IconButton label={t("chat.session.closeSaved")} onClick={() => setDrawer(false)}><X className="size-4" /></IconButton>
+                </div>
+                <div className="min-h-0 flex-1">
+                  <ConversationList {...listProps} heading
+                    onNew={(e) => { startNew(e); setDrawer(false); }}
+                    onOpen={(id) => { setDrawer(false); if (id !== activeIdRef.current) onOpenSession?.(id); }} />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </GraphKindContext.Provider>
+    );
+  }
 
   return (
     <GraphKindContext.Provider value={graphKind}>
@@ -413,82 +624,11 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
 
       <section aria-label={t("chat.thread.conversation")} className="flex min-h-[calc(100dvh-4.5rem)] min-w-0 flex-col pb-[calc(56px+env(safe-area-inset-bottom))] lg:min-h-[calc(100dvh-2.25rem)] lg:pb-0">
         <div className="mx-auto flex w-full max-w-[680px] flex-1 flex-col">
-          <ThreadBar
-            title={empty ? null : title}
-            startedAt={startedAt}
-            sensitive={sensitive}
-            level={level}
-            canEdit={!!conversationId && !empty}
-            busy={streaming}
-            pinned={!!current?.pinned}
-            unread={!!current?.unread}
-            compacting={compacting}
-            canCompact={messages.filter((m) => !m.id.startsWith("local-")).length > 5}
-            onOpenList={() => setDrawer(true)}
-            onNew={startNew}
-            onRename={(t) => (conversationId ? rename(conversationId, t) : Promise.resolve(false))}
-            onDelete={() => (conversationId ? remove(conversationId) : Promise.resolve(false))}
-            onPin={() => conversationId && void pin(conversationId, !current?.pinned)}
-            onUnread={() => conversationId && void markUnread(conversationId, !current?.unread)}
-            onCompact={() => void compact()}
-          />
-
+          {threadBar}
           <MuxBanner initial={mux} canFix={canFix} />
-
-          <div className="flex-1 pb-10" aria-live="polite" aria-busy={streaming}>
-            {empty ? (
-              <ChatEmpty starters={starters} onPick={(q) => submit(q)} />
-            ) : (
-              messages.map((m, i) => (
-                <div key={m.uid}>
-                  {m.role === "user"
-                    ? <Question m={m} first={i === 0} />
-                    : <Answer m={m} conversationId={conversationId} onDecided={decided} onFeedback={feedback}
-                        canClarify={!streaming && m.uid === lastAnswerId} onClarify={(t) => submit(t)} />}
-                  {summary && m.id === summary.upTo && <SummaryDivider text={summary.text} />}
-                </div>
-              ))
-            )}
-            <div ref={bottomRef} />
-          </div>
-
+          {thread}
           <div className="sticky bottom-[calc(56px+env(safe-area-inset-bottom))] z-20 -mx-2 bg-bg px-2 pb-3 pt-2 lg:bottom-0 lg:pb-6">
-            <AnimatePresence>
-              {error && (
-                <motion.div key="err" role="alert" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: EASE }}
-                  className="mb-2 flex items-start gap-3 rounded-lg bg-danger-tint px-4 py-3 text-sm text-danger">
-                  <p className="min-w-0 flex-1">{error}</p>
-                  <button type="button" onClick={() => setError(null)} aria-label={t("chat.dismissMessage")} className="-m-1 rounded p-1 hover:bg-surface/50"><X aria-hidden className="size-4" /></button>
-                </motion.div>
-              )}
-              {notice && !error && (
-                <motion.div key="notice" role="status" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: EASE }}
-                  className="mb-2 flex items-start gap-3 rounded-lg bg-surface px-4 py-3 text-sm">
-                  <p className="min-w-0 flex-1">
-                    {notice}
-                    {noticeHref && <> <Link href={noticeHref} className="text-accent underline-offset-4 hover:underline">{t("chat.notice.review")}</Link></>}
-                  </p>
-                  <button type="button" onClick={() => { setNotice(null); setNoticeHref(null); }} aria-label={t("chat.dismiss")} className="-m-1 rounded p-1 text-muted hover:bg-surface-2"><X aria-hidden className="size-4" /></button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-            <AnimatePresence initial={false}>
-              {queue.length > 0 && (
-                <motion.ul key="queue" aria-label={t("chat.queue.label")} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.18, ease: EASE }} className="mb-2 space-y-1 overflow-hidden">
-                  {queue.map((q, i) => (
-                    <li key={q.id} className="flex items-center gap-2 rounded-md bg-surface-2 py-1.5 pl-3 pr-1 text-sm">
-                      <span className="shrink-0 text-xs text-muted">{i === 0 ? t("chat.queue.next") : t("chat.queue.then")}</span>
-                      <span className="min-w-0 flex-1 truncate">{q.text}</span>
-                      <button type="button" aria-label={t("chat.queue.drop", { text: q.text })} onClick={() => setQueue((x) => x.filter((y) => y.id !== q.id))}
-                        className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted hover:bg-surface hover:text-fg"><X aria-hidden className="size-3.5" /></button>
-                    </li>
-                  ))}
-                </motion.ul>
-              )}
-            </AnimatePresence>
-            <Composer value={input} onChange={setInput} onSend={(p) => void sendFromComposer(p)} onStop={() => void stop()}
-              streaming={streaming} stopping={stopping} sensitive={sensitive} empty={empty} inputRef={inputRef} />
+            {footer}
           </div>
         </div>
       </section>
@@ -521,12 +661,14 @@ function SummaryDivider({ text }: { text: string }) {
   );
 }
 
-function ThreadBar({ title, startedAt, sensitive, level, canEdit, busy, pinned, unread, compacting, canCompact, onOpenList, onNew, onRename, onDelete, onPin, onUnread, onCompact }: {
+function ThreadBar({ title, startedAt, sensitive, level, canEdit, busy, pinned, unread, compacting, canCompact, onOpenList, onNew, onRename, onDelete, onPin, onUnread, onCompact, panel = false, extra }: {
   title: string | null; startedAt: string | null; sensitive: boolean; level: Sensitivity; canEdit: boolean; busy: boolean;
   pinned: boolean; unread: boolean; compacting: boolean; canCompact: boolean;
   onOpenList: () => void; onNew: (e: MouseEvent) => void;
   onRename: (t: string) => Promise<boolean>; onDelete: () => Promise<boolean>;
   onPin: () => void; onUnread: () => void; onCompact: () => void;
+  /** In the Ask panel the list and New buttons always show (the panel is narrow at any screen size). */
+  panel?: boolean; extra?: ReactNode;
 }) {
   const t = useT();
   const fmt = useFormatDate();
@@ -547,8 +689,8 @@ function ThreadBar({ title, startedAt, sensitive, level, canEdit, busy, pinned, 
   }
 
   return (
-    <div className="mb-8 flex min-h-9 items-center gap-2 lg:mb-10">
-      <IconButton label={t("chat.thread.showList")} className="-ml-1.5 lg:hidden" onClick={onOpenList}><PanelLeft className="size-[18px]" /></IconButton>
+    <div className={clsx("flex min-h-9 items-center gap-2", panel ? "mb-3" : "mb-8 lg:mb-10")}>
+      <IconButton label={t("chat.thread.showList")} className={clsx("-ml-1.5", !panel && "lg:hidden")} onClick={onOpenList}><PanelLeft className="size-[18px]" /></IconButton>
       <div className="min-w-0 flex-1">
         {mode === "rename" ? (
           <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void save(); }}>
@@ -572,10 +714,10 @@ function ThreadBar({ title, startedAt, sensitive, level, canEdit, busy, pinned, 
           </div>
         ) : title ? (
           <div className="min-w-0">
-            <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+            <h1 className="flex items-center gap-1.5 truncate text-sm font-medium">
               {pinned && <Pin aria-label={t("chat.thread.pinned")} className="size-3.5 shrink-0 text-muted" />}
               <span className="truncate">{title}</span>
-            </p>
+            </h1>
             <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
               {badge && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-px text-fg/80">
@@ -587,7 +729,7 @@ function ThreadBar({ title, startedAt, sensitive, level, canEdit, busy, pinned, 
             </p>
           </div>
         ) : (
-          <p className="text-sm text-muted lg:hidden">{t("chat.thread.newConversation")}</p>
+          <p className={clsx("text-sm text-muted", !panel && "lg:hidden")}>{panel ? t("chat.session.panel") : t("chat.thread.newConversation")}</p>
         )}
       </div>
       {mode === "view" && (
@@ -602,12 +744,13 @@ function ThreadBar({ title, startedAt, sensitive, level, canEdit, busy, pinned, 
               { label: t("chat.thread.delete"), icon: <Trash2 />, onSelect: () => setMode("delete"), danger: true, disabled: busy },
             ]} />
           )}
-          <Link href="/chat" onClick={onNew} aria-label={t("chat.thread.newConversation")} title={t("chat.thread.newConversation")}
-            className="inline-flex size-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-2 hover:text-fg lg:hidden">
+          <Link href="/chat?new=1" onClick={onNew} aria-label={t("chat.thread.newConversation")} title={t("chat.thread.newConversation")}
+            className={clsx("inline-flex size-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-2 hover:text-fg", !panel && "lg:hidden")}>
             <SquarePen className="size-4" aria-hidden />
           </Link>
         </div>
       )}
+      {extra}
     </div>
   );
 }

@@ -8,6 +8,9 @@ import { useT } from "@/lib/i18n/client";
 import type { ConnectionDTO, ConnectorInfo } from "@/lib/connectors";
 import { api, ConnectorIcon, CountsLine, iconFor, StatusBadge, StatusDot, useStatusText, type Person } from "./bits";
 import { ConnectForm } from "./connect-form";
+import { McpConnectForm } from "./mcp-form";
+
+const MCP = new Set(["mcp", "record"]);
 import { DisconnectDialog } from "./disconnect-dialog";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
@@ -22,6 +25,12 @@ export function ConnectionsApp({ initial, connectors, people, family, graphName 
   const [leaving, setLeaving] = useState<ConnectionDTO | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const galleryRef = useRef<HTMLDivElement>(null);
+
+  // Back from a server's sign-in page with a problem: say it.
+  useEffect(() => {
+    const msg = new URLSearchParams(window.location.search).get("signin");
+    if (msg && msg !== "ok") setNotice(msg);
+  }, []);
 
   const reload = useCallback(async () => {
     const d = await api<{ connections: ConnectionDTO[] }>("/api/connections").catch(() => null);
@@ -67,9 +76,14 @@ export function ConnectionsApp({ initial, connectors, people, family, graphName 
             {connectors.map((info) => (
               <li key={info.id} className="px-4 py-4">
                 <GalleryItem info={info} open={open === info.id} onToggle={() => setOpen(open === info.id ? null : info.id)}>
-                  <ConnectForm info={info} people={people} family={family}
-                    onCancel={() => setOpen(null)}
-                    onDone={(c) => { patch(c); setOpen(null); setNotice(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+                  {MCP.has(info.id) ? (
+                    <McpConnectForm info={info} family={family} onCancel={() => setOpen(null)}
+                      onDone={(c) => { patch(c); setOpen(null); setNotice(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+                  ) : (
+                    <ConnectForm info={info} people={people} family={family}
+                      onCancel={() => setOpen(null)}
+                      onDone={(c) => { patch(c); setOpen(null); setNotice(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+                  )}
                 </GalleryItem>
               </li>
             ))}

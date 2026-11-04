@@ -4,6 +4,7 @@ import { isParent, requireUser } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { annotateMessages, memoryAllowedFor } from "@/lib/assistant/apply";
 import { getConversation, listConversations, markRead } from "@/lib/assistant/store";
+import { setActiveSession } from "@/lib/assistant/session";
 import { muxHealth } from "@/lib/mux";
 import { ChatApp } from "@/components/chat/chat-app";
 import { graphStarters } from "../starters";
@@ -23,6 +24,8 @@ export default async function ConversationPage({ params }: { params: Promise<{ i
   await markRead(v, id);
   const [conversation, conversations, health, starters] = await Promise.all([getConversation(v, id), listConversations(v), muxHealth(), graphStarters(v, t)]);
   if (!conversation) notFound();
+  // Reopening a saved session makes it the active one (panel, other devices, the iOS app follow).
+  await setActiveSession(v, conversation.id).catch((e) => console.error("[chat] active session", e));
   if (!memoryAllowedFor(v)) for (const m of conversation.messages) m.proposals = m.proposals.filter((p) => p.type !== "propose_memory");
   await annotateMessages(v, conversation.messages, conversation.sensitivity);
   return (

@@ -1,8 +1,9 @@
 /** Session and device storage (server-only; no Next imports so it can be unit-tested and scripted). */
 import { and, desc, eq, gt, inArray, lte, ne } from "drizzle-orm";
 import { db } from "@/db";
-import { auditLog, authChallenges, sessions, users } from "@/db/schema";
+import { accountControls, auditLog, authChallenges, sessions, users } from "@/db/schema";
 import { guestActive } from "@/lib/gbrain/access";
+import { lockedProblem, mustChangePassword } from "./account-controls";
 import { writeAudit } from "./audit";
 import { hashToken, needsDeviceApproval, newToken, sessionExpiry, shouldTouch } from "./session";
 
@@ -13,9 +14,9 @@ export type ViewerRow = {
 };
 
 export type SessionState =
-  | { status: "none"; reason?: "expired" | "access_ended" }
+  | { status: "none"; reason?: "expired" | "access_ended" | "locked" }
   | { status: "pending"; sessionId: string; viewer: ViewerRow }
-  | { status: "active"; sessionId: string; viewer: ViewerRow };
+  | { status: "active"; sessionId: string; viewer: ViewerRow; mustChangePassword?: boolean };
 
 type UserRow = typeof users.$inferSelect;
 
@@ -35,8 +36,11 @@ export async function loadSession(token: string, now = new Date()): Promise<Sess
   const [row] = await db.select({
     sid: sessions.id, approved: sessions.approved, expiresAt: sessions.expiresAt, lastSeenAt: sessions.lastSeenAt,
     id: users.id, householdId: users.householdId, name: users.name, email: users.email, role: users.role,
-    personNodeId: users.personNodeId, accessExpiresAt: users.accessExpiresAt,
-  }).from(sessions).innerJoin(users, eq(users.id, sessions.userId)).where(eq(sessions.tokenHash, tokenHash)).limit(1);
+    personNodeId: users.personNodeId, accessExpiresAt: users.accessExpiresAt, passwordHash: users.passwordHash,
+    lockedAt: accountControls.lockedAt, tempPasswordHash: accountControls.tempPasswordHash,
+  }).from(sessions).innerJoin(users, eq(users.id, sessions.userId))
+    .leftJoin(accountControls, eq(accountControls.userId, sessions.userId))
+    .where(eq(sessions.tokenHash, tokenHash)).limit(1);
   if (!row) return { status: "none" };
   if (row.expiresAt.getTime() <= now.getTime()) {
     await db.delete(sessions).where(eq(sessions.id, row.sid));
@@ -47,11 +51,18 @@ export async function loadSession(token: string, now = new Date()): Promise<Sess
     await writeAudit(row, "session.ended_access_expired", { type: "user", id: row.id });
     return { status: "none", reason: "access_ended" };
   }
+  if (lockedProblem(row)) {
+    // Locking ends every session; this catches one that slipped through.
+    await db.delete(sessions).where(eq(sessions.userId, row.id));
+    return { status: "none", reason: "locked" };
+  }
   if (shouldTouch(row.lastSeenAt, now)) {
     await db.update(sessions).set({ lastSeenAt: now, expiresAt: sessionExpiry(now) }).where(eq(sessions.id, row.sid));
   }
   const viewer = toViewer(row);
-  return row.approved ? { status: "active", sessionId: row.sid, viewer } : { status: "pending", sessionId: row.sid, viewer };
+  return row.approved
+    ? { status: "active", sessionId: row.sid, viewer, mustChangePassword: mustChangePassword(row.passwordHash, row.tempPasswordHash) }
+    : { status: "pending", sessionId: row.sid, viewer };
 }
 
 /** A device a parent has approved for this user (latest decision wins). */

@@ -5,6 +5,7 @@
 import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { LOCKED_MESSAGE } from "./account-controls";
 import { writeAudit } from "./audit";
 import { auditIsGraphScoped } from "./audit-labels";
 import { API_HEADER, PATH_HEADER, SESSION_COOKIE } from "./constants";
@@ -33,9 +34,10 @@ export type Viewer = {
 } & GraphContext;
 
 export type SessionState =
-  | { status: "none"; reason?: "expired" | "access_ended" }
+  | { status: "none"; reason?: "expired" | "access_ended" | "locked" }
   | { status: "pending"; sessionId: string; viewer: ViewerRow }
-  | { status: "active"; sessionId: string; viewer: Viewer };
+  /** `mustChangePassword`: signed in with a temporary password an admin set; pages send them to choose a new one. */
+  | { status: "active"; sessionId: string; viewer: Viewer; mustChangePassword?: boolean };
 
 /** Attach the working graph to a signed-in user (the requested one when they are a member, else their default). */
 export async function withGraph(row: ViewerRow, requested: string | null | undefined): Promise<Viewer | null> {
@@ -43,6 +45,9 @@ export async function withGraph(row: ViewerRow, requested: string | null | undef
   if (!g) return null;
   return { ...row, personNodeId: await selfNodeIn(row, g, { personNodeIdIsHome: true }), ...g };
 }
+
+/** Where someone signed in with a temporary password is sent to choose their own. */
+export const MUST_CHANGE_PATH = "/settings?mustChange=1#password";
 
 /** The current request's session, resolved once per request. */
 export const getSession = cache(async (): Promise<SessionState> => {
@@ -53,7 +58,7 @@ export const getSession = cache(async (): Promise<SessionState> => {
   if (s.status !== "active") return s;
   const viewer = await withGraph(s.viewer, jar.get(GRAPH_COOKIE)?.value ?? null);
   if (!viewer) return { status: "none" };
-  return { status: "active", sessionId: s.sessionId, viewer };
+  return { status: "active", sessionId: s.sessionId, viewer, mustChangePassword: s.mustChangePassword };
 });
 
 /** The signed-in user, or null. Reads the session cookie. Sessions waiting for a parent's approval count as signed out. */
@@ -66,21 +71,41 @@ function unauthorized(s: SessionState): Response {
   if (s.status === "pending") {
     return Response.json({ error: "A parent needs to approve this device before you can use My Graph here.", pending: true }, { status: 403 });
   }
-  const error = s.status === "none" && s.reason === "access_ended" ? "Your guest access has ended." : "Please sign in again.";
+  const error = s.status === "none" && s.reason === "access_ended" ? "Your guest access has ended."
+    : s.status === "none" && s.reason === "locked" ? LOCKED_MESSAGE : "Please sign in again.";
   return Response.json({ error }, { status: 401 });
+}
+
+/** API calls with a temporary password: only signing in/out, settings and choosing a new password work until it's replaced. */
+async function refuseUntilPasswordChanged(): Promise<void> {
+  const path = (await headers()).get(PATH_HEADER) ?? "";
+  if (path.startsWith("/api/auth/") || path.startsWith("/api/settings")) return;
+  throw Response.json({ error: "Choose a new password in Settings before you go on.", mustChangePassword: true }, { status: 403 });
 }
 
 /** The signed-in user for route handlers; throws a 401 (or 403 for an unapproved device) JSON Response otherwise. */
 export async function requireUserApi(): Promise<Viewer> {
   const s = await getSession();
-  if (s.status === "active") return s.viewer;
+  if (s.status === "active") {
+    if (s.mustChangePassword) await refuseUntilPasswordChanged();
+    return s.viewer;
+  }
   throw unauthorized(s);
 }
 
 /** The signed-in user; redirects to /login (pages) or throws a 401 Response (route handlers) when signed out. */
 export async function requireUser(): Promise<Viewer> {
   const s = await getSession();
-  if (s.status === "active") return s.viewer;
+  if (s.status === "active") {
+    // A temporary password from an admin has to be replaced before anything else (settings is where you do that).
+    if (s.mustChangePassword) {
+      const h = await headers();
+      const path = h.get(PATH_HEADER) ?? "";
+      if (h.get(API_HEADER) === "1") await refuseUntilPasswordChanged();
+      else if (!path.startsWith("/settings")) redirect(MUST_CHANGE_PATH);
+    }
+    return s.viewer;
+  }
   const h = await headers();
   if (h.get(API_HEADER) === "1") throw unauthorized(s);
   if (s.status === "pending") redirect("/login/pending");

@@ -1,5 +1,7 @@
 import { isParent, requireUser } from "@/lib/auth";
 import { canUseAssistantTools } from "@/lib/automations/policy";
+import { isPlatformAdmin } from "@/lib/plans";
+import { getAdminT } from "@/lib/plans/i18n";
 import { SettingsNav, type SettingsTab } from "./_components/settings-nav";
 
 export default async function SettingsLayout({ children }: { children: React.ReactNode }) {
@@ -9,6 +11,7 @@ export default async function SettingsLayout({ children }: { children: React.Rea
     { href: "/settings#profile", key: "profile", anchor: true },
     { href: "/settings#language", key: "language", anchor: true },
     { href: "/settings#appearance", key: "appearance", anchor: true },
+    { href: "/settings#plan", key: "plan", anchor: true },
     { href: "/settings#security", key: "security", anchor: true },
     { href: "/settings#graph", key: "graph", anchor: true },
     ...(parent ? [{ href: "/settings#household", key: "household", anchor: true } as const] : []),
@@ -20,6 +23,8 @@ export default async function SettingsLayout({ children }: { children: React.Rea
       { href: "/settings/audit", key: "audit" } as const,
     ] : []),
     ...(v.role !== "guest" ? [{ href: "/people/model", key: "model", external: true } as const] : []),
+    // Only the platform admin gets a way into the console (its name is translated here, never sent to others).
+    ...(isPlatformAdmin(v) ? [{ href: "/admin", key: "admin", external: true, label: (await getAdminT())("admin.nav.open") } as const] : []),
   ];
   return (
     <div className="lg:grid lg:grid-cols-[200px_minmax(0,1fr)] lg:gap-12">

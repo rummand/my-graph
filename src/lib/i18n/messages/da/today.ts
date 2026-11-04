@@ -292,6 +292,11 @@ const messages: MessageTree = {
       0: "Hvad ved jeg om det her?",
       1: "Hvad har ændret sig i denne uge?",
     },
+    practice: {
+      0: "Hvilke notater venter på min underskrift?",
+      1: "Hvad har ændret sig for denne klient siden sidste session?",
+      2: "Hvilke opfølgninger skal ske i denne uge?",
+    },
   },
 
   attention: {

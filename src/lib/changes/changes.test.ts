@@ -145,6 +145,8 @@ describe("who may deliver", () => {
     "app/api/changes/deliver-ready/route.ts", // a person presses Deliver all ready and confirms the counts
     "lib/mentions/annotate.ts", // a person presses Send on their own message
     "lib/automations/apply.ts", // a person approves a suggestion
+    "lib/profile/facts.ts", // a person adds a fact on a profile and presses Save
+    "lib/clinical/items.ts", // a clinician presses Sign or Confirm on a drafted item
   ]);
   const files: string[] = [];
   const walk = (dir: string) => {

@@ -28,7 +28,7 @@ const messages: MessageTree = {
     and: "{a} and {b}",
   },
   kinds: {
-    family: "Family", personal: "Just me", work: "Work", shared: "To share", other: "Something else", partner: "For a partner", project: "A project",
+    family: "Family", personal: "Just me", work: "Work", shared: "To share", other: "Something else", partner: "For a partner", project: "A project", practice: "Practice",
   },
   roles: { owner: "Owner", editor: "Can add and edit", viewer: "Can only look" },
   list: {

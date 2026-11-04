@@ -1,5 +1,5 @@
 import {
-  pgTable, pgEnum, uuid, text, timestamp, integer, real, boolean, jsonb, index, uniqueIndex, unique, vector, customType,
+  pgTable, pgEnum, uuid, text, timestamp, integer, real, boolean, jsonb, index, uniqueIndex, unique, vector, customType, primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -23,14 +23,14 @@ export const visibilityEnum = pgEnum("visibility", ["private", "parents", "house
 export const nodeTypeEnum = pgEnum("node_type", ["person", "place", "event", "topic", "document", "source", "organization", "project", "thing"]);
 export const timePrecisionEnum = pgEnum("time_precision", ["minute", "day", "month", "year"]);
 export const edgeStatusEnum = pgEnum("edge_status", ["confirmed", "unconfirmed", "inferred", "rejected", "superseded"]);
-export const sourceKindEnum = pgEnum("source_kind", ["upload", "wiki", "chat", "manual", "sync", "web", "email", "connector"]);
+export const sourceKindEnum = pgEnum("source_kind", ["upload", "wiki", "chat", "manual", "sync", "web", "email", "connector", "recording"]);
 export const sourceStatusEnum = pgEnum("source_status", ["pending", "processing", "ready", "failed"]);
 export const activityEnum = pgEnum("activity", ["upload", "ocr", "transcription", "llm_extraction", "manual_edit", "inference", "import"]);
 export const agentTypeEnum = pgEnum("agent_type", ["user", "model", "rule"]);
 export const subjectTypeEnum = pgEnum("subject_type", ["node", "edge"]);
 export const authorKindEnum = pgEnum("author_kind", ["user", "assistant"]);
 export const messageRoleEnum = pgEnum("message_role", ["user", "assistant", "system"]);
-export const graphKindEnum = pgEnum("graph_kind", ["family", "personal", "work", "shared", "other", "partner", "project"]);
+export const graphKindEnum = pgEnum("graph_kind", ["family", "personal", "work", "shared", "other", "partner", "project", "practice"]);
 export const graphRoleEnum = pgEnum("graph_role", ["owner", "editor", "viewer"]);
 
 /* ── Accounts ─────────────────────────────────────────────────────────────────────────────────────────── */
@@ -267,6 +267,8 @@ export const chunks = pgTable("chunks", {
 export type Locator = {
   page?: number; charStart?: number; charEnd?: number; bbox?: [number, number, number, number]; timeStartSec?: number; timeEndSec?: number;
   slide?: number; sheet?: string; range?: string; image?: string; region?: string;
+  /** A recording: the moment on its own time line, in ms (a meeting from Record), and who was speaking there. */
+  time?: number; speaker?: string;
 };
 
 /** W3C PROV-style record: why we believe a node or edge. */
@@ -655,6 +657,17 @@ export const assistantSettings = pgTable("assistant_settings", {
   onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("assistant_settings_graph_user_uq").on(t.graphId, t.userId)]);
+
+/**
+ * The always-active assistant session: per person, per graph, the conversation the Ask panel, /chat and the apps
+ * open on. "New conversation" clears it (the next question starts one); opening a saved session makes it active.
+ */
+export const assistantSessions = pgTable("assistant_sessions", {
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  conversationId: uuid("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.graphId, t.userId] })]);
 
 /** A recipe run started by hand ("Run" on a recipe), outside any automation. Same shape as automation_runs. */
 export const recipeRuns = pgTable("recipe_runs", {
@@ -1177,3 +1190,264 @@ export const complianceRuns = pgTable("compliance_runs", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   finishedAt: timestamp("finished_at", { withTimezone: true }),
 }, (t) => [index("compliance_runs_target_idx").on(t.graphId, t.targetType, t.targetId, t.createdAt)]);
+
+/* ── Plans, add-ons and the platform admin console (tiers-admin, migration plans_admin) ─────────────────── */
+
+/**
+ * Subscription plans. `public` plans (free, plus, family) may be shown on pricing, onboarding and the settings plan
+ * list; hidden ones (ultimate) are only ever shown to the platform admin and to the people who have them.
+ * `stripePriceId` is the payments seam: null until billing exists.
+ */
+export const plans = pgTable("plans", {
+  key: text("key").primaryKey(),
+  name: text("name").notNull(),
+  public: boolean("public").notNull().default(true),
+  sort: integer("sort").notNull().default(0),
+  description: text("description"),
+  stripePriceId: text("stripe_price_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** The features a plan turns on (feature ids as used by hasFeature). */
+export const planFeatures = pgTable("plan_features", {
+  planKey: text("plan_key").notNull().references(() => plans.key, { onDelete: "cascade" }),
+  feature: text("feature").notNull(),
+}, (t) => [primaryKey({ columns: [t.planKey, t.feature] })]);
+
+/**
+ * A person's own plan (per user account). Household members without a row inherit the household owner's plan for
+ * shared features; add-ons never inherit.
+ */
+export const accountPlans = pgTable("account_plans", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  planKey: text("plan_key").notNull().references(() => plans.key),
+  assignedBy: uuid("assigned_by"),
+  assignedAt: timestamp("assigned_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Sub-items of Ultimate granted to one account (practice_psychology, practice_medical, insights). */
+export const accountAddons = pgTable("account_addons", {
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  addon: text("addon").notNull(),
+  grantedBy: uuid("granted_by"),
+  grantedAt: timestamp("granted_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [primaryKey({ columns: [t.userId, t.addon] })]);
+
+/**
+ * Admin controls on an account. `lockedAt` set: the person can't sign in and every session ends.
+ * `tempPasswordHash`: a temporary password the admin set; while users.password_hash still equals it, the person has
+ * to choose a new password before using the app.
+ */
+export const accountControls = pgTable("account_controls", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  lockedAt: timestamp("locked_at", { withTimezone: true }),
+  lockedBy: uuid("locked_by"),
+  lockReason: text("lock_reason"),
+  tempPasswordHash: text("temp_password_hash"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One-time password reset links (24 hours, single use). Only sha256(token) is stored. */
+export const passwordResets = pgTable("password_resets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull(),
+  createdBy: uuid("created_by"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  usedAt: timestamp("used_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("password_resets_token_idx").on(t.tokenHash), index("password_resets_user_idx").on(t.userId)]);
+
+/* ── Clinical practice (clinical workstream, migration clinical) ─────────────────────────────────────────── */
+
+/**
+ * A client's or patient's written consent, per purpose: recording | transcription | notes | analysis | sharing.
+ * `sharedWith` names the colleagues (user ids) the client agreed may see their record. Valid while signed, not past
+ * `reviewAt` and not withdrawn. Every change writes a `clinical_consent_events` row.
+ */
+export const clinicalConsents = pgTable("clinical_consents", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  householdId: uuid("household_id").notNull(),
+  clientNodeId: uuid("client_node_id").notNull().references(() => nodes.id, { onDelete: "cascade" }),
+  clinicianId: uuid("clinician_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** The signed consent form in the library. */
+  documentSourceId: uuid("document_source_id").references(() => sources.id, { onDelete: "set null" }),
+  purposes: text("purposes").array().notNull().default([]),
+  sharedWith: uuid("shared_with").array().notNull().default([]),
+  signedAt: timestamp("signed_at", { withTimezone: true }).notNull(),
+  reviewAt: timestamp("review_at", { withTimezone: true }),
+  withdrawnAt: timestamp("withdrawn_at", { withTimezone: true }),
+  withdrawnNote: text("withdrawn_note"),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("clinical_consents_client_idx").on(t.graphId, t.clientNodeId)]);
+
+/** History of a consent: created | changed | withdrawn | renewed, with the row before and after. */
+export const clinicalConsentEvents = pgTable("clinical_consent_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  consentId: uuid("consent_id").notNull().references(() => clinicalConsents.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  clientNodeId: uuid("client_node_id").notNull(),
+  actorId: uuid("actor_id"),
+  action: text("action").notNull(),
+  before: jsonb("before").$type<Record<string, unknown> | null>(),
+  after: jsonb("after").$type<Record<string, unknown> | null>(),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("clinical_consent_events_client_idx").on(t.graphId, t.clientNodeId, t.at)]);
+
+/**
+ * A therapy session or a medical consultation: its node in the practice graph (private to the clinician, shared by
+ * `shares`), the audio and the transcript (sensitive sources), and the state of the background work on it.
+ */
+export const clinicalSessions = pgTable("clinical_sessions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  householdId: uuid("household_id").notNull(),
+  clientNodeId: uuid("client_node_id").notNull().references(() => nodes.id, { onDelete: "cascade" }),
+  clinicianId: uuid("clinician_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  nodeId: uuid("node_id").references(() => nodes.id, { onDelete: "set null" }),
+  /** psychology | medical */
+  discipline: text("discipline").notNull(),
+  /** session | consultation */
+  kind: text("kind").notNull(),
+  title: text("title"),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  /** planned | recorded | transcribed | drafted | signed */
+  status: text("status").notNull().default("planned"),
+  /** da | en */
+  language: text("language").notNull().default("da"),
+  audioSourceId: uuid("audio_source_id").references(() => sources.id, { onDelete: "set null" }),
+  transcriptSourceId: uuid("transcript_source_id").references(() => sources.id, { onDelete: "set null" }),
+  /** idle | running | done | failed — transcription and drafting run in the background. */
+  work: text("work").notNull().default("idle"),
+  workError: text("work_error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("clinical_sessions_client_idx").on(t.graphId, t.clientNodeId, t.startsAt), index("clinical_sessions_clinician_idx").on(t.clinicianId, t.startsAt)]);
+
+/**
+ * Everything drafted or recorded for a client: notes and letters (to sign), suggested codes, medications, allergies,
+ * lab values, themes, hypotheses and follow-ups (proposed → confirmed or dismissed), risk flags (open → acknowledged)
+ * and measures (PHQ-9, GAD-7). Nothing reaches the graph until the clinician signs or confirms it; then it is
+ * delivered as a change set they author (`changeSetId`).
+ */
+export const clinicalItems = pgTable("clinical_items", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  householdId: uuid("household_id").notNull(),
+  clientNodeId: uuid("client_node_id").notNull().references(() => nodes.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").references(() => clinicalSessions.id, { onDelete: "cascade" }),
+  clinicianId: uuid("clinician_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  status: text("status").notNull().default("proposed"),
+  /** The consent purpose that allowed it (notes | analysis …): withdrawn analysis hides analysis items. */
+  purpose: text("purpose").notNull().default("notes"),
+  title: text("title"),
+  content: jsonb("content").$type<Record<string, unknown>>().notNull().default({}),
+  /** [{ quote, sourceId, locator }] */
+  evidence: jsonb("evidence").$type<Record<string, unknown>[]>().notNull().default([]),
+  value: real("value"),
+  unit: text("unit"),
+  refLow: real("ref_low"),
+  refHigh: real("ref_high"),
+  measuredAt: timestamp("measured_at", { withTimezone: true }),
+  version: integer("version").notNull().default(1),
+  model: text("model"),
+  changeSetId: uuid("change_set_id"),
+  artifactId: uuid("artifact_id"),
+  decidedBy: uuid("decided_by"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("clinical_items_client_idx").on(t.graphId, t.clientNodeId, t.kind), index("clinical_items_session_idx").on(t.sessionId)]);
+
+/** Every version of a clinical item: who drafted, edited, signed, confirmed or dismissed it, and what it said. */
+export const clinicalItemRevisions = pgTable("clinical_item_revisions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  itemId: uuid("item_id").notNull().references(() => clinicalItems.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  action: text("action").notNull(),
+  status: text("status").notNull(),
+  content: jsonb("content").$type<Record<string, unknown>>().notNull().default({}),
+  actorKind: text("actor_kind").notNull(),
+  actorId: uuid("actor_id"),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("clinical_item_revisions_item_idx").on(t.itemId, t.version)]);
+
+/* ── Living profiles (profiles workstream): the written part of a person's or any node's profile ─────────── */
+
+/**
+ * The free-text blocks of a node's profile page (TipTap JSON, validated by src/lib/profile/doc). Read and written by
+ * whoever may read / edit the node; `version` bumps on every save and each save keeps a profile_doc_versions row.
+ */
+export const profileDocs = pgTable("profile_docs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  nodeId: uuid("node_id").notNull().references(() => nodes.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  doc: jsonb("doc").$type<Record<string, unknown>>().notNull(),
+  version: integer("version").notNull().default(1),
+  updatedBy: uuid("updated_by"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("profile_docs_node_uq").on(t.graphId, t.nodeId)]);
+
+/**
+ * Every saved version of a profile doc, plus "Restore as a proposal" drafts. event: saved | restored | proposed |
+ * delivered | dropped. Saved/restored rows carry the version they became; a proposal carries the version it restores
+ * (`basedOn`) and waits for a person.
+ */
+export const profileDocVersions = pgTable("profile_doc_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  nodeId: uuid("node_id").notNull().references(() => nodes.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  doc: jsonb("doc").$type<Record<string, unknown>>().notNull(),
+  text: text("text").notNull().default(""),
+  event: text("event").notNull().default("saved"),
+  basedOn: integer("based_on"),
+  authorKind: text("author_kind").notNull().default("person"),
+  createdBy: uuid("created_by"),
+  createdByName: text("created_by_name"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("profile_doc_versions_node_idx").on(t.graphId, t.nodeId, t.createdAt)]);
+
+/**
+ * "How they've been doing": insights about a person generated for one viewer from what that viewer may read. Private to
+ * `viewerId` (never shown to anyone else); regenerated on demand. `evidenceHash` says whether new evidence arrived.
+ */
+export const profileInsights = pgTable("profile_insights", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  nodeId: uuid("node_id").notNull().references(() => nodes.id, { onDelete: "cascade" }),
+  viewerId: uuid("viewer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  evidenceHash: text("evidence_hash").notNull(),
+  model: text("model"),
+  generatedAt: timestamp("generated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("profile_insights_viewer_uq").on(t.graphId, t.nodeId, t.viewerId)]);
+
+/* ── Recordings from an MCP server (Record): the time line the player follows ─────────────────────────── */
+
+/**
+ * The time line of a recording source (kind "recording"): every word with its moment (ms on the recording's own time
+ * line), the lines (speaker turns) and who the speakers are, as the MCP server gave them; and the waveform's peaks
+ * (0–1), fetched with the audio and kept here. Read by the player; the words never go to mux from here.
+ */
+export const recordingTimelines = pgTable("recording_timelines", {
+  sourceId: uuid("source_id").primaryKey().references(() => sources.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  durationMs: integer("duration_ms").notNull().default(0),
+  /** [{ a, b, w, line }] */
+  words: jsonb("words").$type<{ a: number; b: number; w: string; line: number }[]>().notNull().default([]),
+  /** [{ a, b, speaker, first, last, text }] */
+  lines: jsonb("lines").$type<{ a: number; b: number; speaker: string | null; first: number; last: number; text: string }[]>().notNull().default([]),
+  /** [{ key, name, email }] */
+  speakers: jsonb("speakers").$type<{ key: string; name: string; email: string | null }[]>().notNull().default([]),
+  peaks: jsonb("peaks").$type<number[] | null>(),
+  /** "exact": word times from the server; "estimated": spread over each line from a plain transcript. */
+  timing: text("timing").notNull().default("exact"),
+  /** Whether the server can give this recording's sound (null: not asked yet). */
+  hasAudio: boolean("has_audio"),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("recording_timelines_graph_idx").on(t.graphId)]);

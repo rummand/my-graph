@@ -40,6 +40,7 @@ enum DebugHooks {
         case "history": return id.map { .history($0, "") }
         case "settings": return .settings
         case "widget": return .debugWidget
+        case "chats": return .conversations
         default: return nil
         }
     }

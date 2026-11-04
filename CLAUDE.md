@@ -106,6 +106,30 @@ nothing links two graphs. The family graph keeps the household rules; other grap
   Documents export as PowerPoint: `GET /api/artifacts/[id]/export?format=pptx[&fonts=standard]`.
 - **Unattended web**: automations, recipes and check-ins may research the web (owners/parents, `web` capability on)
   within a per-run budget (`src/lib/web/budget.ts`); what they find is a change set a person delivers.
+- **Plans and admin** (`src/lib/plans`): Free / Plus / Family are public; Ultimate is hidden (never offered on any
+  surface) and carries add-ons (`practice_psychology`, `practice_medical`, `insights`) that count only on the
+  account's own Ultimate. Gate features on the server with `hasFeature(v, "<feature>")` (on for everyone in dev
+  unless `PLANS_ENFORCE=1`; always enforced in production). Platform admins = `PLATFORM_ADMIN_EMAILS` (default the
+  founder's address; those addresses are reserved, nobody can take one by changing an email). `/admin` and
+  `/api/admin/**` are a 404 for everyone else; every admin action is audited (`auditAdmin`, not best-effort); reset
+  links are single-use, 24 h, only the hash is stored. Admin copy is server-only (`getAdminT`), never in the client dictionary.
+- **Living profiles** (`src/lib/profile`): every person/node page is a profile — sections by kind, facts as blocks
+  with source chips, a TipTap notes doc with versions (`profile_docs`, `profile_doc_versions`), restore as a
+  proposal, and private per-viewer insights (feature `insights`). Someone else's private node needs an edit share to
+  change; clinical clients/patients only their clinician.
+- **Clinical practice** (`src/lib/clinical`, `/clinical`): a `practice` graph kind (gated by the practice add-ons).
+  Clients/patients are private person nodes owned by the clinician; colleagues read only via a share that a
+  consent in force names (`clinicalAccess`). Every piece of work checks the written consent's purpose on the server
+  (`gate`); withdrawal stops recording, hides analysis and removes shares. Drafts are proposals; signing delivers a
+  change set the clinician authors. Transcription and drafting use mux with `sensitive` (no fallback). The client's
+  living profile is the record's base; analysis on it (insights, assistant page context) needs consent for analysis.
+- **Assistant session and panel**: one active conversation per person per graph (`assistant_sessions`,
+  `GET/PUT /api/chat/active`, used by web and iOS). The Ask panel (⌘J) is on every page and sends the open page
+  `{path, kind, id, title}`; the server re-reads it as the viewer in the current graph (`resolvePage`) and drops
+  anything unreadable. Dictation: the browser's/iPhone's own speech recognition (da-DK / en), falling back to
+  `POST /api/transcribe` (auth, 12 MB, audio types only, rate-limited, not stored, mux no-fallback).
+- **iPhone**: the share extension "Send to My Graph" (files, photos, text, links → library upload or
+  `/api/library/paste`), Paste in Library, dictation in Ask, and the same active session.
 
 ## Contracts
 
@@ -125,6 +149,9 @@ index files.
 | timeline | `src/lib/timeline/**`, `src/app/api/timeline/**`, `src/app/(app)/timeline/**`, `src/components/timeline/**` |
 | today | `src/lib/briefs/**`, `src/app/api/reminders/**`, `src/app/(app)/page.tsx`, `src/components/today/**` |
 | people & meta model | `src/lib/meta/**`, `src/lib/people/**`, `src/app/api/meta/**`, `src/app/api/people/**`, `src/app/(app)/people/**`, `src/components/people/**` |
+| plans & admin | `src/lib/plans/**`, `src/app/(app)/admin/**`, `src/app/api/admin/**`, `src/components/admin/**`, `src/app/login/reset/**` |
+| profile | `src/lib/profile/**`, `src/app/api/profile/**`, `src/components/profile/**` |
+| clinical | `src/lib/clinical/**`, `src/app/api/clinical/**`, `src/app/(app)/clinical/**`, `src/components/clinical/**` |
 | versioning | `src/lib/changes/**`, `src/lib/history/**`, `src/app/api/{changes,history,checkpoints}/**`, `src/app/(app)/{changes,history}/**`, `src/components/{changes,history}/**` |
 | web | `src/lib/web/**`, `src/app/api/web/**` |
 | connectors | `src/lib/connectors/**`, `src/app/api/connections/**`, `src/app/(app)/connections/**`, `src/components/connections/**` |

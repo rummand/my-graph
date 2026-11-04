@@ -4,16 +4,20 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { clsx } from "clsx";
 import {
-  ArrowUpRight, Bot, Database, Globe, KeyRound, Layers, Palette, Plug, ScrollText, Shapes, UserRound, UsersRound,
+  ArrowUpRight, BadgeCheck, Bot, Database, Globe, KeyRound, Layers, Palette, Plug, ScrollText, Shapes, ShieldCheck, UserRound, UsersRound,
 } from "lucide-react";
 import { useT } from "@/lib/i18n/client";
 
 const ICONS = {
   profile: UserRound, language: Globe, appearance: Palette, security: KeyRound, graph: Layers, household: UsersRound,
   assistant: Bot, connections: Plug, data: Database, family: UsersRound, audit: ScrollText, model: Shapes,
+  plan: BadgeCheck, admin: ShieldCheck,
 } as const;
-/** `key` names the label (settings.nav.<key>) and the icon. `anchor` items are sections of /settings. */
-export type SettingsTab = { href: string; key: keyof typeof ICONS; anchor?: boolean; external?: boolean };
+/**
+ * `key` names the label (settings.nav.<key>) and the icon. `anchor` items are sections of /settings. `label`
+ * overrides the message (for copy the server translates and keeps out of the client dictionary).
+ */
+export type SettingsTab = { href: string; key: keyof typeof ICONS; anchor?: boolean; external?: boolean; label?: string };
 
 /**
  * Sections of the settings page, then the pages under it. A column beside the page on wide screens (it follows the
@@ -50,7 +54,7 @@ export function SettingsNav({ tabs }: { tabs: SettingsTab[] }) {
           className={clsx("flex h-9 items-center gap-2.5 whitespace-nowrap rounded-md px-2.5 text-sm transition-colors",
             active ? "bg-surface font-medium text-fg" : "text-muted hover:bg-surface-2 hover:text-fg")}>
           <Icon size={16} strokeWidth={1.75} aria-hidden className="shrink-0" />
-          <span className="flex-1">{t(`settings.nav.${x.key}`)}</span>
+          <span className="flex-1">{x.label ?? t(`settings.nav.${x.key}`)}</span>
           {x.external && <ArrowUpRight size={14} aria-hidden className="shrink-0 opacity-60" />}
         </Link>
       </li>

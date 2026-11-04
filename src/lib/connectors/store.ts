@@ -195,6 +195,8 @@ export async function createConnection(v: Viewer, input: { connector: string; la
 function defaultLabel(connector: string, config: Record<string, unknown>): string {
   if (connector === "aula_calendar") return "Aula calendar";
   if (connector === "imap") return typeof config.user === "string" ? config.user : "Mailbox";
+  if (connector === "record") return "Record";
+  if (connector === "mcp") return typeof config.feedHost === "string" ? `MCP server at ${config.feedHost}` : "MCP server";
   return typeof config.feedHost === "string" ? `Calendar from ${config.feedHost}` : "Calendar";
 }
 

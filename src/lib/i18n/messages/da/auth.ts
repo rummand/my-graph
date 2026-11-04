@@ -17,6 +17,7 @@ const messages: MessageTree = {
       signed_out: "Du er logget ud.",
       expired: "Din session er udløbet. Log ind igen.",
       access_ended: "Din gæsteadgang er udløbet. Bed den, der inviterede dig, om at forlænge den.",
+      locked: "Kontoen er låst. Kontakt My Graph-support for at få den låst op.",
     },
     passkey: "Log ind med en adgangsnøgle",
     passkeyBusy: "Venter på din adgangsnøgle…",

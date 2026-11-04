@@ -49,6 +49,10 @@ export function fieldText(field: string, t: TFn): string {
     const label = words.charAt(0).toUpperCase() + words.slice(1);
     return t("history.fieldProp", { key: /^[\p{L}\p{N} ()/-]+$/u.test(label) ? t(`people.attr.${label}`, undefined, words) : words });
   }
+  // Dotted fields written by other areas ("corpus.rules.approved"): a word for the known ones, never the raw key.
+  if (field === "corpus.rules.approved") return t("history.field.rulesApproved");
+  if (field === "corpus.rules.dropped") return t("history.field.rulesDropped");
+  if (field.includes(".")) return (field.split(".").pop() ?? field).replace(/_/g, " ");
   return FIELDS.includes(field) ? t(`history.field.${field}`) : field.replace(/_/g, " ");
 }
 const KINDS = ["created", "updated", "retired", "restored", "merged", "added", "removed", "linked", "shared", "unlinked"];

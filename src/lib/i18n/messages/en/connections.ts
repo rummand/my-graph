@@ -24,6 +24,20 @@ const messages: MessageTree = {
   cancel: "Cancel",
 
   connectors: {
+    record: {
+      title: "Record: meetings, transcripts and people",
+      blurb: "Your recorded meetings from Record: the transcript with who said what and when, the people in them, what was decided and the to-dos. Play the sound with the words following along.",
+      reads: "Meetings you can read in Record, their transcripts and word times, speakers and participants, summaries, decisions and to-dos, and the sound when Record hands it out.",
+      never: "Changes anything in Record on its own. Tools that change things (like ticking off a to-do) are off, and each use waits for your approval.",
+      help: "Sign in with Record and choose which workspaces My Graph may read, or make a key in Record under API and AI tools and paste it here. Each meeting becomes a recording in the library; who spoke and what was decided are proposed for you to approve.",
+    },
+    mcp: {
+      title: "MCP server",
+      blurb: "Any server that speaks the Model Context Protocol. Its tools become available to the assistant in this graph, the ones you choose.",
+      reads: "The tools and resources the server offers. The assistant uses only the tools you turn on.",
+      never: "Uses a tool that changes something without asking you first, or follows instructions in what the server answers.",
+      help: "Paste the server's MCP address. If it supports signing in (OAuth), use Sign in; otherwise paste an API key it gave you.",
+    },
     aula_calendar: {
       title: "Aula calendar",
       blurb: "Your own Aula events (parent meetings, trips, closing days) on the timeline, from the two calendar links Aula gives every parent.",
@@ -55,6 +69,8 @@ const messages: MessageTree = {
   },
 
   fields: {
+    serverUrl: { label: "Server address", hint: "The MCP address, usually ending in /mcp." },
+    apiKey: { label: "API key", hint: "Stored encrypted. Never shown again." },
     label: { label: "Name", hint: "How it shows in this list." },
     url: { label: "Calendar link", hint: "Starts with https:// or webcal://. It works like a password, so it is stored encrypted." },
     yearUrl: { label: "Year calendar link", hint: "Updated by Aula every night." },
@@ -84,6 +100,17 @@ const messages: MessageTree = {
     paused: "Paused",
   },
   codes: {
+    signIn: "sign in to the server to connect it.",
+    missingKey: "paste an API key, or sign in instead.",
+    badKey: "that doesn't look like a Record key (they start with rk_).",
+    notMcp: "nothing answers MCP at that address. Check that it ends in the MCP path.",
+    forbidden: "the server refused: the key or sign-in may not read this.",
+    mcpOther: "the server needs something from you.",
+    oauth: "the sign-in didn't work.",
+    timeout: "the server took too long to answer.",
+    serverError: "the server had a problem.",
+    network: "the server couldn't be reached.",
+    rateLimited: "the server asked us to slow down.",
     authFailed: "the mail server refused the user name or app password. Enter the app password again.",
     linkRefused: "the calendar link now asks for a sign-in. Paste a fresh link.",
     linkGone: "the calendar link no longer works. It may have been reset; paste the new one.",
@@ -142,7 +169,7 @@ const messages: MessageTree = {
     },
     nothingNew: "Nothing new.",
     proposals: { one: "Opened {count} proposal", other: "Opened {count} proposals" },
-    streams: { events: "Calendar", year: "Year calendar", week: "Week calendar", mail: "Mail" },
+    streams: { catalog: "Tools", meetings: "Meetings", events: "Calendar", year: "Year calendar", week: "Week calendar", mail: "Mail" },
     from: "From {host}",
     connected: "Connected {when}",
   },

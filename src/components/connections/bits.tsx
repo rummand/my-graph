@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
-import { CalendarDays, Folder, Globe, Mail, School, type LucideIcon } from "lucide-react";
+import { CalendarDays, Folder, Globe, Mail, Mic, Plug, School, type LucideIcon } from "lucide-react";
 import { Badge } from "@/components/ui";
 import { formatAgo, useLocale, useT } from "@/lib/i18n/client";
 import type { ConnectionDTO, ConnectorInfo } from "@/lib/connectors";
@@ -22,7 +22,7 @@ export async function api<T>(url: string, init?: RequestInit & { json?: unknown 
   return body as T;
 }
 
-const ICONS: Record<ConnectorInfo["icon"], LucideIcon> = { calendar: CalendarDays, school: School, mail: Mail, folder: Folder, globe: Globe };
+const ICONS: Record<ConnectorInfo["icon"], LucideIcon> = { calendar: CalendarDays, school: School, mail: Mail, folder: Folder, globe: Globe, mic: Mic, plug: Plug };
 
 export function ConnectorIcon({ icon, className }: { icon: ConnectorInfo["icon"]; className?: string }) {
   const I = ICONS[icon] ?? Globe;
@@ -30,6 +30,8 @@ export function ConnectorIcon({ icon, className }: { icon: ConnectorInfo["icon"]
 }
 
 export function iconFor(connector: string): ConnectorInfo["icon"] {
+  if (connector === "record") return "mic";
+  if (connector === "mcp") return "plug";
   return connector === "imap" ? "mail" : connector === "aula_calendar" || connector === "aula" ? "school" : "calendar";
 }
 

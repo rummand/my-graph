@@ -163,7 +163,7 @@ export function PeopleOverview({ initial, canManageModel, graph }: {
                   className={clsx("inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-sm transition-colors active:scale-[0.97]",
                     on ? "bg-fg text-bg" : "bg-surface-2 text-muted hover:text-fg")}>
                   {circleName(t, template, c)}
-                  <span className={clsx("tabular-nums", on ? "text-bg/70" : "text-muted/80")}>{circleCounts.get(c)}</span>
+                  <span className={clsx("tabular-nums", on ? "text-bg/80" : "text-muted")}>{circleCounts.get(c)}</span>
                 </button>
               );
             })}

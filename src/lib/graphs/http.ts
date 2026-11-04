@@ -98,7 +98,18 @@ export function limit(l: AttemptLimiter, key: string): void {
 const name = z.string().trim().min(1, "Give the graph a name.").max(60, "Keep the name under 60 characters.");
 const description = z.string().trim().max(400, "Keep the description under 400 characters.").nullish().transform((s) => (s ? s : null));
 const hue = z.number().int().min(0).max(359);
-const kind = z.enum(["personal", "work", "partner", "project", "shared", "other"]);
+const kind = z.enum(["personal", "work", "partner", "project", "shared", "other", "practice"]);
+/** Graph kinds only some plans may make (a clinical practice). Check `hasFeature` before creating one of these. */
+export const GATED_GRAPH_KINDS = ["practice"] as const;
+
+/** Refuses a gated graph kind (404-style: the kind doesn't exist) for an account whose plan doesn't include it. */
+export async function requireKindAllowed(v: Viewer, kind: string | undefined): Promise<void> {
+  if (!kind || !(GATED_GRAPH_KINDS as readonly string[]).includes(kind)) return;
+  const { hasFeature } = await import("@/lib/plans");
+  if (!(await hasFeature(v, "practice_psychology")) && !(await hasFeature(v, "practice_medical"))) {
+    throw new GraphError(400, "That kind of graph isn't available.", { fields: [{ key: "kind", message: "Not available." }] });
+  }
+}
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const email = z.string().trim().toLowerCase().max(254).refine((s) => EMAIL.test(s), "Enter a valid email address.");
 const memberRole = z.enum(["editor", "viewer"]);

@@ -43,7 +43,7 @@ struct MainTabs: View {
                 stack(.today) { TodayView() }
             }
             Tab(String(localized: "Ask"), systemImage: "bubble.left.and.text.bubble.right", value: AppTab.ask) {
-                stack(.ask) { ConversationsView() }
+                stack(.ask) { ActiveChatView() }
             }
             Tab(String(localized: "People"), systemImage: "person.2", value: AppTab.people) {
                 stack(.people) { PeopleView() }
@@ -68,6 +68,7 @@ struct MainTabs: View {
             if let t = DebugHooks.tab { tab = t }
             if let r = DebugHooks.route { routers[tab]?.push(r) }
             if let q = DebugHooks.ask { tab = .ask; routers[.ask]?.push(.debugAsk(q)) }
+            if DebugShare.request != nil { try? await Task.sleep(for: .seconds(1)); DebugShare.presentIfAsked() }
         }
     }
 
@@ -112,6 +113,7 @@ private struct RouterStack<Content: View>: View {
         case .documents: DocumentsView()
         case .settings: SettingsView()
         case .timeline: TimelineScreen()
+        case .conversations: ConversationsView()
         case .debugAsk(let q): ChatView(conversationId: nil, autoAsk: q)
         case .debugWidget:
             VStack(spacing: 16) {

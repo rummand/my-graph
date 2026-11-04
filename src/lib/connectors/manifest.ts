@@ -15,7 +15,7 @@ export const CONNECTOR_STATUSES = ["official", "unofficial", "coming_soon"] as c
 export type ConnectorStatus = (typeof CONNECTOR_STATUSES)[number];
 
 /** What a stream's items become: a calendar event, an email in a correspondence, a document, a photo. */
-export const MAP_TARGETS = ["event", "correspondence", "document", "photo"] as const;
+export const MAP_TARGETS = ["event", "correspondence", "document", "photo", "recording", "catalog"] as const;
 export type MapTarget = (typeof MAP_TARGETS)[number];
 
 export type StreamSpec = {
@@ -45,7 +45,7 @@ export type Manifest<C extends z.ZodType = z.ZodType, S extends z.ZodType = z.Zo
   status: ConnectorStatus;
   /** Only offered in these graph kinds (Aula is for a family graph). Empty = everywhere. */
   graphKinds?: string[];
-  icon: "calendar" | "school" | "mail" | "folder" | "globe";
+  icon: "calendar" | "school" | "mail" | "folder" | "globe" | "mic" | "plug";
   auth: { type: AuthType };
   config: C;
   secrets: S;
@@ -82,7 +82,7 @@ export const manifestShape = z.object({
   version: z.string().regex(/^\d+(\.\d+){0,2}$/),
   status: z.enum(CONNECTOR_STATUSES),
   graphKinds: z.array(z.string()).optional(),
-  icon: z.enum(["calendar", "school", "mail", "folder", "globe"]),
+  icon: z.enum(["calendar", "school", "mail", "folder", "globe", "mic", "plug"]),
   auth: z.object({ type: z.enum(AUTH_TYPES) }),
   fields: z.array(fieldSchema),
   streams: z.array(streamSchema),

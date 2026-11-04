@@ -25,7 +25,11 @@ import links from "./links";
 import docs from "./docs";
 import corpus from "./corpus";
 import compliance from "./compliance";
+import mcp from "./mcp";
+import recordings from "./recordings";
+import clinical from "./clinical";
+import profile from "./profile";
 
-const en: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, wiki, graph, changes, history, memory, automations, connections, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance };
+const en: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, wiki, graph, changes, history, memory, automations, connections, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance, profile, clinical, mcp, recordings };
 
 export default en;

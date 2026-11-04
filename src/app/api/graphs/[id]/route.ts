@@ -1,5 +1,5 @@
 import { archiveGraph, getGraph, updateGraph } from "@/lib/graphs";
-import { parseJson, parseParam, route, updateGraphBody, uuid } from "@/lib/graphs/http";
+import { parseJson, requireKindAllowed, parseParam, route, updateGraphBody, uuid } from "@/lib/graphs/http";
 
 type Ctx = { params: Promise<{ id: string }> };
 const NOT_FOUND = "That graph doesn't exist, or you're not in it.";
@@ -14,6 +14,7 @@ export const GET = route(async (_req, v, ctx: Ctx) => {
 export const PATCH = route(async (req, v, ctx: Ctx) => {
   const id = parseParam((await ctx.params).id, uuid, NOT_FOUND);
   const body = await parseJson(req, updateGraphBody);
+  await requireKindAllowed(v, body.kind);
   return { graph: await updateGraph(v, id, body) };
 });
 

@@ -74,6 +74,11 @@ function splitSegment(s: TextSegment, size: number, overlap: number): Chunk[] {
   }));
 }
 
+/** A recording's line carries its moment in ms (`time`) and its speaker: the chunk starting there keeps both. */
+function moment(s: TextSegment): Pick<Locator, "time" | "speaker"> {
+  return { ...(s.at?.time !== undefined ? { time: s.at.time } : {}), ...(s.at?.speaker ? { speaker: s.at.speaker } : {}) };
+}
+
 function packTimed(segments: TextSegment[], size: number, overlap: number): Chunk[] {
   const out: Chunk[] = [];
   let i = 0;
@@ -90,11 +95,11 @@ function packTimed(segments: TextSegment[], size: number, overlap: number): Chun
     // A single very long segment: split it by characters but keep its time range.
     if (group.length === 1 && text.length > size) {
       for (const { start, end } of splitText(text, size, overlap)) {
-        out.push({ text: text.slice(start, end), locator: { timeStartSec: group[0].timeStartSec, timeEndSec: group[0].timeEndSec ?? group[0].timeStartSec } });
+        out.push({ text: text.slice(start, end), locator: { ...moment(group[0]), timeStartSec: group[0].timeStartSec, timeEndSec: group[0].timeEndSec ?? group[0].timeStartSec } });
       }
     } else {
       const last = group[group.length - 1];
-      out.push({ text, locator: { timeStartSec: group[0].timeStartSec, timeEndSec: last.timeEndSec ?? last.timeStartSec } });
+      out.push({ text, locator: { ...moment(group[0]), timeStartSec: group[0].timeStartSec, timeEndSec: last.timeEndSec ?? last.timeStartSec } });
     }
     if (j >= segments.length) break;
     // Overlap: step back over trailing segments totalling <= overlap chars, but always advance at least one.

@@ -8,7 +8,9 @@ import { loadNodeDetail } from "@/lib/gbrain/detail";
 import { getMeta } from "@/lib/meta";
 import { Avatar, Badge, buttonClass } from "@/components/ui";
 import { FactRow, ProvenancePanel, formatWhen, sentenceCase, typeLabel } from "@/components/provenance";
-import { HistoryPanel, WhoSaid, WhoSaidField } from "@/components/history";
+import { WhoSaid, WhoSaidField } from "@/components/history";
+import { LivingProfile } from "@/components/profile/living-profile";
+import { loadProfile } from "@/lib/profile";
 import { scopeOf } from "@/lib/graphs/pure";
 import { getLocale, getT } from "@/lib/i18n";
 import { MergeSuggestions, NodeEditor, NodeMark } from "@/components/graph";
@@ -56,6 +58,9 @@ export default async function NodePage({ params }: Props) {
     .map(([label, es]) => [label, es.sort((a, b) => rank(a.status) - rank(b.status) || otherOf(a).label.localeCompare(otherOf(b).label))] as const)
     .sort(([la, a], [lb, b]) => peopleFirst(a, otherOf) - peopleFirst(b, otherOf) || b.length - a.length || la.localeCompare(lb));
   const toCheck = d.edges.filter((e) => e.status === "unconfirmed" || e.status === "inferred").length;
+  // The facts that need a decision keep their confirm / mark-wrong rows here; the living profile shows the rest.
+  const checkFirst = ordered.map(([label, es]) => [label, es.filter((e) => e.status === "unconfirmed" || e.status === "inferred")] as const).filter(([, es]) => es.length > 0);
+  const living = await loadProfile(v, node.id);
   const sourceCount = new Set(Object.values(d.provenance.edges).flat().concat(d.provenance.node).map((p) => p.sourceId).filter(Boolean)).size;
 
   const when = formatWhen(node.startAt, node.endAt, node.timePrecision, locale);
@@ -111,27 +116,19 @@ export default async function NodePage({ params }: Props) {
         </div>
       </header>
 
-      <div className="grid gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,1fr)_340px]">
-        <section aria-labelledby="facts-h" className="min-w-0">
-          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <h2 id="facts-h" className="text-lg font-semibold tracking-[-0.01em]">{t("graph.node.whatWeKnow")}</h2>
-            {d.edges.length > 0 && (
+      <LivingProfile initial={living} hide={["overview"]}
+        afterOverview={null}
+        end={checkFirst.length > 0 ? (
+          <section aria-labelledby="facts-h" className="min-w-0">
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+              <h2 id="facts-h" className="text-lg font-semibold tracking-[-0.01em]">{t("graph.node.whatWeKnow")}</h2>
               <p className="text-sm text-muted">
                 <span className="tabular-nums">{t("graph.node.factsFrom", { facts: t("graph.node.facts", { count: d.edges.length }), sources: t("graph.node.sources", { count: sourceCount }) })}</span>
                 {toCheck > 0 && <>, <span className="font-medium tabular-nums text-warn">{t("graph.node.toCheck", { count: toCheck })}</span></>}
               </p>
-            )}
-          </div>
-          {ordered.length === 0 ? (
-            <div className="rounded-lg bg-surface-2/60 px-6 py-10 text-center">
-              <p className="font-medium">{t("graph.node.nothingConnects", { name: node.label })}</p>
-              <p className="mx-auto mt-1.5 max-w-[48ch] text-sm text-muted">
-                {t("graph.node.nothingConnectsBody", { name: node.label })}
-              </p>
             </div>
-          ) : (
             <div className="space-y-7">
-              {ordered.map(([label, es]) => (
+              {checkFirst.map(([label, es]) => (
                 <section key={label} aria-label={label}>
                   <h3 className="mb-2 flex items-baseline gap-2 text-[15px] font-medium">
                     {label} <span className="text-sm font-normal tabular-nums text-muted">{es.length}</span>
@@ -147,23 +144,20 @@ export default async function NodePage({ params }: Props) {
                 </section>
               ))}
             </div>
-          )}
-        </section>
-
-        <aside className="min-w-0 space-y-6 lg:sticky lg:top-8 lg:self-start">
+          </section>
+        ) : null}
+        aside={<>
           <ProvenancePanel items={d.provenance.node} agents={d.agents} title={t("graph.node.whereFrom", { name: node.label })}
             className="rounded-lg bg-surface p-5" emptyText={t("graph.node.noRecords")} t={t} locale={locale} />
           <WhoSaid name={node.label} items={allProvenance} agents={d.agents} t={t} locale={locale} className="px-1" />
           <WhoSaidField nodeId={node.id} className="px-1" />
-          <HistoryPanel v={v} subjectId={node.id} name={node.label} className="px-1" />
           <AlsoInSection nodeId={node.id} hrefBase={node.type === "person" ? "/people/" : "/node/"} className="px-1" />
           {memoryAllowed(v) && <MemoryPanel title={t("graph.node.memory")} aboutNodeId={node.id} aboutName={node.type === "person" ? node.label.split(" ")[0] : node.label} />}
           {d.mergeSuggestions.length > 0 && (
             <MergeSuggestions nodeId={node.id} nodeLabel={node.label}
               suggestions={d.mergeSuggestions.map((s) => ({ other: { id: s.other.id, type: s.other.type, label: s.other.label, summary: s.other.summary }, reason: s.reason, score: s.score }))} />
           )}
-        </aside>
-      </div>
+        </>} />
     </article>
   );
 }

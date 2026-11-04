@@ -7,13 +7,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Save to My Graph"
+            "value": "Send to My Graph"
           }
         },
         "da": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gem i My Graph"
+            "value": "Send til My Graph"
           }
         }
       }

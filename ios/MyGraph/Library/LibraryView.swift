@@ -11,6 +11,7 @@ struct LibraryView: View {
     @State private var query = ""
     @State private var type: String?
     @State private var uploading: String?
+    @State private var uploadProgress: Double?
     @State private var uploadNote: String?
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var showPhotos = false
@@ -42,11 +43,18 @@ struct LibraryView: View {
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
                 if let u = uploading {
-                    HStack(spacing: 10) { ProgressView(); Text(u).mgFont(.secondary) }
-                        .listRowBackground(Color.mgSurface)
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 10) { ProgressView(); Text(u).mgFont(.secondary) }
+                        if let p = uploadProgress { ProgressView(value: p).tint(Color.mgAccent) }
+                    }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityIdentifier("library.sending")
+                    .listRowBackground(Color.mgSurface)
                 }
                 if let n = uploadNote {
-                    NoticeBar(text: n, tone: n.hasPrefix("⚠") ? .danger : .muted)
+                    NoticeBar(text: n.hasPrefix("⚠") ? String(n.dropFirst(2)) : n, tone: n.hasPrefix("⚠") ? .danger : .success)
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier("library.note")
                         .listRowBackground(Color.clear)
                         .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
                 }
@@ -85,6 +93,17 @@ struct LibraryView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
+                // The system Paste button: no "Allow Paste" prompt, and it greys out when there's nothing to paste.
+                PasteButton(supportedContentTypes: Self.pasteTypes) { providers in
+                    Task { @MainActor in await paste(providers) }
+                }
+                .labelStyle(.iconOnly)
+                .buttonBorderShape(.circle)
+                .tint(Color.mgFg)
+                .disabled(uploading != nil)
+                .accessibilityIdentifier("library.paste")
+            }
+            ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button { showPhotos = true } label: { Label("Photos", systemImage: "photo.on.rectangle") }
                     Button { showFiles = true } label: { Label("Files", systemImage: "folder") }
@@ -109,7 +128,7 @@ struct LibraryView: View {
             guard !picked.isEmpty else { return }
             Task { await uploadPhotos(picked); photoItems = [] }
         }
-        .fileImporter(isPresented: $showFiles, allowedContentTypes: [.pdf, .image, .plainText, .text, .audio, .emailMessage, .commaSeparatedText], allowsMultipleSelection: true) { result in
+        .fileImporter(isPresented: $showFiles, allowedContentTypes: [.item], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { Task { await uploadFiles(urls) } }
         }
         .fullScreenCover(isPresented: $showCamera) {
@@ -126,6 +145,44 @@ struct LibraryView: View {
             .ignoresSafeArea()
         }
         .task { if items == nil { await load() } }
+    }
+
+    /// What Paste takes: images, files (PDF, Office, anything), web addresses and text.
+    static let pasteTypes: [UTType] = [.image, .pdf, .fileURL, .url, .plainText, .utf8PlainText, .text, .data]
+
+    /// Pastes what's on the clipboard into this graph's library: files upload, a web address is read and saved as a
+    /// web page, other text becomes a note (`POST /api/library/paste`).
+    private func paste(_ providers: [NSItemProvider]) async {
+        uploading = String(localized: "Getting what you copied…")
+        uploadNote = nil
+        let (items, skipped) = await SendKit.load(providers)
+        guard !items.isEmpty else {
+            uploading = nil
+            uploadNote = "⚠ " + (skipped.isEmpty ? String(localized: "There's nothing on the clipboard My Graph can save. Copy a photo, a file, some text or a link.") : String(localized: "That's too large to add. Files can be up to 50 MB."))
+            Haptics.warning()
+            return
+        }
+        await send(items)
+    }
+
+    private func send(_ items: [Outgoing]) async {
+        uploadProgress = 0
+        defer { uploading = nil; uploadProgress = nil }
+        let s = await SendKit.send(items, visibility: visibility) { p, line in
+            uploadProgress = p
+            if !line.isEmpty { uploading = line }
+        }
+        report(s)
+        await load()
+    }
+
+    private func report(_ s: SendSummary) {
+        let graph = app.currentGraph?.name ?? "My Graph"
+        if s.allFailed { uploadNote = "⚠ " + (s.errors.first ?? ""); Haptics.warning(); return }
+        if s.added == 0 { uploadNote = String(localized: "Already in the library, so it wasn't added twice."); return }
+        Haptics.success()
+        let first = String(localized: "Added to \(graph). The assistant is reading it now; what it finds shows up on the item.")
+        uploadNote = s.errors.isEmpty ? first : "⚠ " + first + " " + s.errors.joined(separator: " ")
     }
 
     static func stamp() -> String { Date().formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour().minute()) .replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: ".") }
@@ -170,23 +227,7 @@ struct LibraryView: View {
         guard !files.isEmpty else { uploading = nil; return }
         uploading = files.count == 1 ? String(localized: "Uploading “\(files[0].filename)”…") : String(localized: "Uploading \(files.count) files…")
         uploadNote = nil
-        defer { uploading = nil }
-        do {
-            let r = try await API.shared.upload(files, visibility: visibility)
-            let results = r.results ?? []
-            let failed = results.filter { $0.error != nil }
-            let dupes = results.filter { $0.duplicate == true }
-            if let f = failed.first?.error { uploadNote = "⚠ " + f; Haptics.warning() }
-            else if !dupes.isEmpty { uploadNote = String(localized: "Already in the library, so it wasn't added twice.") }
-            else {
-                Haptics.success()
-                uploadNote = String(localized: "Added. The assistant is reading it now; what it finds shows up on the item.")
-            }
-            await load()
-        } catch {
-            uploadNote = "⚠ " + error.plainMessage
-            Haptics.warning()
-        }
+        await send(files.map { .file($0) })
     }
 }
 

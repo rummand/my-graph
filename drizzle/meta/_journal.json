@@ -85,6 +85,41 @@
       "when": 1793792985566,
       "tag": "0011_corpus_compliance",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793800519532,
+      "tag": "0012_session_active",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793800602824,
+      "tag": "0013_plans_admin",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793800637485,
+      "tag": "0014_clinical",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1793800643106,
+      "tag": "0015_profile_docs",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793801707078,
+      "tag": "0016_mcp_recordings",
+      "breakpoints": true
     }
   ]
 }

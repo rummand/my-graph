@@ -46,8 +46,8 @@ describe("manifests", () => {
   });
 
   it("offers Aula only in a family graph and shows it as coming soon", () => {
-    expect(offeredIn("family").map((c) => c.manifest.id)).toEqual(["aula_calendar", "imap", "ics", "aula"]);
-    expect(offeredIn("work").map((c) => c.manifest.id)).toEqual(["imap", "ics"]);
+    expect(offeredIn("family").map((c) => c.manifest.id)).toEqual(["aula_calendar", "record", "imap", "ics", "mcp", "aula"]);
+    expect(offeredIn("work").map((c) => c.manifest.id)).toEqual(["record", "imap", "ics", "mcp"]);
     const aula = connectorInfo(connectorById("aula")!);
     expect(aula.status).toBe("coming_soon");
     expect(aula.authType).toBe("mitid_session");

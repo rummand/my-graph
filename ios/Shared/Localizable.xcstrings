@@ -497,6 +497,26 @@
         }
       }
     },
+    "Added to %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføjet til %@"
+          }
+        }
+      }
+    },
+    "Added to %@. The assistant is reading it now; what it finds shows up on the item.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføjet til %@. Assistenten læser det nu; det, den finder, vises på elementet."
+          }
+        }
+      }
+    },
     "Added to the graph.": {
       "localizations": {
         "da": {
@@ -837,6 +857,16 @@
         }
       }
     },
+    "Chats": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Samtaler"
+          }
+        }
+      }
+    },
     "Close": {
       "localizations": {
         "da": {
@@ -913,6 +943,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nuværende graf"
+          }
+        }
+      }
+    },
+    "Danish": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dansk"
           }
         }
       }
@@ -1157,6 +1197,16 @@
         }
       }
     },
+    "English": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Engelsk"
+          }
+        }
+      }
+    },
     "Enjoy the rest of the day.": {
       "localizations": {
         "da": {
@@ -1273,6 +1323,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Familieregler"
+          }
+        }
+      }
+    },
+    "File": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fil"
           }
         }
       }
@@ -1463,6 +1523,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Få et lille puf, når noget forfalder"
+          }
+        }
+      }
+    },
+    "Getting what you copied…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Henter det, du kopierede…"
           }
         }
       }
@@ -1757,6 +1827,36 @@
         }
       }
     },
+    "Listening on this iPhone…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lytter på denne iPhone…"
+          }
+        }
+      }
+    },
+    "Listening…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lytter…"
+          }
+        }
+      }
+    },
+    "Listens in %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lytter på %@"
+          }
+        }
+      }
+    },
     "Low": {
       "localizations": {
         "da": {
@@ -1933,6 +2033,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ny chat"
+          }
+        }
+      }
+    },
+    "New conversation": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ny samtale"
           }
         }
       }
@@ -2187,6 +2297,16 @@
         }
       }
     },
+    "Nothing was added. Please try again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet blev tilføjet. Prøv igen."
+          }
+        }
+      }
+    },
     "Notifications": {
       "localizations": {
         "da": {
@@ -2287,12 +2407,32 @@
         }
       }
     },
+    "Open My Graph and sign in first. Then you can send things here from any app.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn My Graph og log ind først. Så kan du sende ting hertil fra alle apps."
+          }
+        }
+      }
+    },
     "Open My Graph to sign in.": {
       "localizations": {
         "da": {
           "stringUnit": {
             "state": "translated",
             "value": "Åbn My Graph for at logge ind."
+          }
+        }
+      }
+    },
+    "Open now": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åben nu"
           }
         }
       }
@@ -2323,6 +2463,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Åbner My Graph"
+          }
+        }
+      }
+    },
+    "Opening your conversation": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbner din samtale"
           }
         }
       }
@@ -2647,6 +2797,16 @@
         }
       }
     },
+    "Reading %@…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Læser %@…"
+          }
+        }
+      }
+    },
     "Reading…": {
       "localizations": {
         "da": {
@@ -2777,6 +2937,26 @@
         }
       }
     },
+    "Saved as a note": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemmes som en note"
+          }
+        }
+      }
+    },
+    "Saved as a web page": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemmes som en webside"
+          }
+        }
+      }
+    },
     "Saved on your account, so the web and this iPhone speak the same language, and the assistant writes in it too.": {
       "localizations": {
         "da": {
@@ -2793,6 +2973,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gemt i %@. Assistenten læser det nu."
+          }
+        }
+      }
+    },
+    "Saving the note…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemmer noten…"
           }
         }
       }
@@ -2893,6 +3083,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Send"
+          }
+        }
+      }
+    },
+    "Send to My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send til My Graph"
+          }
+        }
+      }
+    },
+    "Sending %lld files…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender %lld filer…"
+          }
+        }
+      }
+    },
+    "Sending “%@”…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender “%@”…"
+          }
+        }
+      }
+    },
+    "Sending…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender…"
           }
         }
       }
@@ -3197,12 +3427,52 @@
         }
       }
     },
+    "Speak your question": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sig dit spørgsmål"
+          }
+        }
+      }
+    },
+    "Speech recognition in %@ isn't available on this iPhone right now.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Talegenkendelse på %@ er ikke tilgængelig på denne iPhone lige nu."
+          }
+        }
+      }
+    },
+    "Starting…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Starter…"
+          }
+        }
+      }
+    },
     "Stop": {
       "localizations": {
         "da": {
           "stringUnit": {
             "state": "translated",
             "value": "Stop"
+          }
+        }
+      }
+    },
+    "Stop listening": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop med at lytte"
           }
         }
       }
@@ -3287,6 +3557,26 @@
         }
       }
     },
+    "That's too large to add. Files can be up to 50 MB.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det er for stort til at tilføje. Filer kan højst være 50 MB."
+          }
+        }
+      }
+    },
+    "That's too large to send. Files can be up to 50 MB.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det er for stort til at sende. Filer kan højst være 50 MB."
+          }
+        }
+      }
+    },
     "The assistant": {
       "localizations": {
         "da": {
@@ -3317,12 +3607,32 @@
         }
       }
     },
+    "The assistant is reading it now. What it finds waits for you on Today.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assistenten læser det nu. Det, den finder, venter på dig under I dag."
+          }
+        }
+      }
+    },
     "The assistant is still reading this. Pull down to check again.": {
       "localizations": {
         "da": {
           "stringUnit": {
             "state": "translated",
             "value": "Assistenten læser stadig. Træk ned for at tjekke igen."
+          }
+        }
+      }
+    },
+    "The microphone is busy. Try again in a moment.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mikrofonen er optaget. Prøv igen om lidt."
           }
         }
       }
@@ -3337,12 +3647,42 @@
         }
       }
     },
+    "There's no microphone to listen with.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der er ingen mikrofon at lytte med."
+          }
+        }
+      }
+    },
     "There's nothing here My Graph can save. Try a photo, a PDF, some text or a link.": {
       "localizations": {
         "da": {
           "stringUnit": {
             "state": "translated",
             "value": "Der er intet her, My Graph kan gemme. Prøv et billede, en PDF, noget tekst eller et link."
+          }
+        }
+      }
+    },
+    "There's nothing here My Graph can save. Try a photo, a file, some text or a link.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der er ikke noget her, My Graph kan gemme. Prøv et billede, en fil, noget tekst eller et link."
+          }
+        }
+      }
+    },
+    "There's nothing on the clipboard My Graph can save. Copy a photo, a file, some text or a link.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der er ikke noget i udklipsholderen, My Graph kan gemme. Kopiér et billede, en fil, noget tekst eller et link."
           }
         }
       }
@@ -3407,6 +3747,26 @@
         }
       }
     },
+    "To speak your question, allow Speech Recognition for My Graph in Settings.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvis du vil sige dit spørgsmål, skal du give My Graph adgang til talegenkendelse i Indstillinger."
+          }
+        }
+      }
+    },
+    "To speak your question, allow the microphone for My Graph in Settings.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvis du vil sige dit spørgsmål, skal du give My Graph adgang til mikrofonen i Indstillinger."
+          }
+        }
+      }
+    },
     "To-dos": {
       "localizations": {
         "da": {
@@ -3433,6 +3793,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "I morgen"
+          }
+        }
+      }
+    },
+    "Too large to send (over 50 MB): %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For stor til at sende (over 50 MB): %@"
           }
         }
       }
@@ -3937,6 +4307,16 @@
         }
       }
     },
+    "You can only look at the graphs you're in, so there's nowhere to send this.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kan kun se de grafer, du er med i, så der er ikke noget sted at sende det hen."
+          }
+        }
+      }
+    },
     "You don't have access to this.": {
       "localizations": {
         "da": {
@@ -4013,6 +4393,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dine grafer"
+          }
+        }
+      }
+    },
+    "Your saved conversations": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dine gemte samtaler"
           }
         }
       }

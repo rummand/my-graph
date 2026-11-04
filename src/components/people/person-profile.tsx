@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ArrowLeft, CalendarDays, FileText, MessageCircle, Pencil, Phone, Plus, Users } from "lucide-react";
 import { clsx } from "clsx";
@@ -17,14 +17,16 @@ import { relationOptions } from "./relation-options";
 import { WellbeingChart } from "./wellbeing-chart";
 import { MemoryPanel } from "@/components/memory/memory-panel";
 import { AlsoInSection } from "@/components/links/also-in";
-import { HistoryCard, WhoSaidField } from "@/components/history/live";
+import { WhoSaidField } from "@/components/history/live";
+import { LivingProfile } from "@/components/profile/living-profile";
+import type { ProfileView } from "@/lib/profile/types";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-export function PersonProfileView({ initial }: { initial: PersonProfile }) {
+export function PersonProfileView({ initial, living }: { initial: PersonProfile; living: ProfileView }) {
   const [profile, setProfile] = useState(initial);
   const id = profile.person.id;
-  const reload = async () => setProfile(await api<PersonProfile>(`/api/people/${id}`));
+  const reload = useCallback(async () => setProfile(await api<PersonProfile>(`/api/people/${id}`)), [id]);
   const canWrite = profile.viewer.role !== "guest";
   const { t } = useFmt();
   const family = profile.graph?.family ?? true;
@@ -35,32 +37,31 @@ export function PersonProfileView({ initial }: { initial: PersonProfile }) {
         <ArrowLeft className="size-4" aria-hidden="true" />{t("people.profile.back")}
       </Link>
       <Header profile={profile} onSaved={setProfile} />
-      <div className="mt-10 grid gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="min-w-0 space-y-10">
-          <Block title={t("people.profile.howTheyveBeen")}>
-            <div className="rounded-lg bg-surface p-4 sm:p-5">
-              <WellbeingChart personId={id} observations={profile.observations} />
-              {canWrite && <CheckIn personId={id} name={profile.person.label} isSelf={profile.person.isViewer} family={family} onSaved={reload} />}
-            </div>
-          </Block>
-          <ContactLog profile={profile} onSaved={reload} />
-          <ActivityFeed items={profile.feed} family={family} />
-        </div>
-        <div className="min-w-0 space-y-10">
-          <Details profile={profile} onSaved={setProfile} />
-          <Relationships profile={profile} onSaved={reload} />
-          <AlsoInSection nodeId={id} hrefBase="/people/" />
-          <MemoryPanel title={t("people.profile.memory")} aboutNodeId={id} aboutName={profile.person.label.split(" ")[0]} graphKind={profile.graph?.template} />
-          <Milestones profile={profile} onSaved={reload} />
-          <WhoSaidField nodeId={id} />
-          <HistoryCard subjectId={id} name={profile.person.label} />
-          {profile.provenance.length > 0 && (
-            <Block title={t("people.profile.whereFrom")}>
-              <div className="flex flex-wrap gap-1.5">{profile.provenance.map((c, i) => <Cite key={i} c={c} n={i + 1} />)}</div>
-              <Link href={`/node/${id}`} className="mt-3 inline-block text-sm text-accent hover:underline">{t("people.profile.openInGraph")}</Link>
+      <div className="mt-10">
+        <LivingProfile initial={living} onGraphChanged={reload}
+          afterOverview={
+            <Block title={t("people.profile.howTheyveBeen")} id="wellbeing">
+              <div className="rounded-lg bg-surface p-4 sm:p-5">
+                <WellbeingChart personId={id} observations={profile.observations} />
+                {canWrite && <CheckIn personId={id} name={profile.person.label} isSelf={profile.person.isViewer} family={family} onSaved={reload} />}
+              </div>
             </Block>
-          )}
-        </div>
+          }
+          end={<><ContactLog profile={profile} onSaved={reload} /><ActivityFeed items={profile.feed} family={family} /></>}
+          aside={<>
+            <Details profile={profile} onSaved={setProfile} />
+            <Relationships profile={profile} onSaved={reload} />
+            <AlsoInSection nodeId={id} hrefBase="/people/" />
+            <MemoryPanel title={t("people.profile.memory")} aboutNodeId={id} aboutName={profile.person.label.split(" ")[0]} graphKind={profile.graph?.template} />
+            <Milestones profile={profile} onSaved={reload} />
+            <WhoSaidField nodeId={id} />
+            {profile.provenance.length > 0 && (
+              <Block title={t("people.profile.whereFrom")}>
+                <div className="flex flex-wrap gap-1.5">{profile.provenance.map((c, i) => <Cite key={i} c={c} n={i + 1} />)}</div>
+                <Link href={`/node/${id}`} className="mt-3 inline-block text-sm text-accent hover:underline">{t("people.profile.openInGraph")}</Link>
+              </Block>
+            )}
+          </>} />
       </div>
     </div>
   );

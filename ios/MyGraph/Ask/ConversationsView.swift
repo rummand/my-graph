@@ -6,6 +6,12 @@ struct ConversationsView: View {
     @State private var items: Loadable<[ConversationSummary]> = .idle
     @State private var query = ""
     @State private var searchTask: Task<Void, Never>?
+    /// Set when the list is the Ask tab's "Chats" sheet: a tap reopens that session instead of pushing it.
+    var onPick: ((String) -> Void)? = nil
+    var onNew: (() -> Void)? = nil
+    var activeId: String? = nil
+
+    private func newChat() { if let onNew { onNew() } else { router.push(.newChat()) } }
 
     var body: some View {
         List {
@@ -19,7 +25,7 @@ struct ConversationsView: View {
                     EmptyStateView(title: query.isEmpty ? "No chats yet" : "No chats match",
                                    message: query.isEmpty ? "Ask about anything in your graph: dates, people, letters. Every answer shows where it came from." : "Try other words, or start a new chat.",
                                    systemImage: "bubble.left.and.text.bubble.right",
-                                   actionTitle: "New chat") { router.push(.newChat()) }
+                                   actionTitle: "New chat") { newChat() }
                         .listRowBackground(Color.clear)
                 } else {
                     let pinned = list.filter { $0.pinned == true }
@@ -40,10 +46,10 @@ struct ConversationsView: View {
             searchTask = Task { try? await Task.sleep(for: .milliseconds(300)); if !Task.isCancelled { await load() } }
         }
         .refreshable { await load() }
-        .navigationTitle(Text("Ask"))
+        .navigationTitle(onPick == nil ? Text("Ask") : Text("Chats"))
         .navigationBarTitleDisplayMode(.inline)
         .safeAreaInset(edge: .bottom) {
-            Button { router.push(.newChat()) } label: {
+            Button { newChat() } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkle")
                     Text("Ask anything").frame(maxWidth: .infinity, alignment: .leading)
@@ -61,7 +67,7 @@ struct ConversationsView: View {
     }
 
     private func row(_ c: ConversationSummary) -> some View {
-        Button { router.push(.chat(c.id, UUID())) } label: {
+        Button { if let onPick { onPick(c.id) } else { router.push(.chat(c.id, UUID())) } } label: {
             HStack(alignment: .top, spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
@@ -73,6 +79,7 @@ struct ConversationsView: View {
                     }
                     HStack(spacing: 6) {
                         if let d = c.updatedAt { Text(Fmt.relative(d)).mgFont(.meta).foregroundStyle(Color.mgMuted) }
+                        if c.id == activeId { StateBadge(text: String(localized: "Open now"), tone: .accent) }
                         if c.sensitivity == "parents" { StateBadge(text: String(localized: "Parents only"), tone: .muted) }
                         if c.sensitivity == "private" { StateBadge(text: String(localized: "Private"), tone: .inferred) }
                     }

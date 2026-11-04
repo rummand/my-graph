@@ -17,6 +17,8 @@ enum Route: Hashable {
     case documents
     case settings
     case timeline
+    /// Every saved chat (the Ask tab itself opens the active one).
+    case conversations
     /// Debug builds: open a new chat and ask this right away.
     case debugAsk(String)
     /// Debug builds: the widget's view at its real sizes.

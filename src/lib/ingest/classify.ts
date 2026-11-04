@@ -12,6 +12,7 @@ const SCAN_MIN_CHARS = 160;
 export function docKindOf(s: { mime: string | null; kind?: string | null; meta?: Record<string, unknown> | null; ocrChars?: number }): DocKind {
   const m = (s.mime ?? "").toLowerCase();
   const meta = s.meta ?? {};
+  if (s.kind === "recording") return "recording";
   if (m === "message/rfc822" || s.kind === "email") return "mail";
   if (m === "application/mbox" || m === "application/zip") return "mailbox";
   if (m.startsWith("image/")) return meta.ocr === "done" && (s.ocrChars ?? 0) >= SCAN_MIN_CHARS ? "scan" : "photo";

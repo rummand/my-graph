@@ -18,6 +18,7 @@ const messages: MessageTree = {
       signed_out: "You're signed out.",
       expired: "Your session ended. Please sign in again.",
       access_ended: "Your guest access has ended. Ask the person who invited you to extend it.",
+      locked: "This account is locked. Contact My Graph support to unlock it.",
     },
     passkey: "Sign in with a passkey",
     passkeyBusy: "Waiting for your passkey…",

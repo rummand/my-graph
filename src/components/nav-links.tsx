@@ -6,11 +6,27 @@ import { clsx } from "clsx";
 import { AnimatePresence, motion } from "motion/react";
 import { useT } from "@/lib/i18n/client";
 import {
-  BookOpen, Brain, Scale, CalendarRange, FileText, FileStack, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, Users, Workflow, X, type LucideIcon,
+  BookOpen, Brain, Scale, CalendarRange, FileText, FileStack, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, ShieldCheck, Stethoscope, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 
-/** `key` is the label under shell.nav.* (or `label`, a full message key, for items whose copy lives in their own namespace). */
-type NavItem = { href: string; key: string; icon: LucideIcon; hideFor?: string[]; label?: string };
+/**
+ * `key` is the label under shell.nav.* (or `label`, a full message key, for items whose copy lives in their own
+ * namespace). `text` is copy already translated on the server (the admin item, kept out of the client dictionary).
+ */
+type NavItem = { href: string; key: string; icon: LucideIcon; hideFor?: string[]; label?: string; text?: string };
+
+/**
+ * The platform admin console, for platform admins only. The shell passes `adminLabel` (translated on the server with
+ * getAdminT) only when isPlatformAdmin(viewer); everyone else never gets the item or its name.
+ */
+function withAdmin(items: NavItem[], adminLabel?: string): NavItem[] {
+  return adminLabel ? [...items, { href: "/admin", key: "admin", icon: ShieldCheck, text: adminLabel }] : items;
+}
+
+/** The clinical workspace, for accounts whose plan includes a practice add-on (the shell decides, on the server). */
+function withPractice(items: NavItem[], practice?: boolean): NavItem[] {
+  return practice ? [{ href: "/clinical", key: "clinical", icon: Stethoscope, label: "clinical.nav" }, ...items] : items;
+}
 
 const PRIMARY: NavItem[] = [
   { href: "/", key: "today", icon: House },
@@ -36,7 +52,7 @@ const SECONDARY: NavItem[] = [
 const visible = (role: string) => (l: NavItem) => !l.hideFor?.includes(role);
 const isActive = (path: string, href: string) => (href === "/" ? path === "/" : path === href || path.startsWith(href + "/"));
 
-export function NavLinks({ role }: { role: string }) {
+export function NavLinks({ role, adminLabel, practice }: { role: string; adminLabel?: string; practice?: boolean }) {
   const path = usePathname();
   const t = useT();
   const item = (l: NavItem) => {
@@ -48,7 +64,7 @@ export function NavLinks({ role }: { role: string }) {
           active ? "font-medium text-fg" : "text-muted hover:bg-surface-2/70 hover:text-fg")}>
         {active && <motion.span layoutId="nav-active" className="absolute inset-0 rounded-md bg-surface shadow-[0_1px_2px_rgb(0_0_0/0.06)]" />}
         <Icon className="relative size-[18px] shrink-0" strokeWidth={active ? 2.2 : 1.8} aria-hidden />
-        <span className="relative">{t(l.label ?? `shell.nav.${l.key}`)}</span>
+        <span className="relative">{l.text ?? t(l.label ?? `shell.nav.${l.key}`)}</span>
       </Link>
     );
   };
@@ -56,17 +72,17 @@ export function NavLinks({ role }: { role: string }) {
     <nav aria-label={t("shell.nav.main")} className="flex flex-col gap-0.5 px-1">
       {PRIMARY.filter(visible(role)).map(item)}
       <div className="my-2" />
-      {SECONDARY.filter(visible(role)).map(item)}
+      {withAdmin(withPractice(SECONDARY.filter(visible(role)), practice), adminLabel).map(item)}
     </nav>
   );
 }
 
 /** Phone navigation: four destinations and a More sheet. */
-export function MobileNav({ role }: { role: string }) {
+export function MobileNav({ role, adminLabel, practice }: { role: string; adminLabel?: string; practice?: boolean }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
   const t = useT();
-  const more = SECONDARY.filter(visible(role));
+  const more = withAdmin(withPractice(SECONDARY.filter(visible(role)), practice), adminLabel);
   const moreActive = more.some((l) => isActive(path, l.href));
   return (
     <>
@@ -101,7 +117,7 @@ export function MobileNav({ role }: { role: string }) {
                 return (
                   <Link key={l.href} href={l.href} onClick={() => setOpen(false)}
                     className={clsx("flex items-center gap-3 rounded-md px-3 py-3", isActive(path, l.href) ? "bg-surface-2 font-medium" : "")}>
-                    <Icon className="size-5 text-muted" aria-hidden />{t(l.label ?? `shell.nav.${l.key}`)}
+                    <Icon className="size-5 text-muted" aria-hidden />{l.text ?? t(l.label ?? `shell.nav.${l.key}`)}
                   </Link>
                 );
               })}

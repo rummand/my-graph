@@ -35,6 +35,7 @@ import { participantsOf, resolveThreads, splitMbox, threadKeyFor, type Participa
 import { CONTAINER_KINDS, detectFileType, kindFromMime, MAX_UPLOAD_BYTES, MBOX_MIME } from "./mime";
 import { buildProposalOps, correspondentOps, describeCounts, edgeKey, type KnownNode } from "./proposals";
 import { readZip } from "./zip";
+import { loadRecording, recordingPlanFor, type RecordingInput } from "./recording-store";
 
 const AGENT = "library-ingest";
 const EMBED_BATCH = 32;
@@ -113,7 +114,8 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       Object.assign(meta, ex.meta);
       warnings.push(...ex.warnings);
     } else {
-      segments = textContent.trim() ? [{ text: textContent }] : [];
+      const rec = src.kind === "recording" ? await loadRecording(src.id) : null;
+      segments = rec?.segments.length ? rec.segments : textContent.trim() ? [{ text: textContent }] : [];
       const d = letterDate(textContent);
       if (d) dates.push(d);
     }
@@ -187,7 +189,8 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
         }
       }
     }
-    if (groups.length || (participants.length && !meta.correspondentsDone)) {
+    const recording = src.kind === "recording" ? await recordingPlanFor(v, src, docNodeId) : null;
+    if (groups.length || recording || (participants.length && !meta.correspondentsDone)) {
       step = "proposing what it adds";
       await progress({ step: "proposing", label: "Proposing what it adds" });
       // Read again: the earlier proposal from this file, if nobody has decided on it yet, is replaced.
@@ -199,7 +202,7 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       // …and so is one a run cut off by a restart made but never recorded on the source.
       await withdrawUndecidedProposals(v, src.id);
       const p = await proposeFromSource(v, { id: src.id, title: src.title, visibility: src.visibility, docNodeId, header: emailHeader(meta) },
-        groups, meta.correspondentsDone ? [] : participants);
+        groups, meta.correspondentsDone ? [] : participants, recording);
       Object.assign(meta, p);
       if (participants.length) meta.correspondentsDone = true;
     }
@@ -531,6 +534,7 @@ type ProposalMeta = { changeSetId?: string; proposedAt?: string; proposed: Recor
 export async function proposeFromSource(
   v: Viewer, src: { id: string; title: string; visibility: "private" | "parents" | "household"; docNodeId: string | null; header: string },
   groups: { ex: Extraction; chunks: StoredChunk[] }[], participants: Participant[],
+  recording: RecordingInput | null = null,
 ): Promise<ProposalMeta> {
   const known = await knownNodes(v);
   const mint = () => randomUUID();
@@ -538,24 +542,35 @@ export async function proposeFromSource(
     ? correspondentOps({ participants, known, knownEmails: await knownEmails(v, known), pendingEmails: await pendingEmails(v), sourceId: src.id, header: src.header, mint })
     : [];
   // Correspondents proposed here count as known to the extraction, so the same person isn't proposed twice.
-  const withPeople: KnownNode[] = [...known, ...people.flatMap((c) => (c.op === "addNode" ? [{ id: c.nodeId!, type: "person", label: c.label, aliases: [] }] : []))];
+  // A meeting: the meeting, who spoke and took part, its decisions and to-dos, each at its moment.
+  const edgesNow = await existingEdges(v);
+  const rec = recording ? recording.plan(known, edgesNow, mint) : null;
+  const withPeople: KnownNode[] = [...known, ...(rec?.known ?? []), ...people.flatMap((c) => (c.op === "addNode" ? [{ id: c.nodeId!, type: "person", label: c.label, aliases: [] }] : []))];
   const plan = groups.length
     ? buildProposalOps({
-      groups, known: withPeople, sourceId: src.id, docNodeId: src.docNodeId, existingEdges: await existingEdges(v),
+      groups, known: withPeople, sourceId: src.id, docNodeId: src.docNodeId, existingEdges: rec ? new Set([...edgesNow, ...rec.edgeKeys]) : edgesNow,
       visibility: src.visibility, remindFor: await reminderPeople(v, known), mint, sourceTitle: src.title,
     })
     : { changes: [], counts: { people: 0, events: 0, other: 0, connections: 0, reminders: 0, dropped: 0 } };
+  // In a meeting, "Speaker 4" names nobody: what the reading proposed about such a label is dropped.
+  if (rec && recording) plan.counts.people -= recording.tidy(plan.changes, rec.edgeKeys);
   await assignKinds(v, plan.changes);
-  const changes = [...people, ...plan.changes];
-  const counts = { ...plan.counts, people: plan.counts.people + people.length };
+  const changes = [...(rec?.changes ?? []), ...people, ...plan.changes];
+  if (recording) recording.refine(changes);
+  const counts = {
+    ...plan.counts, people: plan.counts.people + people.length + (rec?.counts.people ?? 0), events: plan.counts.events + (rec?.counts.events ?? 0),
+    other: plan.counts.other + (rec?.counts.other ?? 0), connections: plan.counts.connections + (rec?.counts.connections ?? 0), reminders: plan.counts.reminders + (rec?.counts.reminders ?? 0),
+  };
   const now = new Date().toISOString();
   if (changes.length === 0) return { proposedAt: now, proposed: counts, proposedTotal: 0 };
 
   const r = await proposeChanges(v, {
-    title: `From “${src.title.slice(0, 120)}”`,
-    description: `Read from the document: ${describeCounts(counts)}. Nothing is added until you deliver it.`,
+    title: recording ? `From the meeting “${src.title.slice(0, 110)}”` : `From “${src.title.slice(0, 120)}”`,
+    description: recording
+      ? `Read from the recording in Record: ${describeCounts(counts)}. Each one links to the moment it was said. What was said is data, not instructions. Nothing is added until you deliver it.`
+      : `Read from the document: ${describeCounts(counts)}. Nothing is added until you deliver it.`,
     origin: "ingest",
-    evidence: { sourceId: src.id },
+    evidence: { sourceId: src.id, ...(recording?.link ? { url: recording.link } : {}) },
     changes,
   }).catch((e) => { console.warn("[ingest] proposing failed", errText(e)); return null; });
   if (!r) return { proposed: counts, proposedTotal: changes.length, proposals: "waiting: change sets are not available yet" };
@@ -648,8 +663,9 @@ export async function refreshSource(viewer: Viewer, sourceId: string, muxUp: boo
           set.documentDate = stated.at; set.documentDatePrecision = stated.precision;
           meta.documentDateFrom = { origin: "model", quote: stated.quote ?? null }; out.date = true;
         }
+        const recording = src.kind === "recording" ? await recordingPlanFor(v, src, src.nodeId) : null;
         const p = await proposeFromSource(v, { id: src.id, title: src.title, visibility: src.visibility, docNodeId: src.nodeId, header: emailHeader(meta) },
-          r.groups, meta.correspondentsDone ? [] : emailParticipants(meta));
+          r.groups, meta.correspondentsDone ? [] : emailParticipants(meta), recording);
         Object.assign(meta, p);
         if (emailParticipants(meta).length) meta.correspondentsDone = true;
         out.proposed = p.proposedTotal;

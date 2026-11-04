@@ -185,16 +185,16 @@ struct ErrorStateView: View {
 struct NoticeBar: View {
     let text: String
     var tone: Tone = .muted
-    enum Tone { case muted, warn, danger }
+    enum Tone { case muted, warn, danger, success }
 
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: tone == .muted ? "wifi.slash" : tone == .warn ? "clock" : "exclamationmark.triangle")
+            Image(systemName: tone == .success ? "checkmark.circle" : tone == .muted ? "wifi.slash" : tone == .warn ? "clock" : "exclamationmark.triangle")
                 .font(.system(size: 12, weight: .semibold)).accessibilityHidden(true)
             Text(text).mgFont(.secondary)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(tone == .danger ? Color.mgDanger : tone == .warn ? Color.mgWarn : Color.mgMuted)
+        .foregroundStyle(tone == .danger ? Color.mgDanger : tone == .warn ? Color.mgWarn : tone == .success ? Color.mgFg : Color.mgMuted)
         .padding(.horizontal, 12).padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 6).fill(tone == .danger ? Color.mgDangerTint : tone == .warn ? Color.mgWarnTint : Color.mgSurface2))
     }

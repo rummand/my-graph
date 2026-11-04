@@ -1,6 +1,6 @@
 # My Graph for iOS
 
-A native SwiftUI app for My Graph (iOS 18+), with a share extension ("Save to My Graph") and a "Next up" widget.
+A native SwiftUI app for My Graph (iOS 18+), with a share extension ("Send to My Graph") and a "Next up" widget.
 It has no third-party dependencies. It talks to the same server as the web app, through the same JSON and SSE routes.
 
 ## Build and run
@@ -17,7 +17,7 @@ xcrun simctl launch booted app.mygraph.ios
 ```
 
 The `MyGraph` scheme builds the app, `MyGraphShare` (share extension) and `MyGraphWidget` (WidgetKit), and tests
-with `MyGraphUITests` (see "UI tests").
+with `MyGraphTests` (unit tests of the sending and dictation logic) and `MyGraphUITests` (see "UI tests").
 Run `xcodegen generate` again after adding or removing files.
 
 ## Choosing the server
@@ -33,7 +33,8 @@ Debug builds also accept launch arguments, which make simulator runs and screens
 xcrun simctl launch booted app.mygraph.ios -MGServer http://localhost:3917 \
   -MGLogin anna@example.com:demo-demo-demo -MGTab people -MGRoute person:<uuid>
 # also: -MGAsk "question", -MGGraphs, -MGSignOut,
-#       -MGRoute memory|changes|changes:<id>|documents|history:<id>|settings|widget|node:<id>|source:<id>|chat:new|chat:<id>
+#       -MGRoute memory|changes|changes:<id>|documents|history:<id>|settings|widget|chats|node:<id>|source:<id>|chat:new|chat:<id>
+#       -MGShareSheet file:<token>|text:<token>|url:<address>   (opens the system share sheet, for the extension test)
 # language: -AppleLanguages "(da)" -AppleLocale da_DK
 ```
 
@@ -57,6 +58,29 @@ None of this is compiled into Release builds.
   - Proposals use `/api/chat/:id/proposals/:n`.
   - Mentions are typed as `@Emma` and sent as `@[Emma](node:<uuid>)`. Suggestions come from `/api/mentions`, with
     `/api/nodes?q=` as the fallback.
+- **Send to My Graph** (share extension, "Send til My Graph" in Danish). Takes photos, PDFs, any file (Word,
+  PowerPoint, Excel, CSV, audio…), text and links from any app. You pick the graph (it remembers the last one) and who
+  can see it. Files go through the normal upload (`POST /api/library`, 20 per request, 50 MB each); text becomes a
+  note and a link a saved web page (`POST /api/library/paste`, `{ kind: "text" | "url", … }`). A progress bar follows
+  the upload's bytes, then "Added to <graph>". The logic is shared with Paste: `Shared/SendKit.swift`. In the share
+  sheet's apps row iOS shows the containing app's name and icon ("My Graph"); the extension's screen is titled
+  "Send to My Graph".
+- **Paste** in the Library tab is the system Paste button (no "Allow Paste" prompt; greyed out when the clipboard has
+  nothing it takes). Images and files upload; a web address is saved as a web page; other text becomes a note.
+  The Library's + → Files now accepts any file type.
+- **Ask opens the active session.** The Ask tab opens the server's always-active conversation
+  (`GET /api/chat/active?light=1` → `{ conversationId }`, null = a new conversation is open), the same one the web's Ask
+  panel opens. Every question keeps its conversation active (the server does this in `POST /api/chat`). The
+  pencil button is "New conversation" (`PUT /api/chat/active { conversationId: null }`); the list button opens
+  "Chats", where a tap reopens a saved session (`PUT … { conversationId }`). When the app comes back to the
+  foreground it follows a switch made on the web or another device, unless an answer is being written. A server
+  without `/api/chat/active` (404) opens the latest conversation instead.
+- **Dictation in Ask.** The microphone button beside the question uses `SFSpeechRecognizer` with `AVAudioEngine`,
+  on the iPhone itself when the language supports it ("Listening on this iPhone…"). It starts in the app's language;
+  the DA/EN toggle in the listening bar (or a long press on the microphone) switches between Danish (`da-DK`) and
+  English (`en-US` in the US, else `en-GB`) and restarts listening. Partial text appears in the field as you speak,
+  after whatever you had typed. The keyboard's own dictation keeps working. Permission prompts are in English and
+  Danish (`NSMicrophoneUsageDescription`, `NSSpeechRecognitionUsageDescription`).
 - **Notifications.** Local notifications are scheduled for open reminders due in the next 14 days (up to 50). They
   are refreshed when the app opens and by `BGAppRefreshTask` (`<bundle id>.refresh`). The permission prompt is a card
   on Today after sign-in, never a cold system alert.
@@ -159,6 +183,16 @@ TEST_RUNNER_MG_SHOTS=/tmp/mg-shots \
 # another server: TEST_RUNNER_MG_SERVER=https://…   (needs anna@example.com / demo-demo-demo)
 ```
 
+`SendAndAskUITests` covers the newer parts:
+
+| Test | Does |
+| --- | --- |
+| `testSendingAPDFThroughTheShareExtension` | Opens the real share sheet with a PDF, picks My Graph, Send, waits for "Added to …", finds it via `/api/library` |
+| `testSendingTextThroughTheShareExtension` | The same with text, which arrives as a note |
+| `testPastingTextAndAnImageIntoTheLibrary` | Puts text, then an image, on the clipboard and taps Paste; checks both landed |
+| `testDictationButtonListensAndSwitchesLanguage` | Taps the microphone, allows the prompts, switches to Danish, Done |
+| `testAskOpensTheActiveSessionAndNewConversationSetsIt` | Sets the session through the API, checks Ask opens it; New conversation and reopening from Chats, checked on the server |
+
 They need the dev server (`http://localhost:3917`) with the demo data, and mux for the chat and upload seeds. The
 suggestions test skips when Anna has fewer than two pending suggestions; the chat test skips when the assistant
 doesn't propose anything. Waits are long (up to five minutes) because the development server compiles routes on
@@ -169,7 +203,10 @@ and ticked, a reminder added from chat, and a few library facts delivered.
 
 - Uploading from Photos, Files, the camera, and the document scanner. The camera and VisionKit scanner don't run on
   the simulator; their menu items are hidden or disabled there.
-- Saving through the share extension from another app.
+- Sending through the share extension from another app (Photos, Files, Safari). The UI test shares from My Graph's
+  own share sheet, which runs the same extension process and code.
+- Dictation with real speech: the simulator has no voice to hear; the test checks the permission flow, the listening
+  state and the language switch.
 - Adding the widget to the Home Screen. Its view was checked inside the app at widget sizes.
 - "Always allow" on a suggestion or a chat proposal (the UI tests cover Approve and Deny, which share the code path).
 - The language switch in Settings: it saves on the account, and SwiftUI text switches at once through `\.locale`, but

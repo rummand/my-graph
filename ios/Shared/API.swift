@@ -187,7 +187,8 @@ final class API: @unchecked Sendable {
     }
 
     /// Uploads files to the library of the current graph (multipart, field `file`).
-    func upload(_ files: [UploadFile], visibility: String) async throws -> UploadResponse {
+    /// `progress` gets the fraction of the body sent so far (0…1).
+    func upload(_ files: [UploadFile], visibility: String, progress: (@Sendable (Double) -> Void)? = nil) async throws -> UploadResponse {
         let boundary = "mg-\(UUID().uuidString)"
         var body = Data()
         func add(_ s: String) { body.append(Data(s.utf8)) }
@@ -204,7 +205,7 @@ final class API: @unchecked Sendable {
         r.timeoutInterval = 300
         let data: Data, resp: URLResponse
         do {
-            (data, resp) = try await session.upload(for: r, from: body)
+            (data, resp) = try await session.upload(for: r, from: body, delegate: progress.map(UploadProgress.init))
         } catch {
             if error.isCancellation { throw CancellationError() }
             throw APIError.offline
@@ -215,5 +216,16 @@ final class API: @unchecked Sendable {
         if let out = try? API.decoder.decode(UploadResponse.self, from: data), out.results?.isEmpty == false { return out }
         if (200..<300).contains(http.statusCode) { return try decode(UploadResponse.self, from: data) }
         throw mapError(status: http.statusCode, data: data)
+    }
+}
+
+/// Reports how much of an upload's body has been sent.
+final class UploadProgress: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    let report: @Sendable (Double) -> Void
+    init(_ report: @escaping @Sendable (Double) -> Void) { self.report = report }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didSendBodyData bytesSent: Int64, totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+        guard totalBytesExpectedToSend > 0 else { return }
+        report(min(1, Double(totalBytesSent) / Double(totalBytesExpectedToSend)))
     }
 }

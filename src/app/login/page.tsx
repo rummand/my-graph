@@ -13,7 +13,7 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 export const dynamic = "force-dynamic";
 
-const REASONS = new Set(["signed_out", "expired", "access_ended"]);
+const REASONS = new Set(["signed_out", "expired", "access_ended", "locked"]);
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ next?: string; reason?: string }> }) {
   const sp = await searchParams;

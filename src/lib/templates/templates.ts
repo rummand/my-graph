@@ -9,8 +9,8 @@
  */
 import type { AttrType, MetaNodeType } from "@/lib/meta/types";
 
-export type GraphTemplateKind = "family" | "personal" | "work" | "partner" | "project" | "shared" | "other";
-export const GRAPH_TEMPLATE_KINDS: GraphTemplateKind[] = ["family", "personal", "work", "partner", "project", "shared", "other"];
+export type GraphTemplateKind = "family" | "personal" | "work" | "partner" | "project" | "shared" | "other" | "practice";
+export const GRAPH_TEMPLATE_KINDS: GraphTemplateKind[] = ["family", "personal", "work", "partner", "project", "shared", "other", "practice"];
 
 export type TodayModule = "quick_actions" | "week" | "brief" | "reminders" | "waiting" | "attention" | "activity" | "recent" | "ready";
 
@@ -72,6 +72,69 @@ const GENERIC_KINDS: TemplateKind[] = [
   { nodeType: "organization", key: "company", label: "Company", pluralLabel: "Companies", icon: "building" },
   { nodeType: "organization", key: "association", label: "Association", pluralLabel: "Associations", icon: "users", description: "A club, union or forening." },
 ];
+
+/**
+ * A clinical practice (psychologists, therapists, doctors). Clients and patients, the clinicians, sessions and
+ * consultations, and what is recorded about them. Everything here is sensitive and private to the clinician unless a
+ * consent allows sharing with a named colleague; the clinical workspace (/clinical) is where it is worked with.
+ */
+const PRACTICE: GraphTemplate = {
+  kind: "practice",
+  describeExample: "Maria sees clients on Tuesdays and Thursdays; Dr. Holm takes the medical consultations.",
+  noun: "practice graph",
+  builtins: { kinds: { person: ["colleague", "doctor", "other"], place: ["clinic"], event: [], topic: [] }, relationCategories: ["care", "work", "time", "document"] },
+  kinds: [
+    { nodeType: "person", key: "client", label: "Client", pluralLabel: "Clients", circle: "clients", icon: "user", description: "Someone in therapy with the practice." },
+    { nodeType: "person", key: "patient", label: "Patient", pluralLabel: "Patients", circle: "patients", icon: "user", description: "Someone the practice treats medically." },
+    { nodeType: "person", key: "clinician", label: "Clinician", pluralLabel: "Clinicians", circle: "practice", icon: "stethoscope", description: "A psychologist, therapist, doctor or nurse in the practice." },
+    { nodeType: "event", key: "session", label: "Session", pluralLabel: "Sessions", icon: "calendar", description: "A therapy session." },
+    { nodeType: "event", key: "consultation", label: "Consultation", pluralLabel: "Consultations", icon: "calendar", description: "A medical consultation." },
+    { nodeType: "event", key: "measure", label: "Measure", pluralLabel: "Measures", icon: "activity", description: "A score from a questionnaire such as PHQ-9 or GAD-7." },
+    { nodeType: "event", key: "lab_result", label: "Lab result", pluralLabel: "Lab results", icon: "flask", description: "A lab value or measurement with its reference range." },
+    { nodeType: "event", key: "referral", label: "Referral", pluralLabel: "Referrals", icon: "send" },
+    { nodeType: "thing", key: "medication", label: "Medication", pluralLabel: "Medications", icon: "pill" },
+    { nodeType: "thing", key: "allergen", label: "Allergy", pluralLabel: "Allergies", icon: "alert-triangle", description: "Something a patient is allergic to." },
+    { nodeType: "topic", key: "diagnosis", label: "Diagnosis", pluralLabel: "Diagnoses", icon: "clipboard", description: "A confirmed ICD-10 or ICPC-2 code." },
+  ],
+  relations: [
+    { key: "client_of", label: "client of", inverseLabel: "has client", category: "care", fromTypes: PP, toTypes: PP },
+    { key: "attended", label: "attended", inverseLabel: "attended by", category: "care", fromTypes: PP, toTypes: ["event"] },
+    { key: "diagnosed_with", label: "diagnosed with", inverseLabel: "diagnosis of", category: "care", fromTypes: PP, toTypes: ["topic"] },
+    { key: "takes", label: "takes", inverseLabel: "taken by", category: "care", fromTypes: PP, toTypes: ["thing"] },
+    { key: "allergic_to", label: "allergic to", inverseLabel: "allergy of", category: "care", fromTypes: PP, toTypes: ["thing", "topic"] },
+    { key: "has_result", label: "has result", inverseLabel: "result of", category: "care", fromTypes: PP, toTypes: ["event"] },
+    { key: "referred_to", label: "referred to", inverseLabel: "received referral of", category: "care", fromTypes: PP, toTypes: ["person", "organization", "event"] },
+  ],
+  attributes: [
+    { nodeType: "person", kindKey: "client", key: "started_on", label: "Started", dataType: "date", sensitive: true },
+    { nodeType: "person", kindKey: "client", key: "referral_reason", label: "Reason for referral", dataType: "longtext", sensitive: true },
+    { nodeType: "person", kindKey: "patient", key: "started_on", label: "Started", dataType: "date", sensitive: true },
+    { nodeType: "thing", kindKey: "medication", key: "dose", label: "Dose", dataType: "text", sensitive: true },
+    { nodeType: "thing", kindKey: "medication", key: "frequency", label: "How often", dataType: "text", sensitive: true },
+    { nodeType: "topic", kindKey: "diagnosis", key: "code", label: "Code", dataType: "text", sensitive: true },
+    { nodeType: "topic", kindKey: "diagnosis", key: "code_system", label: "Code system", dataType: "enum", options: ["ICD-10", "ICPC-2"], sensitive: true },
+    { nodeType: "event", kindKey: "lab_result", key: "value", label: "Value", dataType: "number", sensitive: true },
+    { nodeType: "event", kindKey: "lab_result", key: "unit", label: "Unit", dataType: "text", sensitive: true },
+    { nodeType: "event", kindKey: "lab_result", key: "reference_range", label: "Reference range", dataType: "text", sensitive: true },
+    { nodeType: "event", kindKey: "measure", key: "instrument", label: "Instrument", dataType: "enum", options: ["PHQ-9", "GAD-7"], sensitive: true },
+    { nodeType: "event", kindKey: "measure", key: "score", label: "Score", dataType: "number", sensitive: true },
+  ],
+  circles: [
+    { key: "clients", label: "Clients", hint: "People in therapy with you." },
+    { key: "patients", label: "Patients", hint: "People you treat medically." },
+    { key: "practice", label: "Practice", hint: "Your colleagues in the practice." },
+    { key: "network", label: "Network", hint: "Doctors, hospitals and others you refer to." },
+  ],
+  circleOf: { colleague: "practice", doctor: "network", other: "network" },
+  today: ["quick_actions", "brief", "reminders", "waiting", "recent"],
+  prompts: ["Which notes are waiting for my signature?", "What has changed for this client since the last session?", "Which follow-ups are due this week?"],
+  onboarding: {
+    title: "Your practice graph",
+    lead: "Clients, patients, sessions and consultations, private to each clinician and shared only where a client has consented.",
+    firstSteps: ["Add a client or patient and register their consent", "Record or dictate a session", "Read the drafted note and sign it"],
+  },
+  framing: "You are the assistant for a clinical practice's graph: clients and patients, sessions, consultations, notes and measures. Everything here is confidential health information.",
+};
 
 export const TEMPLATES: Record<GraphTemplateKind, GraphTemplate> = {
   family: {
@@ -296,6 +359,8 @@ export const TEMPLATES: Record<GraphTemplateKind, GraphTemplate> = {
     },
     framing: "You are the assistant for a private knowledge graph: the people, things and facts its owner keeps in it.",
   },
+
+  practice: PRACTICE,
 };
 
 export function isTemplateKind(k: unknown): k is GraphTemplateKind {

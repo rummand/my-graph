@@ -11,7 +11,7 @@ import { GRAPH_PALETTE, graphStyle } from "@/components/graphs/describe";
 import { useT } from "@/lib/i18n/client";
 import { ErrorNote, Notice } from "@/app/login/notes";
 
-type Kind = "family" | "personal" | "work" | "shared" | "other" | "partner" | "project";
+type Kind = "family" | "personal" | "work" | "shared" | "other" | "partner" | "project" | "practice";
 const KINDS: Exclude<Kind, "family">[] = ["personal", "work", "partner", "project", "shared", "other"];
 
 export type GraphSettingsView = {

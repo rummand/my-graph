@@ -292,6 +292,11 @@ const messages: MessageTree = {
       0: "What do I know about this?",
       1: "What changed this week?",
     },
+    practice: {
+      0: "Which notes are waiting for my signature?",
+      1: "What has changed for this client since the last session?",
+      2: "Which follow-ups are due this week?",
+    },
   },
 
   attention: {

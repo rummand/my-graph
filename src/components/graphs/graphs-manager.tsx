@@ -20,7 +20,7 @@ export type DetailMember = { userId: string; name: string; email: string | null;
 export type DetailInvite = { id: string; email: string; role: GraphRole; expiresAt: string };
 export type SelectedDetail = { id: string; members: DetailMember[]; invites: DetailInvite[] };
 
-type MakeableKind = "shared" | "personal" | "work" | "other" | "partner" | "project";
+type MakeableKind = "shared" | "personal" | "work" | "other" | "partner" | "project" | "practice";
 const EASE = [0.22, 1, 0.36, 1] as const;
 /** "Tue 3 Nov" / "tirs. 3. nov." in the reader's language and zone. */
 function useDay() {

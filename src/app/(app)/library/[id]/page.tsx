@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Bell, CalendarDays, CircleCheck, ExternalLink, GitPullRequestArrow, LoaderCircle, Lock, MapPin, MessagesSquare, Paperclip, ShieldAlert, Users, UsersRound } from "lucide-react";
 import { NodeChip, PersonChip } from "@/components/ui";
 import { AudioTranscript } from "@/components/library/audio-transcript";
+import { RecordingSection } from "@/components/recording/recording-section";
 import { CiteButton, MarkedText, PassageList, PdfFrame, ProvenanceProvider } from "@/components/library/provenance";
 import { SharingSettings, SourceSettings } from "@/components/library/source-settings";
 import { isStuck, StatusPill, stepText } from "@/components/library/source-meta";
@@ -102,7 +103,7 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
 
       <div className="grid gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-8">
-          <Original L={L} d={d} />
+          {s.meta.kind === "recording" ? <RecordingSection viewer={v} sourceId={s.id} /> : <Original L={L} d={d} />}
           <ReadText L={L} d={d} />
           <ImportedMessages L={L} d={d} />
         </div>

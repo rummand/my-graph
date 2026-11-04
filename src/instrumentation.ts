@@ -5,6 +5,13 @@ export async function register() {
     if (process.env.SKIP_DB_SETUP === "1") return; // e.g. during `next build` without a database
     const { prepareDatabase } = await import("@/lib/deploy/migrate");
     await prepareDatabase();
+    // The founder / platform admins are on Ultimate with every add-on from the first request.
+    try {
+      const { ensurePlatformAdmins } = await import("@/lib/plans/store");
+      await ensurePlatformAdmins();
+    } catch (err) {
+      console.error("[startup] platform admins", err instanceof Error ? err.message : err);
+    }
     // The assistant's automations and check-ins (never during `next build`).
     if (process.env.NEXT_PHASE !== "phase-production-build") {
       const { startScheduler } = await import("@/lib/automations");

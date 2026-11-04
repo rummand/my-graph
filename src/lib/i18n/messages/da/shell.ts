@@ -22,6 +22,8 @@ const messages: MessageTree = {
     label: "Spørg om alt i din graf",
     placeholder: "Spørg om hvad som helst…",
     placeholderShort: "Spørg om noget",
+    openPanel: "Åbn assistenten",
+    shortcut: "Åbn assistenten med ⌘J eller Ctrl+J",
   },
   homeLabel: "I dag",
   signOut: "Log ud",

@@ -13,6 +13,7 @@ import { GraphSettings } from "@/components/settings/graph-settings";
 import { LanguageChoice, ThemeChoice, TimeZoneChoice } from "@/components/settings/preferences";
 import { getFormatDate, getPrefs, getT } from "@/lib/i18n";
 import { PasskeyList } from "./_components/passkey-list";
+import { PlanSection } from "./_components/plan-section";
 import { PasswordForm, ProfileForm } from "./_components/profile-forms";
 import { Row } from "./_components/section";
 import { SessionList } from "./_components/session-list";
@@ -89,7 +90,17 @@ export default async function SettingsPage() {
         </Row>
       </Group>
 
+      <Group id="plan">
+        <PlanSection v={v} />
+      </Group>
+
       <Group id="security">
+        {s.status === "active" && s.mustChangePassword && (
+          <div role="alert" className="mt-8 rounded-lg bg-warn-tint px-5 py-4">
+            <p className="font-semibold text-warn">{t("settings.mustChange.title")}</p>
+            <p className="mt-1 text-sm">{t("settings.mustChange.body")}</p>
+          </div>
+        )}
         <Row id="password" title={acct.hasPassword ? t("settings.password.title") : t("settings.password.titleAdd")}
           lead={acct.hasPassword ? t("settings.password.lead") : t("settings.password.leadAdd")}>
           <PasswordForm hasPassword={acct.hasPassword} />

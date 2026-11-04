@@ -9,6 +9,10 @@ import { useFormatDate, useT } from "@/lib/i18n/client";
 import type { ConnectionDTO, ConnectorInfo, RunDTO } from "@/lib/connectors";
 import { api, ConnectorIcon, CountsLine, StatusDot, useStatusText, type Person } from "./bits";
 import { ConnectForm } from "./connect-form";
+import { McpConnectForm } from "./mcp-form";
+import { McpTools } from "./mcp-tools";
+
+const MCP = new Set(["mcp", "record"]);
 import { DisconnectDialog } from "./disconnect-dialog";
 
 /** One connection: status and actions, its recent checks (the run log), and its settings. */
@@ -23,6 +27,16 @@ export function ConnectionDetail({ initial, runs: initialRuns, info, people, fam
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [leaving, setLeaving] = useState(false);
+  const [signin, setSignin] = useState<string | null>(null);
+  const mcp = MCP.has(c.connector);
+
+  // Back from the server's sign-in page: say how it went (?signin=ok or the reason), then tidy the address.
+  useEffect(() => {
+    const msg = new URLSearchParams(window.location.search).get("signin");
+    if (!msg) return;
+    setSignin(msg);
+    window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+  }, []);
 
   const reload = useCallback(async () => {
     const d = await api<{ connection: ConnectionDTO; runs: RunDTO[] }>(`/api/connections/${c.id}`).catch(() => null);
@@ -73,7 +87,20 @@ export function ConnectionDetail({ initial, runs: initialRuns, info, people, fam
           {c.counts.waiting > 0 && <Link href="/changes" className={clsx(buttonClass("primary", "sm"), "mt-3")}>{t("connections.actions.review")}</Link>}
         </div>
         {error && <p role="alert" className="mt-3 text-sm text-danger">{error}</p>}
+        {signin && (
+          <p role="status" className={clsx("mt-3 rounded-md px-3 py-2 text-sm", signin === "ok" ? "bg-accent-tint text-accent" : "bg-danger-tint text-danger")}>
+            {signin === "ok" ? t("mcp.auth.signedIn") : signin}
+          </p>
+        )}
+        {mcp && c.status === "needs_you" && c.detailCode === "signIn" && info && (
+          <div className="mt-3"><McpConnectForm info={info} family={family} existing={{ ...c, config: { ...c.config, authMode: "oauth" } }} onDone={(next) => setC(next)} /></div>
+        )}
+        {c.connector === "record" && c.counts.total > 0 && (
+          <Link href="/recordings" className={clsx(buttonClass("secondary", "sm"), "mt-3")}>{t("recordings.title")}</Link>
+        )}
       </div>
+
+      {mcp && <McpTools connectionId={c.id} refreshKey={c.lastRunAt} />}
 
       <Section title={t("connections.detail.runsTitle")}>
         {runs.length === 0 ? <p className="text-sm text-muted">{t("connections.detail.noRuns")}</p> : (
@@ -87,7 +114,9 @@ export function ConnectionDetail({ initial, runs: initialRuns, info, people, fam
         <div id="settings" className="scroll-mt-6">
           <Section title={t("connections.detail.settingsTitle")}>
             <p className="mb-4 max-w-[65ch] text-sm text-muted">{t(`connections.connectors.${info.id}.help`)}</p>
-            <ConnectForm info={info} people={people} family={family} existing={c} onDone={(next) => { setC(next); void reload(); }} />
+            {mcp
+              ? <McpConnectForm info={info} family={family} existing={c} onDone={(next) => { setC(next); void reload(); }} />
+              : <ConnectForm info={info} people={people} family={family} existing={c} onDone={(next) => { setC(next); void reload(); }} />}
           </Section>
         </div>
       )}

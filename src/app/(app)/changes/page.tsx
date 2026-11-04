@@ -80,7 +80,7 @@ export default async function ChangesPage({ searchParams }: { searchParams: Prom
               <Link key={n} href={href(status, origin, n)} aria-current={n === need ? "page" : undefined}
                 className={clsx("inline-flex h-7 items-center rounded-full px-2.5 transition-colors", n === need ? "bg-fg text-bg" : "bg-surface-2/60 text-muted hover:text-fg")}>
                 {t(n === "all" ? "changes.bulk.all" : n === "ready" ? "changes.bulk.ready" : "changes.bulk.needsYou")}
-                {n !== "all" && <span className="ml-1.5 tabular-nums opacity-70">{n === "ready" ? sets.filter(isReady).length : sets.filter((cs) => !isReady(cs)).length}</span>}
+                {n !== "all" && <span className="ml-1.5 tabular-nums">{n === "ready" ? sets.filter(isReady).length : sets.filter((cs) => !isReady(cs)).length}</span>}
               </Link>
             ))}
           </nav>

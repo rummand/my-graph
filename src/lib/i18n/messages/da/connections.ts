@@ -24,6 +24,20 @@ const messages: MessageTree = {
   cancel: "Annullér",
 
   connectors: {
+    record: {
+      title: "Record: møder, udskrifter og personer",
+      blurb: "Dine optagede møder fra Record: udskriften med hvem der sagde hvad og hvornår, personerne, hvad der blev besluttet, og opgaverne. Afspil lyden, mens ordene følger med.",
+      reads: "Møder, du kan læse i Record, deres udskrifter og ordtider, talere og deltagere, resuméer, beslutninger og opgaver, og lyden, når Record giver den.",
+      never: "Ændrer noget i Record af sig selv. Værktøjer, der ændrer noget (fx at krydse en opgave af), er slået fra, og hver brug venter på din godkendelse.",
+      help: "Log ind med Record og vælg, hvilke arbejdsområder My Graph må læse, eller lav en nøgle i Record under API og AI-værktøjer og indsæt den her. Hvert møde bliver en optagelse i biblioteket; hvem der talte, og hvad der blev besluttet, foreslås til din godkendelse.",
+    },
+    mcp: {
+      title: "MCP-server",
+      blurb: "Enhver server, der taler Model Context Protocol. Dens værktøjer bliver tilgængelige for assistenten i denne graf, dem du vælger.",
+      reads: "Værktøjerne og ressourcerne, serveren tilbyder. Assistenten bruger kun dem, du slår til.",
+      never: "Bruger et værktøj, der ændrer noget, uden at spørge dig først, eller følger instruktioner i det, serveren svarer.",
+      help: "Indsæt serverens MCP-adresse. Hvis den understøtter login (OAuth), så brug Log ind; ellers indsæt en API-nøgle, den har givet dig.",
+    },
     aula_calendar: {
       title: "Aula-kalender",
       blurb: "Dine egne begivenheder fra Aula (forældremøder, ture, lukkedage) på tidslinjen, fra de to kalenderlinks, Aula giver alle forældre.",
@@ -55,6 +69,8 @@ const messages: MessageTree = {
   },
 
   fields: {
+    serverUrl: { label: "Serverens adresse", hint: "MCP-adressen, som regel med /mcp til sidst." },
+    apiKey: { label: "API-nøgle", hint: "Gemmes krypteret. Vises aldrig igen." },
     label: { label: "Navn", hint: "Sådan vises den i listen." },
     url: { label: "Kalenderlink", hint: "Starter med https:// eller webcal://. Det virker som en adgangskode, så det gemmes krypteret." },
     yearUrl: { label: "Link til årskalender", hint: "Opdateres af Aula hver nat." },
@@ -84,6 +100,17 @@ const messages: MessageTree = {
     paused: "Sat på pause",
   },
   codes: {
+    signIn: "log ind på serveren for at forbinde den.",
+    missingKey: "indsæt en API-nøgle, eller log ind i stedet.",
+    badKey: "det ligner ikke en Record-nøgle (de starter med rk_).",
+    notMcp: "intet svarer på MCP på den adresse. Tjek, at den slutter med MCP-stien.",
+    forbidden: "serveren afviste: nøglen eller login må ikke læse dette.",
+    mcpOther: "serveren har brug for noget fra dig.",
+    oauth: "login virkede ikke.",
+    timeout: "serveren var for længe om at svare.",
+    serverError: "serveren havde et problem.",
+    network: "serveren kunne ikke nås.",
+    rateLimited: "serveren bad os sætte farten ned.",
     authFailed: "mailserveren afviste brugernavnet eller app-adgangskoden. Indtast app-adgangskoden igen.",
     linkRefused: "kalenderlinket kræver nu login. Indsæt et nyt link.",
     linkGone: "kalenderlinket virker ikke længere. Det er måske blevet nulstillet; indsæt det nye.",
@@ -142,7 +169,7 @@ const messages: MessageTree = {
     },
     nothingNew: "Intet nyt.",
     proposals: { one: "Åbnede {count} forslag", other: "Åbnede {count} forslag" },
-    streams: { events: "Kalender", year: "Årskalender", week: "Ugekalender", mail: "Mail" },
+    streams: { catalog: "Værktøjer", meetings: "Møder", events: "Kalender", year: "Årskalender", week: "Ugekalender", mail: "Mail" },
     from: "Fra {host}",
     connected: "Forbundet {when}",
   },

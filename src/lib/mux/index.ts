@@ -13,6 +13,7 @@ import { buildHeaders, effectiveRoute, extractJson, messageText, muxConfig, read
 import { readSse } from "./sse";
 
 export { MuxError, MuxAuthError, MuxUnavailableError, isMuxDown } from "./errors";
+export { speak, type Speech } from "./speech";
 
 export type MuxRoute = "auto" | "fast" | "agent" | "smart" | "vision" | "multilingual" | "code";
 

@@ -5,6 +5,10 @@ import { requireUser } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { personProfile } from "@/lib/people";
 import { getNode, isRetired } from "@/lib/gbrain";
+import { loadProfile } from "@/lib/profile";
+import { loadClient } from "@/lib/clinical";
+import Link from "next/link";
+import { ArrowUpRight } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -33,9 +37,23 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
     if (await retiredHere(id)) redirect(`/node/${id}`);
     notFound();
   }
+  const v = await requireUser();
+  const living = await loadProfile(v, profile.person.id);
+  // A client or patient's profile is the base of their clinical record: link back to it for those who may open it.
+  const k = living.node.kind;
+  const record = k === "client" || k === "patient" ? await loadClient(v, profile.person.id).catch(() => null) : null;
+  const t = record ? await getT() : null;
   return (
     <div className="mx-auto max-w-6xl">
-      <PersonProfileView initial={profile} />
+      {record && t && (
+        <div className="mb-4 flex justify-end">
+          <Link href={`/clinical/clients/${record.id}`} title={t("clinical.client.recordHint", { name: record.label })}
+            className="inline-flex items-center gap-1 text-sm text-accent hover:underline">
+            {t("clinical.client.record")}<ArrowUpRight aria-hidden className="size-4" />
+          </Link>
+        </div>
+      )}
+      <PersonProfileView initial={profile} living={living} />
     </div>
   );
 }

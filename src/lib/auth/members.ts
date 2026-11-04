@@ -8,6 +8,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { edges, households, nodes, provenance, users } from "@/db/schema";
 import { familyGraphRole } from "@/lib/graphs/pure";
+import { emailIsAdmin, parseAdminEmails } from "@/lib/plans/catalog";
 import { ensureFamilyGraph, upsertMember } from "@/lib/graphs/store";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -121,5 +122,8 @@ export async function createHouseholdWithOwner(input: { householdName: string; n
 
 export async function emailTaken(email: string, exceptUserId?: string): Promise<boolean> {
   const [row] = await db.select({ id: users.id }).from(users).where(eq(users.email, email.toLowerCase())).limit(1);
-  return !!row && row.id !== exceptUserId;
+  if (row) return row.id !== exceptUserId;
+  // Platform admin addresses are reserved: an email is the admin identity, so nobody may take one by creating a
+  // member or changing an email. Only first-run setup (or the seed) can create the account that holds it.
+  return emailIsAdmin(email, parseAdminEmails(process.env.PLATFORM_ADMIN_EMAILS));
 }

@@ -40,6 +40,7 @@ import { foldState } from "./state";
 import { voiceOf } from "./locale";
 import { itemSteps, memoryStep, offStep, searchStep, webSteps } from "./steps";
 import { checkAnswer, rulesForQuestion } from "@/lib/compliance/assistant";
+import { pageHint, type ResolvedPage } from "./page-context";
 import { addMessage, addState, conversationRows, createConversation, ownConversation, raiseConversationSensitivity, renameConversation, touchConversation } from "./store";
 
 export class ChatInputError extends Error {
@@ -131,7 +132,9 @@ const memoryCounts = (items: Memory[]) => ({
   notes: items.filter((m) => m.kind === "note" || m.kind === "fact").length,
 });
 
-export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal: AbortSignal): ReadableStream<Uint8Array> {
+/** `page`: what was open when the question was asked (Ask panel), already re-read as the viewer. */
+export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal: AbortSignal, opts: { page?: ResolvedPage | null } = {}): ReadableStream<Uint8Array> {
+  const page = opts.page ?? null;
   const enc = new TextEncoder();
   const stopper = new AbortController();
   const key = stopKey(v.id, turn.conversationId);
@@ -166,13 +169,16 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
 
         // @mentions in the question: the nodes the person pointed at (readable ones only) lead the retrieval.
         const mentioned = await safe(resolveMentions(v, question), [], "mentions");
+        // The page that's open leads too ("What's new with him?" on Bo's page), after anything @mentioned.
+        const leadIds = [...mentioned.map((m) => m.nodeId), ...(page?.nodeId ? [page.nodeId] : [])];
+        if (page) step({ kind: "other", label: `Looked at what you have open: ${page.title}` });
         if (mentioned.length) void recordMentions(v, { inType: "message", inId: turn.userMessageId, text: question }).catch(() => {});
         const plain = plainQuestion(question);
         const rulesPromise = safe(rulesForQuestion(v, plain), null, "corpus rules");
 
         // Retrieval and memory run together; each step is shown as soon as it finishes.
         const empty: Retrieval = { items: [], hits: 0, people: [] };
-        const retrieval = safe(retrieve(v, question, { tz, now, flags, mentionIds: mentioned.map((m) => m.nodeId) }), empty, "retrieve").then((r) => {
+        const retrieval = safe(retrieve(v, question, { tz, now, flags, mentionIds: leadIds }), empty, "retrieve").then((r) => {
           step(searchStep(flags, r.hits));
           return r;
         });
@@ -223,6 +229,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         const amb = ambiguousNames(question, found.people);
         const hints = amb.map((a) => `"${a.name}" matches ${a.options.length} people ${voice.family ? "the family knows" : "in this graph"}: ${a.options.map((o) => o.label).join(", ")}. If it matters for the answer and the conversation doesn't say which, ask.`);
         if (mentioned.length) hints.push(`The person pointed at ${mentioned.map((m) => `"${m.label}"`).join(", ")} in the graph with @mentions: the question is about ${mentioned.length === 1 ? "that" : "those"}, not someone else with the same name.`);
+        if (page) hints.push(pageHint(page));
         hints.push(...webHints({ need: need.use, allowed: webOk, web, today: longDay(now, tz) }));
         // The rules the graph follows (its corpora), when the question needs them: answered with references.
         const ruleCtx = await rulesPromise;

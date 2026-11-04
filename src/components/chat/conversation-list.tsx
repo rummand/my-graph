@@ -14,15 +14,20 @@ type RowActions = {
   onRename: (id: string, title: string) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
   onPin: (id: string, pinned: boolean) => Promise<boolean>;
+  onOpen?: (id: string) => void;
 };
 
 /** Conversations like an inbox: search, pinned first, then by when they were last used. Unread ones are bold. */
-export function ConversationList({ list, activeId, onNew, onRename, onDelete, onPin, onNavigate, busy }: {
+export function ConversationList({ list, activeId, onNew, onRename, onDelete, onPin, onNavigate, onOpen, busy, heading = false }: {
   list: ConversationSummary[];
   activeId: string | null;
   onNew: (e: MouseEvent) => void;
   onNavigate?: () => void;
+  /** Open a saved session in place (the Ask panel) instead of following the link to /chat/[id]. */
+  onOpen?: (id: string) => void;
   busy: boolean;
+  /** Show the "Saved sessions" heading and what it means (the panel's list). */
+  heading?: boolean;
 } & RowActions) {
   const t = useT();
   const locale = useLocale();
@@ -53,11 +58,17 @@ export function ConversationList({ list, activeId, onNew, onRename, onDelete, on
   const shown: ConversationSummary[] | null = results
     ? results.flatMap((r) => { const cur = list.find((c) => c.id === r.id); return cur ? [{ ...cur, snippet: r.snippet }] : []; })
     : null;
-  const actions = { onRename, onDelete, onPin };
+  const actions = { onRename, onDelete, onPin, onOpen };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <Link href="/chat" onClick={onNew}
+      {heading && (
+        <div className="mb-3 px-2.5">
+          <h2 className="text-sm font-semibold">{t("chat.session.saved")}</h2>
+          <p className="mt-0.5 text-xs leading-relaxed text-muted">{t("chat.session.savedHint")}</p>
+        </div>
+      )}
+      <Link href="/chat?new=1" onClick={onNew}
         className="mb-2 inline-flex h-9 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-fg transition-colors hover:bg-surface-2">
         <SquarePen aria-hidden className="size-4 text-muted" /> {t("chat.list.new")}
       </Link>
@@ -108,7 +119,7 @@ export function ConversationList({ list, activeId, onNew, onRename, onDelete, on
   );
 }
 
-function Row({ c, active, busy, onRename, onDelete, onPin, onNavigate }: {
+function Row({ c, active, busy, onRename, onDelete, onPin, onOpen, onNavigate }: {
   c: ConversationSummary; active: boolean; busy: boolean; onNavigate?: () => void;
 } & RowActions) {
   const t = useT();
@@ -168,12 +179,17 @@ function Row({ c, active, busy, onRename, onDelete, onPin, onNavigate }: {
   return (
     <div className={clsx("group/row relative rounded-md transition-colors",
       active ? "bg-surface text-fg" : "text-fg/80 hover:bg-surface-2 hover:text-fg")}>
-      <Link href={`/chat/${c.id}`} aria-current={active ? "page" : undefined} onClick={onNavigate} title={c.title}
+      <Link href={`/chat/${c.id}`} aria-current={active ? "page" : undefined} title={c.title}
+        onClick={(e) => {
+          if (onOpen && !e.metaKey && !e.ctrlKey && !e.shiftKey && e.button === 0) { e.preventDefault(); onOpen(c.id); }
+          onNavigate?.();
+        }}
         className={clsx("block py-2 pl-2.5 pr-2.5 text-sm [@media(hover:hover)]:group-hover/row:pr-[92px] [@media(hover:hover)]:group-focus-within/row:pr-[92px] max-[1023px]:pr-[92px]",
           (active || c.unread) && "font-medium", c.unread && "font-semibold text-fg")}>
         <span className="flex items-center gap-1.5">
           {c.unread && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-accent" />}
           <span className="truncate">{c.title}</span>
+          {active && <span className="shrink-0 rounded-full bg-accent-tint px-1.5 py-px text-[10px] font-medium text-accent">{t("chat.session.active")}</span>}
           {c.unread && <span className="sr-only">{t("chat.list.unread")}</span>}
         </span>
         {c.snippet && <span className="mt-0.5 line-clamp-2 text-xs font-normal text-muted">{c.snippet}</span>}
