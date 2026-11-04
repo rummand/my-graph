@@ -99,6 +99,13 @@ nothing links two graphs. The family graph keeps the household rules; other grap
   versioned). A draft is private until a person publishes it; publishing pins the design set version. Page `/artifacts`.
 - **Languages** (`src/lib/i18n`): English and Danish for all UI copy (`messages/<locale>/<namespace>.ts`, `getT` /
   `useT`). Text stored by the server in English is translated where it is shown, or written in the reader's language.
+  Generated text (assistant, runs, check-ins, Brain Keeper) is written in the reader's language
+  (`src/lib/assistant/locale.ts`, `voice.ts`) and names the graph by its kind; family wording only in family graphs.
+- **Native app API** (`ios/`, see `ios/README.md`): `GET /api/auth/me` (who is signed in + current graph) and
+  `GET /api/today?days=7` (the whole Today screen in one call; a failing part is null and named in `failed`).
+  Documents export as PowerPoint: `GET /api/artifacts/[id]/export?format=pptx[&fonts=standard]`.
+- **Unattended web**: automations, recipes and check-ins may research the web (owners/parents, `web` capability on)
+  within a per-run budget (`src/lib/web/budget.ts`); what they find is a change set a person delivers.
 
 ## Contracts
 
@@ -143,6 +150,9 @@ Do not run `npm install`; every dependency is installed (check `package.json`). 
 - Write user-facing copy in plain, specific English. Name things by what people recognize.
 - Dates: store UTC, display with `date-fns` in the user's locale; Danish context (school platform Aula, CPR never stored).
 - Tests: vitest, `src/**/*.test.ts`, pure logic only (no DB needed) unless a test DB is up.
+- End-to-end: Playwright in `e2e/` (see `e2e/README.md`), `npm run test:e2e` against the dev server on :3917
+  (`--grep-invert @slow` skips tests that wait on mux; `E2E_BASE_URL` for another server). It signs in the demo users
+  and changes demo data, so don't run it while someone is recording or demoing. Output goes to `$TMPDIR/my-graph-e2e`.
 - Migrations: additive, `npx drizzle-kit generate --name <area>_<what>`, applied with `npx tsx scripts/migrate.ts`;
   `npx drizzle-kit generate --name check` must report no changes afterwards.
 - Checks before you finish: `npx tsc --noEmit` clean for your files; `npx next lint` no errors in your paths.
