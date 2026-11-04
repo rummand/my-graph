@@ -94,9 +94,13 @@ export async function resolveNode(v: Viewer, name: string): Promise<gbrain.GNode
   return found.length === 1 ? found[0] : null;
 }
 
+const PERSON_RELATIONS = new Set([
+  "colleague_of", "works_with", "knows", "friend_of", "manager_of", "mentor_of", "client_of", "relative_of", "parent_of",
+  "child_of", "sibling_of", "partner_of", "married_to", "neighbour_of", "neighbor_of", "teacher_of", "doctor_of",
+]);
+
 async function applyFact(v: Viewer, ctx: ApplyCtx, p: Extract<Proposal, { type: "propose_fact" }>): Promise<ProposalResult> {
   const [foundFrom, foundTo] = await Promise.all([resolveNode(v, p.from), resolveNode(v, p.to)]);
-  if (!foundFrom && !p.fromType) throw new ProposalError(422, `"${p.from}" isn't in your graph yet. Add them first, then approve this again.`);
   const sourceId = await contextSource(v, ctx);
   const prov: gbrain.ProvenanceInput = {
     sourceId, quote: p.quote ?? ctx.quote, activity: "inference", agentType: "model",
@@ -104,8 +108,10 @@ async function applyFact(v: Viewer, ctx: ApplyCtx, p: Extract<Proposal, { type: 
   };
   const ensure = async (found: gbrain.GNode | null, label: string, type: "person" | "place" | "event" | "topic" | null) =>
     found ?? (await gbrain.upsertNode(v, { type: type ?? "topic", label, sensitive: ctx.sensitive }, prov)).node;
-  const from = await ensure(foundFrom, p.from, p.fromType);
-  const to = await ensure(foundTo, p.to, p.toType);
+  // Someone named in a relation between people who isn't in the graph yet is added as a new person on approval.
+  const guess = PERSON_RELATIONS.has(p.relation) ? "person" : null;
+  const from = await ensure(foundFrom, p.from, p.fromType ?? guess);
+  const to = await ensure(foundTo, p.to, p.toType ?? guess);
   const edge = await gbrain.addEdge(v, { fromId: from.id, toId: to.id, relation: p.relation, status: "inferred", confidence: 0.6 }, prov);
   return { href: `/node/${edge.fromId}`, label: `Added as a guess: ${from.label} ${p.relation.replace(/_/g, " ")} ${to.label}`, undo: { type: "edge", id: edge.id } };
 }

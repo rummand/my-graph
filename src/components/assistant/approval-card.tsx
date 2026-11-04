@@ -40,8 +40,8 @@ export function ApprovalCard({
       const r = await onDecide(d);
       if (r && r.ok === false) throw new Error();
       setDone({ d, label: r?.label, href: r?.href });
-    } catch {
-      setError("That didn't go through. Try again.");
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : "That didn't go through. Try again.");
     } finally {
       setBusy(null);
     }
