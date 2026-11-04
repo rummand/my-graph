@@ -71,7 +71,9 @@ export async function listSources(v: Viewer, f: ListFilters = {}): Promise<{ ite
       id: sources.id, householdId: sources.householdId, graphId: sources.graphId, ownerId: sources.ownerId, kind: sources.kind, title: sources.title,
       mime: sources.mime, storageKey: sources.storageKey, sha256: sources.sha256, size: sources.size, textContent: sql<string | null>`null`,
       meta: sources.meta, status: sources.status, error: sources.error, visibility: sources.visibility, sensitive: sources.sensitive,
-      nodeId: sources.nodeId, createdAt: sources.createdAt, ownerName: users.name,
+      nodeId: sources.nodeId, documentDate: sources.documentDate, documentDatePrecision: sources.documentDatePrecision, threadKey: sources.threadKey,
+      url: sources.url, externalId: sources.externalId, connectionId: sources.connectionId, fetchedAt: sources.fetchedAt,
+      createdAt: sources.createdAt, ownerName: users.name,
     })
     .from(sources)
     .leftJoin(users, eq(users.id, sources.ownerId))

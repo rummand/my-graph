@@ -19,7 +19,7 @@ export type DetailMember = { userId: string; name: string; email: string | null;
 export type DetailInvite = { id: string; email: string; role: GraphRole; expiresAt: string };
 export type SelectedDetail = { id: string; members: DetailMember[]; invites: DetailInvite[] };
 
-type MakeableKind = "shared" | "personal" | "work" | "other";
+type MakeableKind = "shared" | "personal" | "work" | "other" | "partner" | "project";
 const EASE = [0.22, 1, 0.36, 1] as const;
 const day = (iso: string) => format(new Date(iso), "EEE d MMM");
 

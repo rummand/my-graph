@@ -12,7 +12,7 @@ export type GraphView = {
   id: string;
   name: string;
   description: string | null;
-  kind: "family" | "personal" | "work" | "shared" | "other";
+  kind: "family" | "personal" | "work" | "shared" | "other" | "partner" | "project";
   color: number;
   myRole: GraphRole;
   memberCount: number;
@@ -45,7 +45,7 @@ export function graphStyle(hue: number): Record<string, string> {
 }
 
 export const KIND_LABEL: Record<GraphView["kind"], string> = {
-  family: "Family", personal: "Just me", work: "Work", shared: "To share", other: "Something else",
+  family: "Family", personal: "Just me", work: "Work", shared: "To share", other: "Something else", partner: "For a partner", project: "A project",
 };
 
 export const ROLE_LABEL: Record<GraphRole, string> = {

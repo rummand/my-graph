@@ -19,17 +19,17 @@ const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
 
 export const roleEnum = pgEnum("role", ["owner", "parent", "child", "guest"]);
 export const visibilityEnum = pgEnum("visibility", ["private", "parents", "household"]);
-export const nodeTypeEnum = pgEnum("node_type", ["person", "place", "event", "topic", "document", "source"]);
+export const nodeTypeEnum = pgEnum("node_type", ["person", "place", "event", "topic", "document", "source", "organization", "project", "thing"]);
 export const timePrecisionEnum = pgEnum("time_precision", ["minute", "day", "month", "year"]);
 export const edgeStatusEnum = pgEnum("edge_status", ["confirmed", "unconfirmed", "inferred", "rejected", "superseded"]);
-export const sourceKindEnum = pgEnum("source_kind", ["upload", "wiki", "chat", "manual", "sync"]);
+export const sourceKindEnum = pgEnum("source_kind", ["upload", "wiki", "chat", "manual", "sync", "web", "email", "connector"]);
 export const sourceStatusEnum = pgEnum("source_status", ["pending", "processing", "ready", "failed"]);
 export const activityEnum = pgEnum("activity", ["upload", "ocr", "transcription", "llm_extraction", "manual_edit", "inference", "import"]);
 export const agentTypeEnum = pgEnum("agent_type", ["user", "model", "rule"]);
 export const subjectTypeEnum = pgEnum("subject_type", ["node", "edge"]);
 export const authorKindEnum = pgEnum("author_kind", ["user", "assistant"]);
 export const messageRoleEnum = pgEnum("message_role", ["user", "assistant", "system"]);
-export const graphKindEnum = pgEnum("graph_kind", ["family", "personal", "work", "shared", "other"]);
+export const graphKindEnum = pgEnum("graph_kind", ["family", "personal", "work", "shared", "other", "partner", "project"]);
 export const graphRoleEnum = pgEnum("graph_role", ["owner", "editor", "viewer"]);
 
 /* ── Accounts ─────────────────────────────────────────────────────────────────────────────────────────── */
@@ -53,6 +53,11 @@ export const users = pgTable("users", {
   accessExpiresAt: timestamp("access_expires_at", { withTimezone: true }),
   /** The user's own person node in their brain. */
   personNodeId: uuid("person_node_id"),
+  /** Interface language: "en" | "da". */
+  locale: text("locale").notNull().default("en"),
+  /** "system" | "light" | "dark" */
+  theme: text("theme").notNull().default("system"),
+  timeZone: text("time_zone").notNull().default("Europe/Copenhagen"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("users_email_idx").on(t.email)]);
 
@@ -227,8 +232,18 @@ export const sources = pgTable("sources", {
   sensitive: boolean("sensitive").notNull().default(false),
   /** The source's own document node in the graph. */
   nodeId: uuid("node_id"),
+  /** When the document itself is dated (letter date, email sent, photo taken, scan date), not when it was uploaded. */
+  documentDate: timestamp("document_date", { withTimezone: true }),
+  documentDatePrecision: text("document_date_precision"),
+  /** Groups correspondence: an email thread (Message-ID/References root), an Aula thread, a letter exchange. */
+  threadKey: text("thread_key"),
+  /** Where it came from outside: a web page URL, a connector item id. */
+  url: text("url"),
+  externalId: text("external_id"),
+  connectionId: uuid("connection_id"),
+  fetchedAt: timestamp("fetched_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("sources_owner_idx").on(t.ownerId, t.createdAt), index("sources_graph_idx").on(t.graphId, t.createdAt)]);
+}, (t) => [index("sources_thread_idx").on(t.graphId, t.threadKey), index("sources_docdate_idx").on(t.graphId, t.documentDate), index("sources_owner_idx").on(t.ownerId, t.createdAt), index("sources_graph_idx").on(t.graphId, t.createdAt)]);
 
 /** Text chunks of a source for retrieval; locator points back into the source (page, offsets, bbox, time). */
 export const chunks = pgTable("chunks", {
@@ -394,6 +409,15 @@ export const metaKinds = pgTable("meta_kinds", {
   color: text("color"),
   sortOrder: integer("sort_order").notNull().default(0),
   builtin: boolean("builtin").notNull().default(false),
+  /** Emergent meta model: candidate (proposed from evidence) | active | hidden. */
+  status: text("status").notNull().default("active"),
+  /** builtin | template | manual | emergent */
+  origin: text("origin").notNull().default("manual"),
+  /** Set when the element belongs to one graph only (e.g. a Work graph's "Department"); null = whole household. */
+  graphId: uuid("graph_id"),
+  evidenceCount: integer("evidence_count").notNull().default(0),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }),
+  changeSetId: uuid("change_set_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("meta_kinds_key_idx").on(t.householdId, t.nodeType, t.key)]);
 
@@ -410,6 +434,15 @@ export const metaRelations = pgTable("meta_relations", {
   toTypes: text("to_types").array().notNull().default([]),
   symmetric: boolean("symmetric").notNull().default(false),
   builtin: boolean("builtin").notNull().default(false),
+  /** Emergent meta model: candidate (proposed from evidence) | active | hidden. */
+  status: text("status").notNull().default("active"),
+  /** builtin | template | manual | emergent */
+  origin: text("origin").notNull().default("manual"),
+  /** Set when the element belongs to one graph only (e.g. a Work graph's "Department"); null = whole household. */
+  graphId: uuid("graph_id"),
+  evidenceCount: integer("evidence_count").notNull().default(0),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }),
+  changeSetId: uuid("change_set_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("meta_relations_key_idx").on(t.householdId, t.key)]);
 
@@ -428,6 +461,15 @@ export const metaAttributes = pgTable("meta_attributes", {
   sensitive: boolean("sensitive").notNull().default(false),
   sortOrder: integer("sort_order").notNull().default(0),
   builtin: boolean("builtin").notNull().default(false),
+  /** Emergent meta model: candidate (proposed from evidence) | active | hidden. */
+  status: text("status").notNull().default("active"),
+  /** builtin | template | manual | emergent */
+  origin: text("origin").notNull().default("manual"),
+  /** Set when the element belongs to one graph only (e.g. a Work graph's "Department"); null = whole household. */
+  graphId: uuid("graph_id"),
+  evidenceCount: integer("evidence_count").notNull().default(0),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }),
+  changeSetId: uuid("change_set_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("meta_attributes_key_idx").on(t.householdId, t.nodeType, t.kindKey, t.key)]);
 
@@ -592,7 +634,7 @@ export const assistantSettings = pgTable("assistant_settings", {
   graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   /** Save memories it learns in chat without asking (facts still always need approval). */
-  autoSaveMemories: boolean("auto_save_memories").notNull().default(false),
+  autoSaveMemories: boolean("auto_save_memories").notNull().default(true),
   /** Kinds of action the person chose "Always allow" for, e.g. "reminder.create", "memory.save". */
   alwaysAllow: jsonb("always_allow").$type<string[]>().notNull().default([]),
   /** Capabilities the assistant may use at all: library, timeline, people, wiki_write, reminders. Off = tool removed. */
@@ -625,3 +667,147 @@ export const recipeRuns = pgTable("recipe_runs", {
   suggestionCount: integer("suggestion_count").notNull().default(0),
   error: text("error"),
 }, (t) => [index("recipe_runs_graph_user_idx").on(t.graphId, t.userId, t.startedAt)]);
+
+
+/* ── Versioning: the graph works like a git repo (see docs/versioning-plan.md, after Nexus) ───────────── */
+
+export const changeSetStatusEnum = pgEnum("change_set_status", ["draft", "delivered", "abandoned"]);
+
+/** A branch: proposed changes that don't touch the graph until a person delivers (merges) them. */
+export const changeSets = pgTable("change_sets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: changeSetStatusEnum("status").notNull().default("draft"),
+  /** person | assistant | chat | connector | web | ingest | automation | heartbeat | restore */
+  origin: text("origin").notNull(),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  /** Who it is waiting for (null = anyone who may write in the graph). */
+  forUserId: uuid("for_user_id"),
+  /** The moment of the graph it was cut from. */
+  baseAt: timestamp("base_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Evidence and provenance for the whole set: conversation, message, source, run, quote. */
+  evidence: jsonb("evidence").$type<Record<string, unknown>>().notNull().default({}),
+  /** Hash of the ops; an approval with an older fingerprint is stale. */
+  fingerprint: text("fingerprint"),
+  deliveredAt: timestamp("delivered_at", { withTimezone: true }),
+  deliveredBy: uuid("delivered_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("change_sets_graph_idx").on(t.graphId, t.status, t.createdAt)]);
+
+/** One op on a change set (a commit-sized unit). Node ids for new nodes are minted when the op is written. */
+export const changes = pgTable("changes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  changeSetId: uuid("change_set_id").notNull().references(() => changeSets.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  seq: integer("seq").notNull(),
+  /** addNode | updateNode | retireNode | mergeNodes | addEdge | updateEdge | removeEdge | addKind | addRelationType | addAttribute | updateMeta | addReminder | addMemory | editWiki */
+  op: text("op").notNull(),
+  nodeId: uuid("node_id"),
+  edgeId: uuid("edge_id"),
+  subject: text("subject"),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  /** Why, in one sentence. */
+  note: text("note"),
+  /** Evidence for this op: { sourceId, chunkId, locator, quote, url, messageId, confidence }. */
+  receipt: jsonb("receipt").$type<Record<string, unknown>>().notNull().default({}),
+  /** included = will be delivered; excluded = the person unticked it. */
+  included: boolean("included").notNull().default(true),
+  authorKind: text("author_kind").notNull(), // person | assistant | connector | system
+  authorId: uuid("author_id"),
+  authorName: text("author_name"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("changes_set_idx").on(t.changeSetId, t.seq)]);
+
+/** The history log: one row per field that moved on a node or edge (or meta element), observed at write time. */
+export const graphEvents = pgTable("graph_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** node | edge | meta | wiki | source */
+  subjectType: text("subject_type").notNull(),
+  /** No FK on purpose: history outlives deletes. */
+  subjectId: uuid("subject_id").notNull(),
+  subjectName: text("subject_name"),
+  /** created | updated | retired | restored | merged | added | removed */
+  kind: text("kind").notNull(),
+  field: text("field"),
+  fromValue: jsonb("from_value"),
+  toValue: jsonb("to_value"),
+  /** For edges: both ends, so edges can be rewound too. */
+  fromNodeId: uuid("from_node_id"),
+  toNodeId: uuid("to_node_id"),
+  actorKind: text("actor_kind").notNull(), // person | assistant | connector | import | system
+  actorId: uuid("actor_id"),
+  actorName: text("actor_name"),
+  changeSetId: uuid("change_set_id"),
+  context: text("context"),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("graph_events_graph_at_idx").on(t.graphId, t.at), index("graph_events_subject_idx").on(t.subjectId, t.at)]);
+
+/** A named moment (a tag). Restoring one creates a change set; history is never rewritten. */
+export const checkpoints = pgTable("checkpoints", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  label: text("label").notNull(),
+  at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("checkpoints_graph_idx").on(t.graphId, t.at)]);
+
+/* ── @mentions everywhere ───────────────────────────────────────────────────────────────────────────── */
+
+/** Where a node is mentioned: a chat message, wiki page, reminder, memory, automation, recipe, note. */
+export const mentions = pgTable("mentions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  nodeId: uuid("node_id").notNull(),
+  /** message | wiki | reminder | memory | automation | recipe | note | change_set */
+  inType: text("in_type").notNull(),
+  inId: uuid("in_id").notNull(),
+  /** The text as written ("@EAM Platform"), for display if the node is later renamed. */
+  label: text("label"),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("mentions_node_idx").on(t.graphId, t.nodeId), uniqueIndex("mentions_in_uq").on(t.inType, t.inId, t.nodeId)]);
+
+/* ── Connectors (see the Aula and connectors proposal) ─────────────────────────────────────────────── */
+
+/** One connection: a person's account at a source, feeding one graph. */
+export const connections = pgTable("connections", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** Connector id from its manifest: "ics", "imap", "aula_calendar", "aula", "folder" … */
+  connector: text("connector").notNull(),
+  label: text("label").notNull(),
+  /** Non-secret settings (host, folder names, ICS URL is a secret). */
+  config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+  /** Encrypted secrets (AES-256-GCM with APP key): tokens, passwords, secret URLs. Never sent to mux. */
+  secrets: text("secrets"),
+  /** Per-stream cursors, committed in the same transaction as what they brought in. */
+  state: jsonb("state").$type<Record<string, unknown>>().notNull().default({}),
+  /** ok | needs_you | error | paused */
+  status: text("status").notNull().default("ok"),
+  statusDetail: text("status_detail"),
+  everyMinutes: integer("every_minutes").notNull().default(15),
+  nextRunAt: timestamp("next_run_at", { withTimezone: true }),
+  lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+  lastOkAt: timestamp("last_ok_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("connections_due_idx").on(t.status, t.nextRunAt), index("connections_graph_idx").on(t.graphId)]);
+
+export const connectionRuns = pgTable("connection_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  connectionId: uuid("connection_id").notNull().references(() => connections.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  status: runStatusEnum("status").notNull().default("running"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  /** { stream: { fetched, added, updated, skipped } } */
+  counts: jsonb("counts").$type<Record<string, unknown>>().notNull().default({}),
+  changeSetId: uuid("change_set_id"),
+  error: text("error"),
+}, (t) => [index("connection_runs_conn_idx").on(t.connectionId, t.startedAt)]);
