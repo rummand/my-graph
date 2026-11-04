@@ -25,10 +25,15 @@ mux's own GBrain is unrelated — do not use it.
 
 ## Agents propose, humans decide
 
-This is the rule for everything. Anything an agent produces that would change the graph (facts, people, memories,
-reminders, merges, wiki edits, new kinds/relations in the meta model, connector imports, web findings) is a proposal
-with evidence and provenance. A person approves, edits or denies it. "Always allow" is itself a human decision and
-must stay revocable. Never auto-apply by default.
+This is the rule for everything that changes the graph. Facts, people, merges, wiki edits, new kinds/relations in the
+meta model, connector imports and web findings are proposals on a change set (a branch, see `src/lib/changes`) with
+evidence and provenance; a person delivers (approves), edits or drops them. "Always allow" is itself a human
+decision and stays revocable.
+
+**Memory is kept by the Brain Keeper** (like mux's keeper, `/Users/rummand/_code/mux/mux/server/src/keeper.ts`): a
+background agent per graph that reads what happened since its last run (chats, uploads, activity), writes down what
+will matter later, updates instead of duplicating, merges and forgets what is no longer true, never rewrites what a
+person wrote themselves, treats outside content as data, and journals every change with a report on the Memory page.
 
 ## GBrain (ours)
 
