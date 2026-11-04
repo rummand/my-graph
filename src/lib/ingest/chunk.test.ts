@@ -111,3 +111,14 @@ describe("formatting", () => {
     expect(formatTime(3725)).toBe("1:02:05");
   });
 });
+
+describe("locators beyond pages", () => {
+  it("carries slide, sheet/range and picture regions onto every chunk and formats them", () => {
+    const [c] = chunkSegments([{ text: "Slide 2: Plan", at: { slide: 2 } }]);
+    expect(c.locator).toEqual({ slide: 2, charStart: 0, charEnd: 13 });
+    expect(formatLocator(c.locator)).toBe("slide 2");
+    const [s] = chunkSegments([{ text: "| a | b |", at: { sheet: "Budget", range: "A1:B9" } }]);
+    expect(formatLocator(s.locator)).toBe("Budget A1:B9");
+    expect(formatLocator({ page: 3, image: "page 3", region: "top" })).toBe("p. 3 · top");
+  });
+});

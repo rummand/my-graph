@@ -27,12 +27,17 @@ ENV NODE_ENV=production \
 
 # Non-root user that owns the upload volume.
 RUN groupadd --system --gid 1001 app && useradd --system --uid 1001 --gid app app \
- && mkdir -p /data/uploads /data/tesseract-cache && chown -R app:app /data
+ && mkdir -p /data/uploads && chown -R app:app /data
 
 COPY --from=builder --chown=app:app /app/public ./public
 COPY --from=builder --chown=app:app /app/.next/standalone ./
 COPY --from=builder --chown=app:app /app/.next/static ./.next/static
 COPY --from=builder --chown=app:app /app/drizzle ./drizzle
+# The fallback text reader (tesseract.js): its WebAssembly core is loaded from disk at run time, which Next's file
+# tracing doesn't see, and its English + Danish language data ship in the repo so nothing is downloaded at run time.
+COPY --from=builder --chown=app:app /app/node_modules/tesseract.js-core ./node_modules/tesseract.js-core
+COPY --from=builder --chown=app:app /app/assets/tesseract ./assets/tesseract
+ENV TESSERACT_LANG_PATH=/app/assets/tesseract
 
 USER app
 EXPOSE 3000

@@ -1,6 +1,8 @@
 /**
- * The ingestion pipeline. Server-only. Runs in-process after the upload returns; progress lives on the source row
- * (status pending → processing → ready | failed, with `error` and details in `meta`).
+ * The ingestion pipeline. Server-only. Runs from the durable job queue (src/lib/jobs, kind "ingest.read") after the
+ * upload returns; progress lives on the source row (status pending → processing → ready | failed, with `error` and
+ * details in `meta`) and, step by step, on the job. Safe to run again on the same source (after a restart, "Read it
+ * again"): its chunks are replaced, its document node is reused, and its earlier undecided proposals are withdrawn.
  *   1. text extraction (files only), the document's own date, its thread (mail), attachments as child sources
  *   2. chunk + embed   3. the source's document node
  *   4. entity/fact extraction via mux   5. a change set proposing what it adds (people, dates, connections,
@@ -12,7 +14,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { chunks, edges, sources, users } from "@/db/schema";
+import { changeSets, chunks, edges, nodes, sources, users } from "@/db/schema";
 import type { Locator } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import { abandonChangeSet, getChangeSet, listChangeSets, proposeChanges, type ChangeInput } from "@/lib/changes";
@@ -20,6 +22,8 @@ import * as gbrain from "@/lib/gbrain";
 import { viewerInGraph } from "@/lib/graphs/store";
 import * as mux from "@/lib/mux";
 import { getMeta, type Meta as MetaHelpers, type MetaNodeType } from "@/lib/meta";
+import { enqueueSourceRead } from "@/lib/jobs/queue";
+import type { JobProgress } from "@/lib/jobs/policy";
 import { putFile, readStored, sha256Hex } from "@/lib/storage";
 import { chunkSegments, groupChunks, type TextSegment } from "./chunk";
 import { docKindOf, needsAnything, ocrCharsOf, rebuildNeeds } from "./classify";
@@ -42,25 +46,9 @@ type Meta = Record<string, unknown>;
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e)).slice(0, 500);
 
-/* ── A small in-process queue so a burst of uploads doesn't run 20 OCR jobs at once ──────────────────────── */
-
-const g = globalThis as unknown as { __ingestQueue?: { running: number; waiting: (() => void)[] } };
-const queue = (g.__ingestQueue ??= { running: 0, waiting: [] });
-const CONCURRENCY = 2;
-
-export function enqueue(job: () => Promise<void>): void {
-  const run = () => {
-    queue.running++;
-    job()
-      .catch((e) => console.error("[ingest] job crashed", e))
-      .finally(() => {
-        queue.running--;
-        queue.waiting.shift()?.();
-      });
-  };
-  if (queue.running < CONCURRENCY) run();
-  else queue.waiting.push(run);
-}
+/** Reports what the pipeline is doing to the job running it (and lets the job stop it at a step boundary). */
+export type OnProgress = (p: JobProgress) => Promise<void> | void;
+const noProgress: OnProgress = () => {};
 
 /* ── Pipeline ─────────────────────────────────────────────────────────────────────────────────────────── */
 
@@ -77,7 +65,8 @@ async function muxIsUp(): Promise<boolean> {
  * `fromFile`: run text extraction on the stored original; otherwise use the source's existing textContent.
  * A mail import (.mbox / .zip) is split into one source per message instead (processContainer).
  */
-export async function processSource(viewer: Viewer, sourceId: string, opts: { fromFile: boolean }): Promise<void> {
+export async function processSource(viewer: Viewer, sourceId: string, opts: { fromFile: boolean; onProgress?: OnProgress }): Promise<void> {
+  const progress = opts.onProgress ?? noProgress;
   const [src] = await db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
   if (!src) return;
   // Everything read from a file lands in the file's own graph, whatever graph its owner is looking at now.
@@ -87,7 +76,7 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     return;
   }
   const kind = kindFromMime(src.mime);
-  if (opts.fromFile && kind && CONTAINER_KINDS.has(kind)) return processContainer(v, src);
+  if (opts.fromFile && kind && CONTAINER_KINDS.has(kind)) return processContainer(v, src, progress);
 
   const meta: Meta = { ...(src.meta ?? {}) };
   delete meta.extraction; delete meta.extracted; delete meta.warnings; delete meta.failedStep;
@@ -112,6 +101,7 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       if (!kind || !src.storageKey) throw new Error("The original file is missing or of an unknown type.");
       raw = await readStored(src.storageKey);
       step = "reading the text";
+      await progress({ step: "reading", label: "Reading the text" });
       const ex = await extractText({ bytes: raw, mime: src.mime!, kind, filename: src.title, sensitive: src.sensitive, muxUp, muxMeta });
       segments = ex.segments;
       textContent = ex.textContent;
@@ -130,7 +120,8 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     const fallback = parentDate(meta);
     if (fallback) dates.push(fallback);
     let docDate = pickDocumentDate(dates);
-    meta.docKind = docKindOf({ mime: src.mime, kind: src.kind, meta, ocrChars: ocrCharsOf(textContent) });
+    // A pasted web page stays a web page when it is read again.
+    meta.docKind = src.kind === "web" ? "web_page" : docKindOf({ mime: src.mime, kind: src.kind, meta, ocrChars: ocrCharsOf(textContent) });
     meta.documentDateChecked = true;
     if (docDate) meta.documentDateFrom = { origin: docDate.origin, quote: docDate.quote ?? null };
     await db.update(sources).set({
@@ -141,19 +132,24 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     // 1b. Attachments of an email become their own sources, in the same conversation.
     if (raw && kind === "email" && !meta.attachmentsSaved) {
       step = "saving the attachments";
+      await progress({ step: "attachments", label: "Saving the attachments" });
       meta.attachmentsSaved = await saveAttachments(v, src, raw, threadKey, docDate?.at ?? null);
     }
 
     // 2. Chunk + embed
     step = "splitting the text";
+    await progress({ step: "splitting", label: "Splitting the text" });
     const stored = await replaceChunks(src.id, src.ownerId, src.graphId, segments);
     meta.chunks = stored.length;
     step = "indexing for search";
-    meta.embedding = await embedChunks(stored, muxMeta, muxUp);
+    meta.embedding = await embedChunks(stored, muxMeta, muxUp, progress);
 
     // 3. Document node (the file's own record in the graph: adding a file is the person's act, not a proposal)
     step = "adding it to the graph";
-    let docNodeId = src.nodeId;
+    await progress({ step: "adding", label: "Adding it to the graph" });
+    // A run cut off right after creating the node (a restart) left it without nodeId on the source: reuse it.
+    let docNodeId = src.nodeId ?? (await existingDocNode(src.id, src.graphId));
+    if (docNodeId && !src.nodeId) await db.update(sources).set({ nodeId: docNodeId }).where(eq(sources.id, sourceId));
     if (!docNodeId) {
       const { node } = await gbrain.upsertNode(v, {
         type: "document",
@@ -171,12 +167,13 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
 
     // 4–5. Extraction → a change set to review (people, places, dates, connections, reminders)
     step = "finding people, places and events";
+    await progress({ step: "finding", label: "Finding people and dates" });
     const participants = emailParticipants(meta);
     let groups: { ex: Extraction; chunks: StoredChunk[] }[] = [];
     if (!muxUp) meta.extraction = "skipped: mux unreachable";
     else if (stored.length === 0) meta.extraction = "skipped: no text";
     else {
-      const r = await readFacts(v, src.title, stored, muxMeta);
+      const r = await readFacts(v, src.title, stored, muxMeta, progress);
       groups = r.groups;
       meta.extraction = r.summary;
       if (r.model) meta.extractionModel = r.model;
@@ -192,12 +189,15 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     }
     if (groups.length || (participants.length && !meta.correspondentsDone)) {
       step = "proposing what it adds";
+      await progress({ step: "proposing", label: "Proposing what it adds" });
       // Read again: the earlier proposal from this file, if nobody has decided on it yet, is replaced.
       if (typeof meta.changeSetId === "string") {
         const prev = await getChangeSet(v, meta.changeSetId).catch(() => null);
         if (prev?.status === "draft") await abandonChangeSet(v, prev.id).catch(() => false);
         delete meta.changeSetId;
       }
+      // …and so is one a run cut off by a restart made but never recorded on the source.
+      await withdrawUndecidedProposals(v, src.id);
       const p = await proposeFromSource(v, { id: src.id, title: src.title, visibility: src.visibility, docNodeId, header: emailHeader(meta) },
         groups, meta.correspondentsDone ? [] : participants);
       Object.assign(meta, p);
@@ -208,6 +208,7 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     meta.finishedAt = new Date().toISOString();
     await db.update(sources).set({ status: "ready", error: null, meta }).where(eq(sources.id, sourceId));
   } catch (e) {
+    if (isStop(e)) return; // the server is stopping; the queue reads it again when it is back
     console.error(`[ingest] source ${sourceId} failed while ${step}`, e);
     meta.warnings = warnings;
     meta.failedStep = step;
@@ -217,6 +218,22 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       .where(eq(sources.id, sourceId))
       .catch((e2) => console.error("[ingest] could not record failure", e2));
   }
+}
+
+/** The document node an earlier, interrupted run made for this source, if any. */
+async function existingDocNode(sourceId: string, graphId: string): Promise<string | null> {
+  const [n] = await db.select({ id: nodes.id }).from(nodes)
+    .where(and(eq(nodes.graphId, graphId), eq(nodes.type, "document"), sql`${nodes.props}->>'sourceId' = ${sourceId}`, sql`${nodes.mergedInto} is null`))
+    .limit(1);
+  return n?.id ?? null;
+}
+
+/** Undecided proposals read from this source before (so reading it again never leaves two). */
+async function withdrawUndecidedProposals(v: Viewer, sourceId: string): Promise<void> {
+  const rows = await db.select({ id: changeSets.id }).from(changeSets)
+    .where(and(eq(changeSets.graphId, v.graphId), eq(changeSets.status, "draft"), eq(changeSets.origin, "ingest"), sql`${changeSets.evidence}->>'sourceId' = ${sourceId}`))
+    .limit(20);
+  for (const r of rows) await abandonChangeSet(v, r.id).catch(() => false);
 }
 
 /** The sent date of the email an attachment came with, as the weakest date candidate. */
@@ -259,7 +276,7 @@ async function saveAttachments(v: Viewer, parent: typeof sources.$inferSelect, r
         meta: { originalName: part.filename, kind: type.kind, parentSourceId: parent.id, parentSentAt: sentAt?.toISOString() ?? null, correspondentsDone: true },
         status: "pending", visibility: parent.visibility, sensitive: parent.sensitive, threadKey, connectionId: parent.connectionId,
       }).returning({ id: sources.id });
-      enqueue(() => processSource(v, row.id, { fromFile: true }));
+      await enqueueSourceRead(v.id, row.id, { fromFile: true, priority: 5 });
       saved++;
     } catch (e) {
       console.warn("[ingest] attachment skipped", errText(e));
@@ -273,7 +290,7 @@ async function saveAttachments(v: Viewer, parent: typeof sources.$inferSelect, r
 const MAX_MESSAGES = 2000;
 
 /** Split a mail import into messages; each becomes an email source (deduplicated by Message-ID) and is read in turn. */
-async function processContainer(v: Viewer, src: typeof sources.$inferSelect): Promise<void> {
+async function processContainer(v: Viewer, src: typeof sources.$inferSelect, progress: OnProgress): Promise<void> {
   const meta: Meta = { ...(src.meta ?? {}) };
   await db.update(sources).set({ status: "processing", error: null, meta: { ...meta, startedAt: new Date().toISOString() } }).where(eq(sources.id, src.id));
   try {
@@ -290,6 +307,7 @@ async function processContainer(v: Viewer, src: typeof sources.$inferSelect): Pr
     }
     if (raws.length === 0) throw new Error(src.mime === MBOX_MIME ? "No messages were found in the mailbox." : "No .eml or .mbox files were found in the zip.");
     const msgs = raws.slice(0, MAX_MESSAGES).map((raw) => ({ raw, e: parseEmail(raw) }));
+    await progress({ step: "mail", done: 0, total: msgs.length, label: "Splitting the mail into messages" });
     const threads = resolveThreads(msgs.map((m) => m.e));
 
     let imported = 0, duplicates = 0;
@@ -314,8 +332,9 @@ async function processContainer(v: Viewer, src: typeof sources.$inferSelect): Pr
         threadKey: key, externalId: e.messageId ?? null, documentDate: e.date ?? null, documentDatePrecision: e.date ? "minute" : null,
         connectionId: src.connectionId,
       }).returning({ id: sources.id });
-      enqueue(() => processSource(v, row.id, { fromFile: true }));
+      await enqueueSourceRead(v.id, row.id, { fromFile: true });
       imported++;
+      if (imported % 25 === 0) await progress({ step: "mail", done: imported + duplicates, total: msgs.length, label: "Splitting the mail into messages" });
     }
 
     // Unknown correspondents across the whole import: one proposal, not one per message.
@@ -351,13 +370,14 @@ async function replaceChunks(sourceId: string, ownerId: string, graphId: string,
   });
 }
 
-async function embedChunks(stored: StoredChunk[], meta: mux.MuxCallMeta, muxUp: boolean): Promise<string> {
+async function embedChunks(stored: StoredChunk[], meta: mux.MuxCallMeta, muxUp: boolean, progress: OnProgress = noProgress): Promise<string> {
   if (stored.length === 0) return "skipped: no text";
   if (!muxUp) return "skipped: mux unreachable (keyword search still works)";
   let done = 0;
   try {
     for (let i = 0; i < stored.length; i += EMBED_BATCH) {
       const batch = stored.slice(i, i + EMBED_BATCH);
+      await progress({ step: "indexing", done: i, total: stored.length, label: "Indexing for search" });
       const vecs = await mux.embed(batch.map((c) => c.text), meta);
       if (!vecs) return done ? `partial: ${done} of ${stored.length}` : "skipped: mux unreachable (keyword search still works)";
       for (let j = 0; j < batch.length; j++) {
@@ -369,9 +389,13 @@ async function embedChunks(stored: StoredChunk[], meta: mux.MuxCallMeta, muxUp: 
     }
     return done === stored.length ? "done" : `partial: ${done} of ${stored.length}`;
   } catch (e) {
+    if (isStop(e)) throw e;
     return `failed: ${errText(e)}`;
   }
 }
+
+/** The job running this was told to stop (restart): let that through instead of recording a partial result. */
+const isStop = (e: unknown) => e instanceof Error && /server is restarting/i.test(e.message);
 
 /* ── Step 4: reading facts (mux) ─────────────────────────────────────────────────────────────────────── */
 
@@ -404,13 +428,14 @@ async function extractGroup(messages: mux.MuxMessage[], meta: mux.MuxCallMeta): 
 }
 
 /** Ask the model what the text states, group by group. Nothing is written here. */
-async function readFacts(v: Viewer, title: string, stored: StoredChunk[], meta: mux.MuxCallMeta) {
+async function readFacts(v: Viewer, title: string, stored: StoredChunk[], meta: mux.MuxCallMeta, progress: OnProgress = noProgress) {
   const known = (await knownNodes(v)).filter((k) => k.type === "person").map((p) => ({ id: p.id, label: p.label, aliases: p.aliases }));
   const all = groupChunks(stored, 4000);
   const groups = all.slice(0, MAX_EXTRACTION_GROUPS);
   const out: { ex: Extraction; chunks: StoredChunk[] }[] = [];
   let failed = 0, lastError = "", model: string | null = null;
-  for (const group of groups) {
+  for (const [i, group] of groups.entries()) {
+    await progress({ step: "finding", done: i, total: groups.length, label: "Finding people and dates" });
     try {
       const r = await extractGroup(buildExtractionMessages({ title, text: group.map((c) => c.text).join("\n\n"), known, today: new Date(), viewerName: v.name }), meta);
       out.push({ ex: r.data, chunks: group });

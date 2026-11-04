@@ -21,11 +21,12 @@ export function visibilityOptions(L: Lx): { value: Visibility; label: string; hi
 export const visibilityLabel = (L: Lx, v: Visibility) => L.t(`library.visibility.${L.family ? "family" : "graph"}.${v}.label`);
 
 const DOC_KINDS = new Set(["mail", "letter", "scan", "photo", "recording", "note", "mailbox", "file", "web_page"]);
-const CATEGORIES = new Set(["pdf", "document", "text", "image", "audio", "email", "mailbox", "other"]);
+const CATEGORIES = new Set(["pdf", "document", "slides", "spreadsheet", "text", "image", "audio", "email", "mailbox", "other"]);
 
 /** What people call an item: "Letter", "Scan", "Email", else the kind of file. */
 export function kindWord(L: Pick<Lx, "t">, docKind: string | null | undefined, category: FileCategory): string {
-  if (docKind && DOC_KINDS.has(docKind)) return L.t(`library.docKind.${docKind}`);
+  // A presentation or spreadsheet is called that, not "File" or "Note".
+  if (docKind && DOC_KINDS.has(docKind) && category !== "slides" && category !== "spreadsheet") return L.t(`library.docKind.${docKind}`);
   return L.t(`library.kind.${CATEGORIES.has(category) ? category : "other"}`);
 }
 
@@ -128,3 +129,14 @@ export function dateOriginNote(L: Pick<Lx, "t">, from: { origin?: string; quote?
 /** Display name from an address header: `"Anna Holm" <anna@x.dk>` → Anna Holm. */
 export const senderName = (from: string | null | undefined): string | null =>
   from ? from.replace(/\s*<[^>]+>\s*$/, "").replace(/^"|"$/g, "").trim() || from : null;
+
+const STEPS = new Set(["starting", "reading", "attachments", "splitting", "indexing", "adding", "finding", "proposing", "mail", "refreshing", "done"]);
+
+/** What a running job is doing: "Finding people and dates, part 2 of 5", "Indexing for search, 64 of 120". */
+export function stepText(L: Pick<Lx, "t">, p: { step: string; done?: number; total?: number; label?: string } | null | undefined): string {
+  if (!p) return L.t("library.queue.step.starting");
+  const step = STEPS.has(p.step) ? L.t(`library.queue.step.${p.step}`) : p.label ?? p.step;
+  if (typeof p.total !== "number" || p.total <= 1 || typeof p.done !== "number") return step;
+  if (p.step === "finding") return L.t("library.queue.stepPart", { step, done: Math.min(p.done + 1, p.total), total: p.total });
+  return L.t("library.queue.stepOf", { step, done: p.done, total: p.total });
+}

@@ -12,6 +12,9 @@ export async function register() {
       // Connections (calendar links, mailboxes): every 60s, claims due ones atomically (src/lib/connectors).
       const { startConnectorScheduler } = await import("@/lib/connectors");
       startConnectorScheduler();
+      // The reading queue (src/lib/jobs): resumes what a restart interrupted, then reads uploads as they come.
+      const { startWorker } = await import("@/lib/jobs/worker");
+      startWorker();
     }
   }
 }

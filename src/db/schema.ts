@@ -259,7 +259,15 @@ export const chunks = pgTable("chunks", {
   search: tsvector("search"),
 }, (t) => [index("chunks_source_idx").on(t.sourceId), index("chunks_graph_idx").on(t.graphId)]);
 
-export type Locator = { page?: number; charStart?: number; charEnd?: number; bbox?: [number, number, number, number]; timeStartSec?: number; timeEndSec?: number };
+/**
+ * Where a passage sits in its original. `slide` (presentations), `sheet` + `range` (spreadsheets, e.g. "A1:F40"),
+ * `image` (which picture in the file, e.g. "ppt/media/image3.png" or "page 2"), `region` (where in the picture, as the
+ * reader described it) and `bbox` ([x, y, width, height] in pixels) are optional additions to page/chars/time.
+ */
+export type Locator = {
+  page?: number; charStart?: number; charEnd?: number; bbox?: [number, number, number, number]; timeStartSec?: number; timeEndSec?: number;
+  slide?: number; sheet?: string; range?: string; image?: string; region?: string;
+};
 
 /** W3C PROV-style record: why we believe a node or edge. */
 export const provenance = pgTable("provenance", {
@@ -962,3 +970,50 @@ export const artifactVersions = pgTable("artifact_versions", {
   createdBy: uuid("created_by"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("artifact_versions_uq").on(t.artifactId, t.version)]);
+
+/* ── Background jobs: a durable queue in Postgres (reading files, rebuilding), claimed with SKIP LOCKED ──── */
+
+/**
+ * One piece of background work, e.g. reading an uploaded file. Workers claim queued jobs with
+ * `FOR UPDATE SKIP LOCKED` and hold a lease (`leaseUntil`, renewed while running); a job whose lease ran out
+ * (the server restarted) goes back to the queue. Failures retry with back-off until `maxAttempts`.
+ */
+export const jobs = pgTable("jobs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** It runs as this person (re-checked when it starts: still a member who may write). */
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** ingest.read | ingest.rebuild */
+  kind: text("kind").notNull(),
+  /** What it works on: a source id. */
+  subjectId: uuid("subject_id").references(() => sources.id, { onDelete: "cascade" }),
+  /** queued | running | done | failed | cancelled */
+  status: text("status").notNull().default("queued"),
+  /** OCR, vision and transcription: run fewer of these at once. */
+  heavy: boolean("heavy").notNull().default(false),
+  /** Options for the handler, e.g. { fromFile: true }. */
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  attempts: integer("attempts").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(3),
+  /** Times a run was cut off by a restart (not counted as attempts, but capped). */
+  interruptions: integer("interruptions").notNull().default(0),
+  /** Higher first. */
+  priority: integer("priority").notNull().default(0),
+  runAfter: timestamp("run_after", { withTimezone: true }).notNull().defaultNow(),
+  leaseUntil: timestamp("lease_until", { withTimezone: true }),
+  lockedBy: text("locked_by"),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  /** { step, done, total, label } */
+  progress: jsonb("progress").$type<{ step: string; done?: number; total?: number; label?: string }>(),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index("jobs_claim_idx").on(t.status, t.priority, t.runAfter),
+  index("jobs_graph_idx").on(t.graphId, t.status, t.createdAt),
+  index("jobs_subject_idx").on(t.subjectId, t.status),
+  // At most one waiting job per thing (a second "Read it again" while one waits is the same job).
+  uniqueIndex("jobs_one_queued_uq").on(t.kind, t.subjectId).where(sql`status = 'queued'`),
+]);
+

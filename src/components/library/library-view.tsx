@@ -6,7 +6,8 @@ import { LayoutGrid, Lock, MessagesSquare, RefreshCw, Rows3, Search, ShieldAlert
 import { Avatar, Button, Input, Select, Tabs } from "@/components/ui";
 import { RebuildButton } from "@/components/timeline/rebuild-button";
 import type { LibraryType, SourceSummary } from "@/lib/ingest/library";
-import { extensionLabel, isStuck, StatusPill, TypeIcon, type SourceStatus } from "./source-meta";
+import { extensionLabel, isStuck, StatusPill, stepText, TypeIcon, type SourceStatus } from "./source-meta";
+import { ReadingQueue } from "./reading-queue";
 import { formatBytes, formatDay, formatDocDate, kindWord, senderName, visibilityLabel, type Lx } from "./i18n";
 import { useLx } from "./use-lx";
 import { UploadZone } from "./upload-zone";
@@ -42,7 +43,8 @@ function queryString(f: LibraryFilters, extra?: Record<string, string>) {
   return p.toString();
 }
 
-const busy = (s: SourceSummary) => (s.status === "pending" || s.status === "processing") && !isStuck(s.status, s.startedAt, s.createdAt);
+const busy = (s: SourceSummary) => !!s.job || ((s.status === "pending" || s.status === "processing") && !isStuck(s.status, s.startedAt, s.createdAt, s.job));
+const stuckOf = (s: SourceSummary) => isStuck(s.status, s.startedAt, s.createdAt, s.job);
 
 export function LibraryView({ initial, initialFilters, family = false }: { initial: List; initialFilters: LibraryFilters; family?: boolean }) {
   const L = useLx(family);
@@ -57,6 +59,7 @@ export function LibraryView({ initial, initialFilters, family = false }: { initi
   const [owner, setOwner] = useState<string>("");
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
   const [watchingUploads, setWatchingUploads] = useState(false);
+  const [queueKey, setQueueKey] = useState(0);
   const reqId = useRef(0);
   const tRef = useRef(t);
   tRef.current = t;
@@ -139,6 +142,7 @@ export function LibraryView({ initial, initialFilters, family = false }: { initi
         setError(body.error ?? t("library.list.retryFailed"));
       }
       await load(filters, true, Math.max(PAGE, shown));
+      setQueueKey((k) => k + 1);
     } finally {
       setRetrying((s) => { const n = new Set(s); n.delete(id); return n; });
     }
@@ -159,7 +163,8 @@ export function LibraryView({ initial, initialFilters, family = false }: { initi
 
   const byId = useMemo(() => new Map(data.items.map((s) => [s.id, s])), [data.items]);
   const statusOf = useCallback((id: string) => byId.get(id), [byId]);
-  const onUploaded = useCallback(() => void load(filters, true, Math.max(PAGE, shown)), [load, filters, shown]);
+  const onUploaded = useCallback(() => { void load(filters, true, Math.max(PAGE, shown)); setQueueKey((k) => k + 1); }, [load, filters, shown]);
+  const onQueueSettled = useCallback(() => void load(filters, true, Math.max(PAGE, shown)), [load, filters, shown]);
 
   const filtered = filters.type !== "" || filters.status !== "" || filters.q.trim() !== "" || ownerActive;
   const clear = () => { setFilters({ type: "", status: "", q: "" }); setOwner(""); };
@@ -169,6 +174,7 @@ export function LibraryView({ initial, initialFilters, family = false }: { initi
   return (
     <div className="space-y-10">
       <UploadZone family={family} onUploaded={onUploaded} statusOf={statusOf} onWatching={setWatchingUploads} prominent={emptyLibrary} />
+      <ReadingQueue L={L} refreshKey={queueKey} onSettled={onQueueSettled} />
 
       {!emptyLibrary && (
         <section aria-labelledby="library-files-h">
@@ -374,7 +380,11 @@ function MailLine({ L, s }: { L: Lx; s: SourceSummary }) {
 
 function RetryLine({ L, s, onRetry, retrying }: { L: Lx; s: SourceSummary; onRetry: (id: string) => void; retrying: boolean }) {
   const { t } = L;
-  const stuck = isStuck(s.status, s.startedAt, s.createdAt);
+  const stuck = stuckOf(s);
+  if (s.job?.status === "running") return <p className="mt-1.5 truncate text-xs text-accent">{stepText(L, s.job.progress)}</p>;
+  if (s.job?.status === "queued") {
+    return s.job.error ? <p className="mt-1.5 line-clamp-2 text-xs text-warn">{t("library.queue.retryingSoon", { reason: s.job.error })}</p> : null;
+  }
   if (s.status !== "failed" && !stuck) return null;
   return (
     <div className="mt-1.5">
@@ -392,14 +402,14 @@ function RetryLine({ L, s, onRetry, retrying }: { L: Lx; s: SourceSummary; onRet
 }
 
 function Tile({ L, s, onRetry, retrying }: { L: Lx; s: SourceSummary; onRetry: (id: string) => void; retrying: boolean }) {
-  const stuck = isStuck(s.status, s.startedAt, s.createdAt);
+  const stuck = stuckOf(s);
   const ext = s.category !== "image" && s.category !== "text" ? extensionLabel(s.title) : null;
   return (
     <article className="group min-w-0">
       <Link href={`/library/${s.id}`} className="relative block overflow-hidden rounded-lg focus-visible:outline-offset-4" aria-label={s.title}>
         <Thumb s={s} excerpt className="aspect-[4/3] w-full transition-[filter] duration-150 group-hover:brightness-[0.97]" />
         {ext && <span className="absolute bottom-2.5 right-3 rounded bg-surface px-1 text-xs text-muted">{ext}</span>}
-        <span className="absolute left-2 top-2"><StatusPill L={L} status={s.status} stuck={stuck} className="shadow-[0_1px_2px_rgb(0_0_0/0.08)]" /></span>
+        <span className="absolute left-2 top-2"><StatusPill L={L} status={s.status} stuck={stuck} job={s.job} className="shadow-[0_1px_2px_rgb(0_0_0/0.08)]" /></span>
       </Link>
       <h3 className="mt-2 truncate text-sm font-medium" title={s.title}>
         <Link href={`/library/${s.id}`} className="hover:underline" tabIndex={-1}>{s.title}</Link>
@@ -426,7 +436,7 @@ function FileTable({ L, items, onRetry, retrying }: { L: Lx; items: SourceSummar
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <Link href={`/library/${s.id}`} className="min-w-0 flex-1 truncate text-sm font-medium hover:underline">{s.title}</Link>
-                <StatusPill L={L} status={s.status} stuck={isStuck(s.status, s.startedAt, s.createdAt)} />
+                <StatusPill L={L} status={s.status} stuck={stuckOf(s)} job={s.job} />
               </div>
               <p className="mt-0.5 flex min-w-0 items-center gap-2 text-xs text-muted">
                 <span className="shrink-0">{kindWord(L, s.docKind, s.category)}</span>
@@ -456,7 +466,7 @@ function FileTable({ L, items, onRetry, retrying }: { L: Lx; items: SourceSummar
         </thead>
         <tbody>
           {items.map((s) => {
-            const stuck = isStuck(s.status, s.startedAt, s.createdAt);
+            const stuck = stuckOf(s);
             return (
               <tr key={s.id} className="group border-b border-line align-middle last:border-0 hover:bg-surface/60">
                 <td className="max-w-0 py-2 pr-4 sm:w-[42%]">
@@ -465,7 +475,7 @@ function FileTable({ L, items, onRetry, retrying }: { L: Lx; items: SourceSummar
                     <div className="min-w-0">
                       <Link href={`/library/${s.id}`} className="block truncate font-medium hover:underline" title={s.title}>{s.title}</Link>
                       <MailLine L={L} s={s} />
-                      {(s.status === "failed" || stuck) && <RetryLine L={L} s={s} onRetry={onRetry} retrying={retrying.has(s.id)} />}
+                      {(s.status === "failed" || stuck || s.job) && <RetryLine L={L} s={s} onRetry={onRetry} retrying={retrying.has(s.id)} />}
                     </div>
                   </div>
                 </td>
@@ -486,7 +496,7 @@ function FileTable({ L, items, onRetry, retrying }: { L: Lx; items: SourceSummar
                   </span>
                 </td>
                 <td className="hidden whitespace-nowrap py-2 pr-4 text-right tabular-nums text-muted lg:table-cell">{formatBytes(L, s.size) || "—"}</td>
-                <td className="whitespace-nowrap py-2 text-right"><StatusPill L={L} status={s.status} stuck={stuck} /></td>
+                <td className="whitespace-nowrap py-2 text-right"><StatusPill L={L} status={s.status} stuck={stuck} job={s.job} /></td>
               </tr>
             );
           })}

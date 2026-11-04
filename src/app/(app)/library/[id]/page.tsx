@@ -6,7 +6,7 @@ import { NodeChip, PersonChip } from "@/components/ui";
 import { AudioTranscript } from "@/components/library/audio-transcript";
 import { CiteButton, MarkedText, PassageList, PdfFrame, ProvenanceProvider } from "@/components/library/provenance";
 import { SharingSettings, SourceSettings } from "@/components/library/source-settings";
-import { isStuck, StatusPill } from "@/components/library/source-meta";
+import { isStuck, StatusPill, stepText } from "@/components/library/source-meta";
 import { countsLine, dateOriginNote, extractionNote, formatBytes, formatDay, formatDocDate, formatMoment, kindWord, listJoin, senderName, timeOfDay, visibilityLabel, type Lx } from "@/components/library/i18n";
 import { libraryLx } from "@/components/library/server-lx";
 import { StatusWatcher } from "@/components/library/status-watcher";
@@ -55,8 +55,8 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
     pendingId ? getChangeSet(v, pendingId).catch(() => null) : Promise.resolve(null)]);
   const { t } = L;
   const s = d.source;
-  const stuck = isStuck(s.status, s.startedAt, s.createdAt);
-  const busy = (s.status === "pending" || s.status === "processing") && !stuck;
+  const stuck = isStuck(s.status, s.startedAt, s.createdAt, s.job);
+  const busy = !!s.job || ((s.status === "pending" || s.status === "processing") && !stuck);
   const VisIcon = s.visibility === "private" ? Lock : s.visibility === "parents" ? UsersRound : Users;
   const family = L.family;
   const dateFrom = (s.meta.documentDateFrom ?? null) as { origin?: string; quote?: string | null } | null;
@@ -91,7 +91,8 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
               <ShieldAlert aria-hidden className="size-3.5" />{t("library.detail.sensitive")}
             </span>
           )}
-          <StatusPill L={L} status={s.status} stuck={stuck} />
+          <StatusPill L={L} status={s.status} stuck={stuck} job={s.job} />
+          {s.job?.status === "running" && <span className="text-accent">{stepText(L, s.job.progress)}</span>}
         </div>
       </header>
 

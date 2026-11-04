@@ -24,9 +24,11 @@ describe("detectFileType", () => {
   it("tells docx apart from other zip files", () => {
     const zip = pad(bytes("PK", 3, 4));
     expect(detectFileType("Letter.docx", "", zip)).toMatchObject({ ok: true, kind: "docx" });
-    const xlsx = detectFileType("Budget.xlsx", "", zip);
-    expect(xlsx.ok).toBe(false);
-    if (!xlsx.ok) expect(xlsx.reason).toMatch(/spreadsheet/);
+    expect(detectFileType("Budget.xlsx", "", zip)).toMatchObject({ ok: true, kind: "spreadsheet", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    expect(detectFileType("Møde.pptx", "", zip)).toMatchObject({ ok: true, kind: "pptx", mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+    expect(detectFileType("Ark.ods", "", zip)).toMatchObject({ ok: true, kind: "spreadsheet", mime: "application/vnd.oasis.opendocument.spreadsheet" });
+    // No useful name: the part names near the start of the zip tell.
+    expect(detectFileType("upload", "", pad(bytes("PK", 3, 4, "....[Content_Types].xml....ppt/slides/slide1.xml")))).toMatchObject({ ok: true, kind: "pptx" });
     // A .zip is a mail import (its .eml files are read); a zip under another name is still refused.
     expect(detectFileType("mail.zip", "", zip)).toMatchObject({ ok: true, kind: "archive", mime: "application/zip" });
     expect(detectFileType("stuff.bin", "", zip)).toMatchObject({ ok: false });
@@ -39,7 +41,7 @@ describe("detectFileType", () => {
 
   it("accepts text formats by extension when the bytes are text", () => {
     expect(detectFileType("notes.md", "", text("# Hej\nÆble og øl"))).toMatchObject({ ok: true, kind: "text", mime: "text/markdown" });
-    expect(detectFileType("data.csv", "text/csv", text("a,b\n1,2"))).toMatchObject({ ok: true, mime: "text/csv" });
+    expect(detectFileType("data.csv", "text/csv", text("a,b\n1,2"))).toMatchObject({ ok: true, kind: "spreadsheet", mime: "text/csv" });
     expect(detectFileType("readme.txt", "", text("hello"))).toMatchObject({ ok: true, mime: "text/plain" });
     expect(detectFileType("mail.eml", "", text("From: a@b.dk\nSubject: Hi\n\nBody"))).toMatchObject({ ok: true, kind: "email", mime: "message/rfc822" });
   });
@@ -56,6 +58,10 @@ describe("detectFileType", () => {
     expect(detectFileType("empty.txt", "", new Uint8Array())).toMatchObject({ ok: false });
     expect(detectFileType("clip.mp4", "video/mp4", pad(bytes(0, 0, 0, 24, "ftypisom")))).toMatchObject({ ok: false });
     expect(detectFileType("old.doc", "", pad(bytes(0xd0, 0xcf, 0x11, 0xe0)))).toMatchObject({ ok: false });
+    expect(detectFileType("Regnskab.xls", "", pad(bytes(0xd0, 0xcf, 0x11, 0xe0)))).toMatchObject({ ok: true, kind: "spreadsheet", mime: "application/vnd.ms-excel" });
+    const ppt = detectFileType("Gammel.ppt", "", pad(bytes(0xd0, 0xcf, 0x11, 0xe0)));
+    expect(ppt.ok).toBe(false);
+    if (!ppt.ok) expect(ppt.reason).toMatch(/old PowerPoint file \(\.ppt\).*save it as \.pptx/);
   });
 });
 
@@ -76,7 +82,12 @@ describe("helpers", () => {
     expect(mimeCategory("audio/mp4")).toBe("audio");
     expect(mimeCategory(null)).toBe("other");
     expect(kindFromMime("message/rfc822")).toBe("email");
-    expect(kindFromMime("text/csv")).toBe("text");
+    expect(kindFromMime("text/csv")).toBe("spreadsheet");
+    expect(kindFromMime("application/vnd.openxmlformats-officedocument.presentationml.presentation")).toBe("pptx");
+    expect(kindFromMime("application/vnd.ms-excel")).toBe("spreadsheet");
+    expect(mimeCategory("application/vnd.openxmlformats-officedocument.presentationml.presentation")).toBe("slides");
+    expect(mimeCategory("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")).toBe("spreadsheet");
+    expect(mimeCategory("text/csv")).toBe("spreadsheet");
     expect(kindFromMime("application/zip")).toBe("archive");
     expect(kindFromMime("application/mbox")).toBe("mailbox");
     expect(kindFromMime("application/octet-stream")).toBeNull();

@@ -6,7 +6,8 @@
 import type { Locator } from "@/db/schema";
 
 /** A unit of extracted text: one PDF page, one transcript segment, or a whole text file. */
-export type TextSegment = { text: string; page?: number; timeStartSec?: number; timeEndSec?: number };
+/** `at` carries the rest of the locator (slide, sheet + range, image, region, bbox) onto every chunk cut from it. */
+export type TextSegment = { text: string; page?: number; timeStartSec?: number; timeEndSec?: number; at?: Omit<Locator, "page" | "charStart" | "charEnd" | "timeStartSec" | "timeEndSec"> };
 export type Chunk = { text: string; locator: Locator };
 
 export const CHUNK_SIZE = 1200;
@@ -69,7 +70,7 @@ export function chunkSegments(segments: TextSegment[], size = CHUNK_SIZE, overla
 function splitSegment(s: TextSegment, size: number, overlap: number): Chunk[] {
   return splitText(s.text, size, overlap).map(({ start, end }) => ({
     text: s.text.slice(start, end),
-    locator: { ...(s.page !== undefined ? { page: s.page } : {}), charStart: start, charEnd: end },
+    locator: { ...(s.at ?? {}), ...(s.page !== undefined ? { page: s.page } : {}), charStart: start, charEnd: end },
   }));
 }
 
@@ -131,8 +132,12 @@ export function formatLocator(l: Locator | null | undefined): string {
   if (!l) return "";
   const parts: string[] = [];
   if (l.page !== undefined) parts.push(`p. ${l.page}`);
+  if (l.slide !== undefined) parts.push(`slide ${l.slide}`);
+  if (l.sheet !== undefined) parts.push(l.range ? `${l.sheet} ${l.range}` : l.sheet);
+  if (l.image !== undefined && l.slide === undefined && l.page === undefined) parts.push(l.image);
+  if (l.region !== undefined) parts.push(l.region);
   if (l.timeStartSec !== undefined) parts.push(`${formatTime(l.timeStartSec)}–${formatTime(l.timeEndSec ?? l.timeStartSec)}`);
-  else if (l.charStart !== undefined && l.page === undefined) parts.push(`chars ${l.charStart}–${l.charEnd ?? l.charStart}`);
+  else if (l.charStart !== undefined && l.page === undefined && l.slide === undefined && l.sheet === undefined && l.image === undefined) parts.push(`chars ${l.charStart}–${l.charEnd ?? l.charStart}`);
   return parts.join(" · ");
 }
 

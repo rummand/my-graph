@@ -2,7 +2,7 @@
  * Ingestion contract (owned by the library workstream). Server-only.
  * Stores the original unchanged (content-addressed), extracts text (PDF, DOCX, images via OCR, audio via mux), chunks
  * and embeds it, then asks mux to extract entities/events/facts and writes them into GBrain with provenance pointing
- * at the exact chunk and quote.
+ * at the exact chunk and quote. Reading runs from the durable job queue (src/lib/jobs), so a restart never loses it.
  */
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -12,7 +12,7 @@ import { putFile, sha256Hex } from "@/lib/storage";
 import { scopeOf } from "@/lib/graphs/pure";
 import { IngestError } from "./errors";
 import { detectFileType, MAX_UPLOAD_BYTES } from "./mime";
-import { enqueue, processSource } from "./pipeline";
+import { enqueueSourceRead, waitForJob } from "@/lib/jobs/queue";
 
 export { IngestError };
 
@@ -51,7 +51,7 @@ export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "p
   }).returning({ id: sources.id });
 
   void audit(v, "library.upload", { type: "source", id: row.id }, { mime: type.mime, size: stored.size }).catch(() => {});
-  enqueue(() => processSource(v, row.id, { fromFile: true }));
+  await enqueueSourceRead(v.id, row.id, { fromFile: true, priority: 10 });
   return { sourceId: row.id, duplicate: false };
 }
 
@@ -64,14 +64,15 @@ export async function ingestText(v: Viewer, sourceId: string): Promise<void> {
   const [src] = await db.select({ ownerId: sources.ownerId, graphId: sources.graphId }).from(sources).where(eq(sources.id, sourceId)).limit(1);
   if (!src) throw new IngestError(404, "Source not found.");
   if (src.ownerId !== v.id || src.graphId !== v.graphId) throw new IngestError(403, "Only the owner can process this source, in its own graph.");
-  await new Promise<void>((resolve) => enqueue(() => processSource(v, sourceId, { fromFile: false }).finally(resolve)));
+  const job = await enqueueSourceRead(v.id, sourceId, { fromFile: false, priority: 10 });
+  if (job) await waitForJob(job.id);
 }
 
-/** Run the whole pipeline again for an uploaded source (Retry). Returns immediately. */
+/** Run the whole pipeline again for an uploaded source (Retry, "Read it again", connectors). Queues it; returns at once. */
 export async function reprocessSource(v: Viewer, sourceId: string): Promise<void> {
   const [src] = await db.select({ ownerId: sources.ownerId, graphId: sources.graphId, storageKey: sources.storageKey }).from(sources).where(eq(sources.id, sourceId)).limit(1);
   if (!src) throw new IngestError(404, "Source not found.");
   if (src.ownerId !== v.id || src.graphId !== v.graphId) throw new IngestError(403, "Only the person who added this file can reprocess it.");
   await db.update(sources).set({ status: "pending", error: null }).where(eq(sources.id, sourceId));
-  enqueue(() => processSource(v, sourceId, { fromFile: !!src.storageKey }));
+  await enqueueSourceRead(v.id, sourceId, { fromFile: !!src.storageKey, priority: 20 });
 }

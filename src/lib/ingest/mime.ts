@@ -3,13 +3,20 @@
  * (magic numbers), so a renamed executable never gets through as a "pdf".
  */
 
-export type FileKind = "pdf" | "docx" | "text" | "image" | "audio" | "email" | "mailbox" | "archive";
-export type FileCategory = "pdf" | "document" | "text" | "image" | "audio" | "email" | "mailbox" | "other";
+export type FileKind = "pdf" | "docx" | "pptx" | "spreadsheet" | "text" | "image" | "audio" | "email" | "mailbox" | "archive";
+export type FileCategory = "pdf" | "document" | "slides" | "spreadsheet" | "text" | "image" | "audio" | "email" | "mailbox" | "other";
 
 /** Containers are split into messages (each its own source); they are not read as one document. */
 export const CONTAINER_KINDS: ReadonlySet<FileKind> = new Set(["mailbox", "archive"]);
 export const MBOX_MIME = "application/mbox";
 export const ZIP_MIME = "application/zip";
+export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+export const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation";
+export const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+export const XLS_MIME = "application/vnd.ms-excel";
+export const ODS_MIME = "application/vnd.oasis.opendocument.spreadsheet";
+export const CSV_MIME = "text/csv";
+const SPREADSHEET_MIMES = new Set([XLSX_MIME, XLS_MIME, ODS_MIME, CSV_MIME, "application/vnd.ms-excel.sheet.macroenabled.12"]);
 
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
@@ -18,17 +25,18 @@ export type DetectResult =
   | { ok: false; reason: string };
 
 /** Plain-English list of what the library accepts, for error messages and the upload zone. */
-export const ACCEPTED_DESCRIPTION = "PDF, Word (.docx), text (.txt, .md, .csv), email (.eml, a mailbox .mbox, or a .zip of .eml files), photos (JPG, PNG, HEIC, WebP) and audio (MP3, M4A, WAV, OGG, WebM)";
+export const ACCEPTED_DESCRIPTION = "PDF, Word (.docx), PowerPoint (.pptx), spreadsheets (.xlsx, .xls, .ods, .csv), text (.txt, .md), email (.eml, a mailbox .mbox, or a .zip of .eml files), photos (JPG, PNG, HEIC, WebP) and audio (MP3, M4A, WAV, OGG, WebM)";
 
 /** The `accept` attribute for the file picker. */
 export const ACCEPT_ATTR = [
-  ".pdf", ".docx", ".txt", ".md", ".markdown", ".csv", ".eml", ".mbox", ".zip",
+  ".pdf", ".docx", ".pptx", ".xlsx", ".xlsm", ".xls", ".ods", ".txt", ".md", ".markdown", ".csv", ".eml", ".mbox", ".zip",
   ".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp",
   ".mp3", ".m4a", ".wav", ".ogg", ".oga", ".opus", ".webm",
   "application/pdf", "image/*", "audio/*", "text/plain", "text/markdown", "text/csv", "message/rfc822", "application/mbox", "application/zip",
+  DOCX_MIME, PPTX_MIME, XLSX_MIME, XLS_MIME, ODS_MIME,
 ].join(",");
 
-const TEXT_EXT: Record<string, string> = { txt: "text/plain", md: "text/markdown", markdown: "text/markdown", csv: "text/csv" };
+const TEXT_EXT: Record<string, string> = { txt: "text/plain", md: "text/markdown", markdown: "text/markdown" };
 const AUDIO_EXT: Record<string, string> = { mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", ogg: "audio/ogg", oga: "audio/ogg", opus: "audio/ogg", webm: "audio/webm" };
 const IMAGE_EXT: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", heic: "image/heic", heif: "image/heic", webp: "image/webp" };
 
@@ -93,14 +101,27 @@ export function detectFileType(name: string, declaredMime: string, head: Uint8Ar
     return { ok: false, reason: `"${name}" looks like a video. The library takes audio recordings, not video.` };
   }
   if (startsWith(head, [0x50, 0x4b, 0x03, 0x04])) {
-    if (ext === "docx" || declared === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-      return { ok: true, mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", kind: "docx", ext: "docx" };
-    }
+    // Office files are zips; the extension or declared type says which, else the part names near the start do.
+    const names = ascii(head, 0, head.length);
+    if (ext === "docx" || declared === DOCX_MIME) return { ok: true, mime: DOCX_MIME, kind: "docx", ext: "docx" };
+    if (ext === "pptx" || declared === PPTX_MIME) return { ok: true, mime: PPTX_MIME, kind: "pptx", ext: "pptx" };
+    if (ext === "xlsx" || ext === "xlsm" || declared === XLSX_MIME) return { ok: true, mime: XLSX_MIME, kind: "spreadsheet", ext: "xlsx" };
+    if (ext === "ods" || declared === ODS_MIME || names.includes(ODS_MIME)) return { ok: true, mime: ODS_MIME, kind: "spreadsheet", ext: "ods" };
+    if (["odp", "odt", "ppsx", "potx"].includes(ext)) return { ok: false, reason: `"${name}" isn't a format the library reads. Save it as PDF${ext === "odt" ? " or .docx" : " or .pptx"} and upload that.` };
     if (ext === "zip" || declared === "application/zip" || declared === "application/x-zip-compressed") return { ok: true, mime: ZIP_MIME, kind: "archive", ext: "zip" };
-    if (["xlsx", "pptx"].includes(ext)) return { ok: false, reason: `"${name}" is a ${ext === "xlsx" ? "spreadsheet" : "presentation"}. Save it as PDF (or CSV for a spreadsheet) and upload that.` };
+    if (names.includes("ppt/")) return { ok: true, mime: PPTX_MIME, kind: "pptx", ext: "pptx" };
+    if (names.includes("xl/")) return { ok: true, mime: XLSX_MIME, kind: "spreadsheet", ext: "xlsx" };
+    if (names.includes("word/")) return { ok: true, mime: DOCX_MIME, kind: "docx", ext: "docx" };
     return { ok: false, reason: `"${name}" is a zip archive. Name it .zip to import the emails inside, or unpack it and upload the files.` };
   }
-  if (startsWith(head, [0xd0, 0xcf, 0x11, 0xe0])) return { ok: false, reason: `"${name}" is an old Word/Office file (.doc). Save it as .docx or PDF and upload that.` };
+  if (startsWith(head, [0xd0, 0xcf, 0x11, 0xe0])) {
+    // Old binary Office files. Excel 97–2003 (.xls) can be read; old PowerPoint and Word can't.
+    if (ext === "xls" || declared === XLS_MIME) return { ok: true, mime: XLS_MIME, kind: "spreadsheet", ext: "xls" };
+    if (ext === "ppt" || ext === "pps" || declared === "application/vnd.ms-powerpoint") {
+      return { ok: false, reason: `"${name}" is an old PowerPoint file (.ppt), which the library can't read. Open it in PowerPoint or Keynote, save it as .pptx and upload that.` };
+    }
+    return { ok: false, reason: `"${name}" is an old Word/Office file (.doc). Save it as .docx or PDF and upload that.` };
+  }
 
   // Text formats — decided by extension (or declared type), then checked to really be text.
   const isText = looksLikeText(head);
@@ -110,12 +131,16 @@ export function detectFileType(name: string, declaredMime: string, head: Uint8Ar
   if (ext === "eml" || declared === "message/rfc822") {
     return isText ? { ok: true, mime: "message/rfc822", kind: "email", ext: "eml" } : { ok: false, reason: `"${name}" doesn't look like an email file.` };
   }
-  const textMime = TEXT_EXT[ext] ?? (["text/plain", "text/markdown", "text/csv"].includes(declared) ? declared : undefined);
+  if (ext === "csv" || declared === CSV_MIME) {
+    return isText ? { ok: true, mime: CSV_MIME, kind: "spreadsheet", ext: "csv" } : { ok: false, reason: `"${name}" isn't readable text.` };
+  }
+  const textMime = TEXT_EXT[ext] ?? (["text/plain", "text/markdown"].includes(declared) ? declared : undefined);
   if (textMime) {
     return isText ? { ok: true, mime: textMime, kind: "text", ext: ext || textMime.split("/")[1] } : { ok: false, reason: `"${name}" isn't readable text.` };
   }
 
-  if (IMAGE_EXT[ext] || AUDIO_EXT[ext] || ext === "pdf" || ext === "docx") {
+  if (ext === "ppt") return { ok: false, reason: `"${name}" is an old PowerPoint file (.ppt), which the library can't read. Open it in PowerPoint or Keynote, save it as .pptx and upload that.` };
+  if (IMAGE_EXT[ext] || AUDIO_EXT[ext] || ["pdf", "docx", "pptx", "xlsx", "xls", "ods"].includes(ext)) {
     return { ok: false, reason: `"${name}" says it is a .${ext} file, but its contents don't match. It may be damaged.` };
   }
   return { ok: false, reason: `"${name}" isn't a file type the library can read. Accepted: ${ACCEPTED_DESCRIPTION}.` };
@@ -126,6 +151,8 @@ export function mimeCategory(mime: string | null | undefined): FileCategory {
   const m = (mime ?? "").toLowerCase();
   if (m === "application/pdf") return "pdf";
   if (m.includes("wordprocessingml")) return "document";
+  if (m.includes("presentationml")) return "slides";
+  if (SPREADSHEET_MIMES.has(m)) return "spreadsheet";
   if (m === "message/rfc822") return "email";
   if (m === MBOX_MIME || m === ZIP_MIME) return "mailbox";
   if (m.startsWith("image/")) return "image";
@@ -135,7 +162,7 @@ export function mimeCategory(mime: string | null | undefined): FileCategory {
 }
 
 export const CATEGORY_LABEL: Record<FileCategory, string> = {
-  pdf: "PDF", document: "Word document", text: "Text", image: "Photo", audio: "Audio", email: "Email", mailbox: "Mail import", other: "Note",
+  pdf: "PDF", document: "Word document", slides: "Presentation", spreadsheet: "Spreadsheet", text: "Text", image: "Photo", audio: "Audio", email: "Email", mailbox: "Mail import", other: "Note",
 };
 
 /** The processing kind for a stored mime type (inverse of detectFileType's result). */
@@ -143,6 +170,8 @@ export function kindFromMime(mime: string | null | undefined): FileKind | null {
   const m = (mime ?? "").toLowerCase();
   if (m === "application/pdf") return "pdf";
   if (m.includes("wordprocessingml")) return "docx";
+  if (m.includes("presentationml")) return "pptx";
+  if (SPREADSHEET_MIMES.has(m)) return "spreadsheet";
   if (m === "message/rfc822") return "email";
   if (m === MBOX_MIME) return "mailbox";
   if (m === ZIP_MIME) return "archive";

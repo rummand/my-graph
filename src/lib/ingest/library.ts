@@ -10,6 +10,7 @@ import { audit, type Viewer } from "@/lib/auth";
 import { getChangeSet } from "@/lib/changes";
 import * as gbrain from "@/lib/gbrain";
 import { deleteStored } from "@/lib/storage";
+import { liveJobsFor, type LiveJob } from "@/lib/jobs/queue";
 import { canEditSourceRow, canReadSourceRow, sourceVisibleTo } from "./access";
 import { IngestError } from "./errors";
 import { docKindOf, type DocKind } from "./classify";
@@ -35,6 +36,8 @@ export type SourceSummary = {
   containerId: string | null; parentSourceId: string | null;
   /** Mail imports: messages found and imported. */
   messages: number | null; imported: number | null;
+  /** Its job in the reading queue, while one waits or runs (the real state behind "pending"/"processing"). */
+  job: LiveJob | null;
 };
 
 /** What people filter by: the kind of file, or what the item is (mail, letter, scan, photo). */
@@ -90,7 +93,15 @@ function summarize(r: typeof sources.$inferSelect & { ownerName: string | null }
     parentSourceId: typeof m.parentSourceId === "string" ? m.parentSourceId : null,
     messages: typeof m.messages === "number" ? m.messages : null,
     imported: typeof m.imported === "number" ? m.imported : null,
+    job: null,
   };
+}
+
+/** Attach each source's waiting or running job. */
+async function withJobs<T extends SourceSummary>(items: T[]): Promise<T[]> {
+  const live = await liveJobsFor(items.filter((i) => i.status === "pending" || i.status === "processing" || i.status === "failed").map((i) => i.id)).catch(() => new Map<string, LiveJob>());
+  for (const i of items) i.job = live.get(i.id) ?? null;
+  return items;
 }
 
 export async function listSources(v: Viewer, f: ListFilters = {}): Promise<{ items: SourceSummary[]; total: number }> {
@@ -123,7 +134,7 @@ export async function listSources(v: Viewer, f: ListFilters = {}): Promise<{ ite
     .limit(Math.min(f.limit ?? 60, 200))
     .offset(f.offset ?? 0);
   const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(sources).where(where);
-  const items = rows.map((r) => summarize(r, v));
+  const items = await withJobs(rows.map((r) => summarize(r, v)));
   const keys = [...new Set(items.map((i) => i.threadKey).filter((k): k is string => !!k))];
   if (keys.length) {
     const counts = await db.select({ key: sources.threadKey, n: sql<number>`count(*)::int` }).from(sources)
@@ -224,7 +235,7 @@ export async function getSourceDetail(v: Viewer, id: string): Promise<SourceDeta
     .map((n) => ({ id: n.id, label: n.label, type: n.type, summary: n.summary, startAt: n.startAt?.toISOString() ?? null }))
     .sort((a, b) => a.type.localeCompare(b.type) || a.label.localeCompare(b.label));
 
-  const summary = summarize({ ...src, ownerName: src.ownerName }, v);
+  const [summary] = await withJobs([summarize({ ...src, ownerName: src.ownerName }, v)]);
   const m = src.meta ?? {};
 
   let thread: SourceDetail["thread"] = null;

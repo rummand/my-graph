@@ -7,7 +7,7 @@ import { ArrowUpFromLine, Check, ClipboardPaste, Globe, LoaderCircle, X } from "
 import { Button, Kbd } from "@/components/ui";
 import type { SourceSummary } from "@/lib/ingest/library";
 import { ACCEPT_ATTR, MAX_UPLOAD_BYTES, mimeCategory } from "@/lib/ingest/mime";
-import { isStuck, TypeIcon } from "./source-meta";
+import { isStuck, stepText, TypeIcon } from "./source-meta";
 import { extractionNote, formatBytes, type Lx, type Visibility } from "./i18n";
 import { formatDate } from "@/lib/i18n/dates";
 import { useLx } from "./use-lx";
@@ -274,7 +274,7 @@ export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false
   const live = (i: Item) => (i.sourceId && i.state === "done" ? statusOf?.(i.sourceId) : undefined);
   const watching = items.some((i) => {
     const s = live(i);
-    return !!s && (s.status === "pending" || s.status === "processing") && !isStuck(s.status, s.startedAt, s.createdAt);
+    return !!s && (!!s.job || ((s.status === "pending" || s.status === "processing") && !isStuck(s.status, s.startedAt, s.createdAt, s.job)));
   });
   useEffect(() => { onWatching?.(watching); }, [watching, onWatching]);
 
@@ -368,7 +368,7 @@ export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false
 function UploadRow({ L, item: i, live, onRemove }: { L: Lx; item: Item; live?: SourceSummary; onRemove: () => void }) {
   const { t } = L;
   const category = mimeCategory(i.mime);
-  const stuck = live ? isStuck(live.status, live.startedAt, live.createdAt) : false;
+  const stuck = live ? isStuck(live.status, live.startedAt, live.createdAt, live.job) : false;
   const href = i.sourceId ? `/library/${i.sourceId}` : undefined;
 
   let line: React.ReactNode;
@@ -383,6 +383,8 @@ function UploadRow({ L, item: i, live, onRemove }: { L: Lx; item: Item; live?: S
   else if (i.note) { line = i.note; tone = "warn"; }
   else if (!live) { line = t("library.upload.starts"); spinning = true; }
   else if (stuck) { line = t("library.upload.stuck"); tone = "warn"; }
+  else if (live.job?.status === "running") { line = stepText(L, live.job.progress); tone = "accent"; spinning = true; }
+  else if (live.job?.status === "queued") { line = live.job.error ? t("library.queue.retryingSoon", { reason: live.job.error }) : t("library.status.queued"); tone = live.job.error ? "warn" : "muted"; }
   else if (live.status === "pending") { line = t("library.upload.waiting"); spinning = true; }
   else if (live.status === "processing") { line = t("library.upload.reading"); tone = "accent"; spinning = true; }
   else if (live.status === "failed") { line = live.error ?? t("library.upload.readFailed"); tone = "danger"; }

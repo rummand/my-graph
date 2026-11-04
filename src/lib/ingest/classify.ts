@@ -17,7 +17,8 @@ export function docKindOf(s: { mime: string | null; kind?: string | null; meta?:
   if (m.startsWith("image/")) return meta.ocr === "done" && (s.ocrChars ?? 0) >= SCAN_MIN_CHARS ? "scan" : "photo";
   if (m === "application/pdf") {
     const warnings = Array.isArray(meta.warnings) ? (meta.warnings as unknown[]) : [];
-    return warnings.some((w) => typeof w === "string" && /scan/i.test(w)) ? "scan" : "letter";
+    const scanned = (meta.scannedPages ?? null) as { read?: number } | null;
+    return (scanned?.read ?? 0) > 0 || warnings.some((w) => typeof w === "string" && /scan/i.test(w)) ? "scan" : "letter";
   }
   if (m.includes("wordprocessingml")) return "letter";
   if (m.startsWith("audio/")) return "recording";
