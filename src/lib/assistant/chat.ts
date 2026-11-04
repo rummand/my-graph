@@ -26,6 +26,7 @@ export { degradedAnswer, type DegradedReason };
 import { longDay, timeZone } from "./dates";
 import { autoApplyDecision, inferBasis } from "./policy";
 import { buildMessages, cleanTitle, fallbackTitle, titleMessages, type HistoryTurn, type Tone } from "./prompt";
+import * as wiki from "@/lib/wiki";
 import { parseProposals, ProposalStreamFilter, type ProposalView } from "./proposals";
 import { flagsFrom, offWords, retrieve, type Retrieval } from "./retrieve";
 import { chooseRoute } from "./route";
@@ -240,12 +241,19 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
 
         // Proposals: annotate (who'd see it, what it changes), then apply the ones the person always allows.
         const proposals: ProposalView[] = [];
+        let existingWikiTitles: string[] | undefined;
         if (!stopped && !degraded) {
           const onlyOutside = citationsOnlyOutside(citations);
           const anyOutside = citationsAnyOutside(citations);
           for (const [i, p] of parsed.proposals.entries()) {
             const n = i + 1;
             if (p.type === "propose_memory" && !memOk) continue;
+            // Never offer to start a page that already exists (or one that only differs by "project", "notes" …).
+            if (p.type === "propose_wiki_note") {
+              existingWikiTitles ??= await wiki.listPages(v, { limit: 200 }).then((ps) => ps.map((x) => wikiTitleKey(x.title))).catch(() => []);
+              const k = wikiTitleKey(p.title);
+              if (!k || existingWikiTitles.some((t) => t === k || (t.length > 3 && (t.includes(k) || k.includes(t))))) continue;
+            }
             const basis = inferBasis(p, { userText: turn.userText, citedOnlyDocuments: onlyOutside, citedDocuments: anyOutside });
             const note = await annotateProposal(v, p, level);
             const view: ProposalView = { ...p, basis, n, status: "pending", result: null, auto: null, ...note };
@@ -284,4 +292,10 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
       }
     },
   });
+}
+
+/** A wiki title reduced to what it is about: "EAM Platform Project notes" and "EAM platform" both become "eam platform". */
+export function wikiTitleKey(title: string): string {
+  const stop = new Set(["project", "projects", "page", "notes", "note", "wiki", "the", "a", "an", "about", "on", "om", "noter", "side", "projektet", "projekt"]);
+  return title.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter((w) => w && !stop.has(w)).join(" ");
 }
