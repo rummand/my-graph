@@ -5,7 +5,7 @@ import { useState } from "react";
 import { clsx } from "clsx";
 import { AnimatePresence, motion } from "motion/react";
 import {
-  CalendarRange, FileText, FolderOpen, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, Users, X, type LucideIcon,
+  Brain, CalendarRange, FileText, FolderOpen, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 
 type NavItem = { href: string; label: string; icon: LucideIcon; hideFor?: string[] };
@@ -20,6 +20,8 @@ const SECONDARY: NavItem[] = [
   { href: "/library", label: "Library", icon: FolderOpen },
   { href: "/wiki", label: "Wiki", icon: FileText, hideFor: ["guest"] },
   { href: "/graph", label: "Connections", icon: Network },
+  { href: "/memory", label: "Memory", icon: Brain, hideFor: ["guest", "child"] },
+  { href: "/automations", label: "Automations", icon: Workflow, hideFor: ["guest", "child"] },
   { href: "/graphs", label: "Graphs", icon: Layers },
   { href: "/settings", label: "Family & settings", icon: Settings },
 ];

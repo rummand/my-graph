@@ -322,6 +322,14 @@ export const conversations = pgTable("conversations", {
   title: text("title").notNull().default("New conversation"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Inbox-style controls (Scout): pinned to the top, flagged to revisit. */
+  pinnedAt: timestamp("pinned_at", { withTimezone: true }),
+  unreadAt: timestamp("unread_at", { withTimezone: true }),
+  /** Highest visibility level touched in this chat: normal, parents or private. Raised, never lowered. */
+  sensitivity: text("sensitivity").notNull().default("normal"),
+  /** Summary of earlier turns after "compact this conversation". */
+  summary: text("summary"),
+  summaryUpToMessageId: uuid("summary_up_to_message_id"),
 }, (t) => [index("conversations_graph_user_idx").on(t.graphId, t.userId)]);
 
 export type Citation = { n: number; sourceId?: string; nodeId?: string; edgeId?: string; title: string; quote?: string; locator?: Locator; confidence?: number };
@@ -336,8 +344,17 @@ export const messages = pgTable("messages", {
   model: text("model"),
   route: text("route"),
   muxRequestId: text("mux_request_id"),
+  /** What the assistant did while answering, shown as "Searched the library, read 3 letters …". */
+  steps: jsonb("steps").$type<AssistantStep[]>().notNull().default([]),
+  thoughtMs: integer("thought_ms"),
+  /** A clarifying question with preset choices (the user may also type, or skip). */
+  clarify: jsonb("clarify").$type<{ question: string; choices: string[] } | null>(),
+  /** Thumbs up (1) or down (-1) from the person who asked. */
+  feedback: integer("feedback"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export type AssistantStep = { kind: "search" | "read" | "timeline" | "people" | "memory" | "think" | "write" | "other"; label: string; count?: number; ms?: number };
 
 export const reminders = pgTable("reminders", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -437,3 +454,153 @@ export const observations = pgTable("observations", {
   sensitive: boolean("sensitive").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("observations_person_at_idx").on(t.personNodeId, t.at), index("observations_graph_idx").on(t.graphId)]);
+
+
+/* ── Always-on assistant (inspired by Microsoft Scout, see docs/scout-research.md) ───────────────────────── */
+
+export const memoryKindEnum = pgEnum("memory_kind", ["preference", "rule", "fact", "note"]);
+export const memoryOriginEnum = pgEnum("memory_origin", ["chat", "upload", "external", "manual", "automation"]);
+export const memoryStatusEnum = pgEnum("memory_status", ["active", "pending", "paused"]);
+
+/** What the assistant remembers in a graph: preferences, family rules and notes, each with where it came from. */
+export const memories = pgTable("memories", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** Who added it, or on whose chat it was learned. */
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: memoryKindEnum("kind").notNull(),
+  text: text("text").notNull(),
+  /** Person/place/topic nodes it is about, e.g. a rule that only applies to Emma. */
+  aboutNodeIds: jsonb("about_node_ids").$type<string[]>().notNull().default([]),
+  origin: memoryOriginEnum("origin").notNull(),
+  /** Where it came from: a conversation/message, a source document, an automation run. */
+  conversationId: uuid("conversation_id"),
+  messageId: uuid("message_id"),
+  sourceId: uuid("source_id"),
+  runId: uuid("run_id"),
+  quote: text("quote"),
+  confidence: real("confidence").notNull().default(1),
+  /** pending = learned from outside content, waits for a person to confirm before it is used. */
+  status: memoryStatusEnum("status").notNull().default("active"),
+  visibility: visibilityEnum("visibility").notNull().default("household"),
+  createdByKind: authorKindEnum("created_by_kind").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+}, (t) => [index("memories_graph_idx").on(t.graphId, t.status)]);
+
+export const triggerKindEnum = pgEnum("trigger_kind", ["schedule", "condition", "heartbeat"]);
+export const runStatusEnum = pgEnum("run_status", ["running", "done", "failed", "skipped"]);
+
+/** Saved prompts the family writes ("Weekly family summary"), usable in chat, on Today, or in an automation. */
+export const recipes = pgTable("recipes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  description: text("description").notNull().default(""),
+  prompt: text("prompt").notNull(),
+  visibility: visibilityEnum("visibility").notNull().default("household"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("recipes_graph_idx").on(t.graphId)]);
+
+/** Work the assistant does on its own: a schedule, a condition it checks, or the Heartbeat check-in. */
+export const automations = pgTable("automations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** Runs as this person: it sees exactly what they may see in the graph, never more. */
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  prompt: text("prompt").notNull(),
+  recipeId: uuid("recipe_id"),
+  trigger: triggerKindEnum("trigger").notNull(),
+  /** schedule: { days: [0-6], time: "HH:MM", tz }  condition: { check: string, everyMinutes }  heartbeat: { everyMinutes, days, from, to, tz } */
+  config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+  oneShot: boolean("one_shot").notNull().default(false),
+  enabled: boolean("enabled").notNull().default(true),
+  nextRunAt: timestamp("next_run_at", { withTimezone: true }),
+  lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("automations_due_idx").on(t.enabled, t.nextRunAt), index("automations_graph_idx").on(t.graphId)]);
+
+export const automationRuns = pgTable("automation_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  automationId: uuid("automation_id").notNull().references(() => automations.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  status: runStatusEnum("status").notNull().default("running"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  /** One plain sentence: what it found and did. */
+  summary: text("summary"),
+  output: text("output"),
+  citations: jsonb("citations").$type<Citation[]>().notNull().default([]),
+  steps: jsonb("steps").$type<AssistantStep[]>().notNull().default([]),
+  /** Steps that would have needed approval and were skipped because nobody was watching. */
+  skipped: jsonb("skipped").$type<string[]>().notNull().default([]),
+  suggestionCount: integer("suggestion_count").notNull().default(0),
+  error: text("error"),
+}, (t) => [index("automation_runs_automation_idx").on(t.automationId, t.startedAt)]);
+
+export const suggestionKindEnum = pgEnum("suggestion_kind", ["fact", "reminder", "merge", "rule", "memory", "wiki_edit", "nudge"]);
+export const suggestionStatusEnum = pgEnum("suggestion_status", ["pending", "approved", "denied", "expired"]);
+
+/** The assistant's proposals waiting for a person: approve, always allow, or deny. */
+export const suggestions = pgTable("suggestions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** Who should decide. */
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: suggestionKindEnum("kind").notNull(),
+  title: text("title").notNull(),
+  body: text("body"),
+  /** Exactly what would be written if approved (shown as the preview). */
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
+  citations: jsonb("citations").$type<Citation[]>().notNull().default([]),
+  origin: text("origin").notNull(), // "chat" | "automation" | "heartbeat" | "ingest"
+  runId: uuid("run_id"),
+  conversationId: uuid("conversation_id"),
+  /** Same key = same suggestion; used to avoid repeating one the person already denied. */
+  dedupeKey: text("dedupe_key"),
+  status: suggestionStatusEnum("status").notNull().default("pending"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  decidedBy: uuid("decided_by"),
+}, (t) => [index("suggestions_inbox_idx").on(t.graphId, t.userId, t.status), index("suggestions_dedupe_idx").on(t.graphId, t.dedupeKey)]);
+
+/** Everything the assistant did, and when (Scout's Heartbeat log), per graph. */
+export const assistantActivity = pgTable("assistant_activity", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** The person it acted for. */
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  actor: text("actor").notNull(), // "chat" | "automation" | "heartbeat" | "ingest" | "wiki"
+  action: text("action").notNull(), // e.g. "suggested_reminder", "saved_memory", "ran_automation", "edited_wiki"
+  summary: text("summary").notNull(),
+  subjectType: text("subject_type"),
+  subjectId: uuid("subject_id"),
+  runId: uuid("run_id"),
+  conversationId: uuid("conversation_id"),
+  visibility: visibilityEnum("visibility").notNull().default("household"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("assistant_activity_graph_idx").on(t.graphId, t.createdAt)]);
+
+/** Per person, per graph: what the assistant may do and how it behaves. Defaults are deliberately conservative. */
+export const assistantSettings = pgTable("assistant_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** Save memories it learns in chat without asking (facts still always need approval). */
+  autoSaveMemories: boolean("auto_save_memories").notNull().default(true),
+  /** Kinds of action the person chose "Always allow" for, e.g. "reminder.create", "memory.save". */
+  alwaysAllow: jsonb("always_allow").$type<string[]>().notNull().default([]),
+  /** Capabilities the assistant may use at all: library, timeline, people, wiki_write, reminders. Off = tool removed. */
+  capabilities: jsonb("capabilities").$type<Record<string, boolean>>().notNull().default({}),
+  /** "warm" | "brief" | "detailed" */
+  tone: text("tone").notNull().default("warm"),
+  /** Max proactive suggestions per day (avoid nagging). */
+  dailySuggestionCap: integer("daily_suggestion_cap").notNull().default(5),
+  onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("assistant_settings_graph_user_uq").on(t.graphId, t.userId)]);
