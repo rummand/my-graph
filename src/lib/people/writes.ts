@@ -14,7 +14,7 @@ import { findRelation, getMeta, type Meta } from "@/lib/meta";
 import type { PropError } from "@/lib/meta/types";
 import { visibleNode, canEditNode } from "./data";
 import type { ObservationKind, Visibility } from "./types";
-import { scopeOf } from "@/lib/graphs/pure";
+import { scopeOf, stripReservedProps } from "@/lib/graphs/pure";
 
 const readOnlyMessage = (v: Viewer, what: string) =>
   v.role === "guest" && scopeOf(v).family ? `Guests can't ${what}` : `You can look at this graph but can't ${what} in it`;
@@ -95,7 +95,8 @@ export async function createPerson(v: Viewer, input: CreatePersonInput): Promise
   const meta = await getMeta(v);
   const kind = input.kind ? meta.kind("person", input.kind) : undefined;
   if (input.kind && (!kind || kind.hidden)) throw new PeopleError(422, "Unknown kind of person", { fields: [{ key: "kind", message: "Pick a kind from the list" }] });
-  const props = Object.fromEntries(Object.entries(propsOrThrow(meta, input.kind, input.props ?? {}, false)).filter(([, x]) => x !== null));
+  // Nobody can mark a node as someone's own (self) node: those keys are the system's.
+  const props = Object.fromEntries(Object.entries(propsOrThrow(meta, input.kind, stripReservedProps(input.props ?? {}), false)).filter(([, x]) => x !== null));
   const visibility = input.visibility ?? defaultVisibility(kind?.circle);
   const sensitive = input.sensitive ?? false;
   const label = input.label.trim();
@@ -146,7 +147,7 @@ export async function updatePerson(v: Viewer, id: string, patch: UpdatePersonInp
       const sens = new Set(meta.attributesFor("person", kind).filter((a) => a.sensitive).map((a) => a.key));
       for (const k of Object.keys(patch.props)) if (sens.has(k)) throw new PeopleError(403, "You can't change that detail");
     }
-    const checked = propsOrThrow(meta, kind, patch.props, true);
+    const checked = propsOrThrow(meta, kind, stripReservedProps(patch.props), true);
     // gbrain merges props, so a removed value is written as null (readers treat null as "not set").
     props = { ...checked };
   }

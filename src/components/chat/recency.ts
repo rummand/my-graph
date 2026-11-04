@@ -18,6 +18,13 @@ export function groupByRecency<T extends Dated>(list: T[], now: Date = new Date(
   return [...groups.values()];
 }
 
+/** The inbox: pinned conversations first (most recently pinned order kept by update time), then by recency. */
+export function groupForInbox<T extends Dated & { pinned?: boolean }>(list: T[], now: Date = new Date()): Group<T>[] {
+  const pinned = list.filter((c) => c.pinned).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
+  const rest = groupByRecency(list.filter((c) => !c.pinned), now);
+  return pinned.length ? [{ key: "pinned", label: "Pinned", items: pinned }, ...rest] : rest;
+}
+
 function bucket(d: Date, now: Date): { key: string; label: string } {
   const days = differenceInCalendarDays(startOfDay(now), startOfDay(d));
   if (days <= 0) return { key: "today", label: "Today" };

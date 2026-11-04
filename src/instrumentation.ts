@@ -5,5 +5,10 @@ export async function register() {
     if (process.env.SKIP_DB_SETUP === "1") return; // e.g. during `next build` without a database
     const { prepareDatabase } = await import("@/lib/deploy/migrate");
     await prepareDatabase();
+    // The assistant's automations and check-ins (never during `next build`).
+    if (process.env.NEXT_PHASE !== "phase-production-build") {
+      const { startScheduler } = await import("@/lib/automations");
+      startScheduler();
+    }
   }
 }

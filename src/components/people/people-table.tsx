@@ -14,8 +14,9 @@ type SortKey = "name" | "kind" | "relation" | "contact" | "wellbeing" | "birthda
 /** "Emma's grandparent", or "Teacher" when no relation is recorded; the kind is added when the relation doesn't say it. */
 function subline(p: PersonSummary): string {
   const rel = p.relation?.label, kind = p.kindLabel;
-  if (!rel) return kind ?? "";
-  return kind && !rel.toLowerCase().includes(kind.toLowerCase()) ? `${rel}, ${kind.toLowerCase()}` : rel;
+  const base = !rel ? kind ?? "" : kind && !rel.toLowerCase().includes(kind.toLowerCase()) ? `${rel}, ${kind.toLowerCase()}` : rel;
+  if (!p.householdMember) return base;
+  return base ? `${base} · member` : "Member of this graph";
 }
 
 const latest = (p: PersonSummary) => p.wellbeing[p.wellbeing.length - 1]?.score ?? null;

@@ -604,3 +604,24 @@ export const assistantSettings = pgTable("assistant_settings", {
   onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("assistant_settings_graph_user_uq").on(t.graphId, t.userId)]);
+
+/** A recipe run started by hand ("Run" on a recipe), outside any automation. Same shape as automation_runs. */
+export const recipeRuns = pgTable("recipe_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  recipeId: uuid("recipe_id").notNull().references(() => recipes.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** Who ran it (it ran as them). */
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: runStatusEnum("status").notNull().default("running"),
+  /** The prompt as run, with its fill-ins. */
+  prompt: text("prompt").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  summary: text("summary"),
+  output: text("output"),
+  citations: jsonb("citations").$type<Citation[]>().notNull().default([]),
+  steps: jsonb("steps").$type<AssistantStep[]>().notNull().default([]),
+  skipped: jsonb("skipped").$type<string[]>().notNull().default([]),
+  suggestionCount: integer("suggestion_count").notNull().default(0),
+  error: text("error"),
+}, (t) => [index("recipe_runs_graph_user_idx").on(t.graphId, t.userId, t.startedAt)]);

@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 import { motion } from "motion/react";
-import { Check, Copy, Lock } from "lucide-react";
+import { Check, Copy, Lock, ThumbsDown, ThumbsUp } from "lucide-react";
+import { clsx } from "clsx";
 import { format } from "date-fns";
 import type { Citation } from "@/db/schema";
 import type { MessageView } from "@/lib/assistant/store";
@@ -10,6 +11,8 @@ import { Markdown } from "./markdown";
 import { SourceList } from "./citation";
 import { ProposalCard } from "./proposal-card";
 import { shortModel } from "./recency";
+import { ClarifyPicker } from "./clarify-picker";
+import { LiveSteps, WorkedLine } from "./work-steps";
 
 export type UiMessage = MessageView & { uid: string; streaming?: boolean; live?: Citation[]; fresh?: boolean };
 
@@ -30,18 +33,29 @@ export function Question({ m, first }: { m: UiMessage; first: boolean }) {
   );
 }
 
-export function Answer({ m, conversationId, onDecided }: {
+export function Answer({ m, conversationId, onDecided, canClarify, onClarify, onFeedback }: {
   m: UiMessage; conversationId: string | null; onDecided: (messageId: string, p: ProposalView) => void;
+  /** The latest answer, and nothing is being written: its clarifying question can be answered. */
+  canClarify: boolean;
+  onClarify: (text: string) => void;
+  onFeedback: (messageId: string, value: 1 | -1 | null) => void;
 }) {
   const citations = m.streaming ? m.live ?? [] : m.citations;
   return (
     <motion.article
       initial={m.fresh ? { opacity: 0 } : false} animate={{ opacity: 1 }} transition={{ duration: 0.2, ease: EASE }}
       className="mt-4" aria-busy={m.streaming || undefined}>
-      {m.content ? (
-        <Markdown text={m.content} citations={citations} caret={m.streaming} />
+      {m.streaming && !m.content ? (
+        <LiveSteps steps={m.steps} writing={false} />
       ) : (
-        <Thinking found={m.live?.length ?? 0} />
+        <>
+          <WorkedLine steps={m.steps} thoughtMs={m.thoughtMs} streaming={m.streaming} />
+          <Markdown text={m.content} citations={citations} caret={m.streaming} />
+        </>
+      )}
+
+      {!m.streaming && m.clarify && (
+        <ClarifyPicker clarify={m.clarify} active={canClarify} onAnswer={onClarify} />
       )}
 
       {!m.streaming && m.citations.length > 0 && <SourceList citations={m.citations} />}
@@ -49,33 +63,17 @@ export function Answer({ m, conversationId, onDecided }: {
       {!m.streaming && conversationId && m.proposals.length > 0 && (
         <div className="mt-6 space-y-2">
           {m.proposals.map((p) => (
-            <ProposalCard key={p.n} conversationId={conversationId} messageId={m.id} proposal={p} onDecided={(x) => onDecided(m.id, x)} />
+            <ProposalCard key={p.n} conversationId={conversationId} messageId={m.id} proposal={p} citations={m.citations} onDecided={(x) => onDecided(m.id, x)} />
           ))}
         </div>
       )}
 
-      {!m.streaming && m.content && <AnswerMeta m={m} />}
+      {!m.streaming && m.content && <AnswerMeta m={m} onFeedback={conversationId && !m.id.startsWith("local-") && m.id !== "pending" ? onFeedback : undefined} />}
     </motion.article>
   );
 }
 
-function Thinking({ found }: { found: number }) {
-  return (
-    <p className="flex items-center gap-2.5 text-muted" role="status">
-      <span className="inline-flex gap-1" aria-hidden>
-        {[0, 1, 2].map((i) => (
-          <motion.span key={i} className="size-1.5 rounded-full bg-muted"
-            animate={{ opacity: [0.25, 1, 0.25] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.16, ease: "easeInOut" }} />
-        ))}
-      </span>
-      {found > 0
-        ? <span>Found {found} {found === 1 ? "thing" : "things"} in your graph. Writing the answer…</span>
-        : <span>Looking through your graph…</span>}
-    </p>
-  );
-}
-
-function AnswerMeta({ m }: { m: UiMessage }) {
+function AnswerMeta({ m, onFeedback }: { m: UiMessage; onFeedback?: (messageId: string, value: 1 | -1 | null) => void }) {
   const [copied, setCopied] = useState(false);
   const model = shortModel(m.model);
   const when = new Date(m.createdAt);
@@ -93,6 +91,12 @@ function AnswerMeta({ m }: { m: UiMessage }) {
         {copied ? <Check aria-hidden className="size-3.5 text-accent" /> : <Copy aria-hidden className="size-3.5" />}
         {copied ? "Copied" : "Copy answer"}
       </button>
+      {onFeedback && (
+        <span className="inline-flex items-center" role="group" aria-label="Was this answer helpful?">
+          <FeedbackButton label="Good answer" pressed={m.feedback === 1} onClick={() => onFeedback(m.id, m.feedback === 1 ? null : 1)}><ThumbsUp className="size-3.5" /></FeedbackButton>
+          <FeedbackButton label="Not a good answer" pressed={m.feedback === -1} onClick={() => onFeedback(m.id, m.feedback === -1 ? null : -1)}><ThumbsDown className="size-3.5" /></FeedbackButton>
+        </span>
+      )}
       {(m.route || model) && (
         <span className="inline-flex items-center gap-1" title={m.model ?? undefined}>
           {m.route === "agent" && <Lock aria-hidden className="size-3" />}
@@ -101,5 +105,15 @@ function AnswerMeta({ m }: { m: UiMessage }) {
       )}
       {!Number.isNaN(when.getTime()) && <time dateTime={m.createdAt}>{format(when, "EEE d MMM, HH:mm")}</time>}
     </div>
+  );
+}
+
+function FeedbackButton({ label, pressed, onClick, children }: { label: string; pressed: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" aria-label={label} title={label} aria-pressed={pressed} onClick={onClick}
+      className={clsx("inline-flex size-7 items-center justify-center rounded-md transition-[background-color,color,transform] active:scale-[0.92]",
+        pressed ? "bg-accent-tint text-accent" : "hover:bg-surface-2 hover:text-fg")}>
+      {children}
+    </button>
   );
 }

@@ -25,3 +25,24 @@ export const restoreBody = z.object({
   revisionId: z.uuid({ message: "That version id isn't valid." }),
   version: z.number().int().min(1, "Send the current page version."),
 });
+
+export const cowriteMode = z.enum(["insert", "rewrite", "page"], { message: "Choose where the assistant should write." });
+
+/** POST /api/wiki/[slug]/cowrite — the request and the page as the writer sees it now (it may have unsaved edits). */
+export const cowriteBody = z.object({
+  instruction: z.string({ message: "Tell the assistant what to write." }).trim().min(3, "Tell the assistant what to write.").max(2000, "Keep the request under 2,000 characters."),
+  mode: cowriteMode,
+  pageMarkdown: z.string().max(200_000, "This page is too long for the assistant to read in one go.").default(""),
+  selectionMarkdown: z.string().max(40_000, "Select a shorter passage to rewrite.").optional(),
+}).refine((b) => b.mode !== "rewrite" || !!b.selectionMarkdown?.trim(), { message: "Select the text you want rewritten first.", path: ["selectionMarkdown"] });
+
+/** POST /api/wiki/[slug]/cowrite/accept — keep the assistant's draft as its own revision. */
+export const acceptBody = z.object({
+  version: z.number().int().min(1, "Send the current page version."),
+  content,
+  instruction: z.string().trim().min(1).max(2000),
+  mode: cowriteMode,
+  words: z.number().int().min(0).max(1_000_000).optional(),
+  sourceCount: z.number().int().min(0).max(100).optional(),
+  usedNarrower: z.boolean().optional(),
+});

@@ -18,7 +18,7 @@ export type PersonSummary = {
   visibility: Visibility;
   sensitive: boolean;
   ownerId: string;
-  /** Has a login in this household. */
+  /** A member of the current graph (has a login and is in this graph; in the family graph: the household). */
   householdMember: boolean;
   isViewer: boolean;
   relation: { label: string; hops: 1 | 2; via: { id: string; label: string } | null; relation: string; category: string } | null;
@@ -70,6 +70,8 @@ export type RelationshipItem = {
   /** From this person's side: "child of", "teacher of", "attends". */
   label: string;
   direction: "out" | "in";
+  /** When the other end is you: how this person relates to you ("Your manager", "Knows you"). */
+  toYou: string | null;
   other: { id: string; label: string; type: string; kind: string | null; kindLabel: string | null };
   status: string;
   confidence: number;
@@ -78,7 +80,7 @@ export type RelationshipItem = {
 
 export type RelationshipGroup = { category: string; label: string; items: RelationshipItem[] };
 
-export type NodeOption = { id: string; label: string; type: string; kind: string | null };
+export type NodeOption = { id: string; label: string; type: string; kind: string | null; isViewer?: boolean };
 
 export type PersonProfile = {
   person: PersonSummary & { props: Record<string, unknown>; summary: string | null; aliases: string[]; canEdit: boolean; createdAt: string };

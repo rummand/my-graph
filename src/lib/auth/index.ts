@@ -11,7 +11,7 @@ import { API_HEADER, PATH_HEADER, SESSION_COOKIE } from "./constants";
 import { isWellFormedToken } from "./session";
 import { loadSession, type SessionState as StoredSession, type ViewerRow } from "./store";
 import { GRAPH_COOKIE, type GraphContext } from "@/lib/graphs/pure";
-import { resolveGraph } from "@/lib/graphs/store";
+import { resolveGraph, selfNodeIn } from "@/lib/graphs/store";
 
 export type Role = "owner" | "parent" | "child" | "guest";
 
@@ -19,7 +19,9 @@ export type Role = "owner" | "parent" | "child" | "guest";
  * The signed-in person, working in one graph. `householdId` and `role` are their own household and household role
  * (settings, members, audit). Content is scoped by the graph fields: `graphId` is the graph they are working in
  * (mg_graph cookie, validated against membership on every request), `graphRole` what they may do there.
- * `personNodeId` is their own person node; it lives in their family graph, so it is null in any other graph.
+ * `personNodeId` is their own person node in the current graph (their "self" node, see src/lib/graphs/self): every
+ * member of every graph is a person in it. In their family graph it is `users.personNodeId`; settings and the profile
+ * read that from the users row. Null only if the node couldn't be made.
  */
 export type Viewer = {
   id: string;
@@ -39,8 +41,7 @@ export type SessionState =
 export async function withGraph(row: ViewerRow, requested: string | null | undefined): Promise<Viewer | null> {
   const g = await resolveGraph(row, requested);
   if (!g) return null;
-  const inFamily = g.graphKind === "family" && g.graphHouseholdId === row.householdId;
-  return { ...row, personNodeId: inFamily ? row.personNodeId : null, ...g };
+  return { ...row, personNodeId: await selfNodeIn(row, g, { personNodeIdIsHome: true }), ...g };
 }
 
 /** The current request's session, resolved once per request. */

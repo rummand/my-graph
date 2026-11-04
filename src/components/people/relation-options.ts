@@ -22,5 +22,40 @@ export const KIND_RELATION: Record<string, string> = {
   close_friend: "friend_of:out", friend: "friend_of:out", childs_friend: "friend_of:out", childs_friend_parent: "knows:out",
   neighbour: "neighbour_of:out", teacher: "teacher_of:out", pedagogue: "teacher_of:out", school_leader: "knows:out",
   classmate: "friend_of:out", doctor: "treated_by:in", dentist: "treated_by:in", health_visitor: "treated_by:in",
-  psychologist: "treated_by:in", babysitter: "knows:out", colleague: "works_with:out", manager: "works_with:out", other: "knows:out",
+  psychologist: "treated_by:in", babysitter: "knows:out", colleague: "colleague_of:out", manager: "manager_of:out", other: "knows:out",
 };
+
+/**
+ * One-click answers to "How do they know you?" on the add-person form. `rel` is read from the new person's side with
+ * you at the other end ("manager_of:out" = they are your manager). `kind` is the kind they get (null: leave unset).
+ */
+export type YouPreset = { id: string; label: string; kind: string | null; rel: string };
+
+const PRESETS: Record<string, Omit<YouPreset, "id">> = {
+  manager: { label: "My manager", kind: "manager", rel: "manager_of:out" },
+  report: { label: "Reports to me", kind: "colleague", rel: "manager_of:in" },
+  colleague: { label: "Colleague", kind: "colleague", rel: "colleague_of:out" },
+  friend: { label: "Friend", kind: "friend", rel: "friend_of:out" },
+  family: { label: "Family", kind: null, rel: "relative_of:out" },
+  neighbour: { label: "Neighbour", kind: "neighbour", rel: "neighbour_of:out" },
+  knows: { label: "Knows me", kind: null, rel: "knows:out" },
+};
+
+const ORDER: Record<string, string[]> = {
+  work: ["manager", "report", "colleague", "friend", "knows"],
+  family: ["family", "friend", "neighbour", "colleague", "manager", "knows"],
+  other: ["friend", "family", "colleague", "manager", "knows"],
+};
+
+/**
+ * The presets that fit this graph (work graphs lead with work), keeping only relations and kinds the household's
+ * meta model has and hasn't hidden.
+ */
+export function youPresets(graphKind: string | null | undefined, options: RelationOption[], kindKeys: string[]): YouPreset[] {
+  const order = ORDER[graphKind === "work" || graphKind === "family" ? graphKind : "other"];
+  const rels = new Set(options.map((o) => o.value));
+  const kinds = new Set(kindKeys);
+  return order.map((id) => ({ id, ...PRESETS[id] }))
+    .filter((p) => rels.has(p.rel))
+    .map((p) => (p.kind && !kinds.has(p.kind) ? { ...p, kind: null } : p));
+}

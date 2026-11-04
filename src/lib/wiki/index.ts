@@ -7,6 +7,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { edges, nodes, provenance, sources, users, wikiPages, wikiRevisions } from "@/db/schema";
 import { audit, type Viewer } from "@/lib/auth";
+import { logActivity } from "@/lib/automations";
 import { readableNodeIds } from "@/lib/gbrain";
 import { scopeOf } from "@/lib/graphs/pure";
 import {
@@ -273,7 +274,7 @@ export async function updatePage(v: Viewer, slug: string, input: { version: numb
 
 async function save(
   v: Viewer, slug: string, version: number,
-  input: { title?: string; content?: Doc; force: boolean; summary?: string },
+  input: { title?: string; content?: Doc; force: boolean; summary?: string; author?: "user" | "assistant" },
 ): Promise<SaveResult> {
   const cur0 = await readablePage(v, slug);
   if (!canEditPage(v, cur0)) throw new WikiError(403, "You can read this page but not change it. Ask its owner to share it with the family.");
@@ -300,13 +301,14 @@ async function save(
 
     const [last] = await tx.select().from(wikiRevisions).where(eq(wikiRevisions.pageId, cur.id))
       .orderBy(desc(wikiRevisions.version)).limit(1);
-    const coalesce = !input.summary && last && last.summary === null && last.authorKind === "user" && last.authorId === v.id
+    const authorKind = input.author ?? "user";
+    const coalesce = !input.summary && authorKind === "user" && last && last.summary === null && last.authorKind === "user" && last.authorId === v.id
       && now.getTime() - last.createdAt.getTime() < COALESCE_MS && last.version === cur.version;
     if (coalesce) {
       await tx.update(wikiRevisions).set({ version: nextVersion, title, content, contentText, createdAt: now }).where(eq(wikiRevisions.id, last.id));
     } else {
       await tx.insert(wikiRevisions).values({
-        pageId: cur.id, version: nextVersion, title, content, contentText, authorId: v.id, authorKind: "user", summary: input.summary ?? null,
+        pageId: cur.id, version: nextVersion, title, content, contentText, authorId: v.id, authorKind, summary: input.summary ?? null,
       });
     }
     return { prev: { title: cur.title, visibility: cur.visibility, content: cur.content as DocNode }, id: cur.id };
@@ -368,7 +370,8 @@ const revCols = {
 };
 
 function authorName(kind: "user" | "assistant", name: string | null) {
-  return kind === "assistant" ? "Assistant" : name ?? "Someone who has left the family account";
+  if (kind === "assistant") return name ? `Assistant (asked by ${name})` : "Assistant";
+  return name ?? "Someone who has left the family account";
 }
 
 export async function listRevisions(v: Viewer, slug: string, opts: { withText?: boolean; limit?: number } = {}): Promise<(WikiRevisionSummary & { contentText?: string })[]> {
@@ -399,5 +402,39 @@ export async function restoreRevision(v: Viewer, slug: string, revisionId: strin
     title: rev.title, content: sanitizeDoc(rev.content), force: false, summary: `Restored version ${rev.version} (${when})`,
   });
   safeAudit(v, "wiki.restore", { type: "wiki_page", id: res.page.id }, { revisionId, version: rev.version });
+  return res;
+}
+
+/* ── Co-writing ────────────────────────────────────────────────────────────────────────────────────────── */
+
+export type AssistantDraftInput = {
+  version: number; content: unknown; instruction: string; mode: "insert" | "rewrite" | "page";
+  words?: number; sourceCount?: number; usedNarrower?: boolean; conversationId?: string;
+};
+
+/** The revision summary for an accepted draft: what was asked, in the asker's words. */
+export function draftSummary(instruction: string, mode: AssistantDraftInput["mode"]): string {
+  const what = mode === "page" ? "Updated the page" : mode === "rewrite" ? "Rewrote a passage" : "Wrote a new section";
+  const ask = instruction.replace(/\s+/g, " ").trim();
+  return `${what}: “${ask.length > 90 ? `${ask.slice(0, 88).trimEnd()}…` : ask}”`;
+}
+
+/**
+ * Save an assistant draft the person accepted, as its own revision attributed to "Assistant (asked by <name>)".
+ * The person's own edits are saved first by the editor, so this revision holds only the assistant's change.
+ */
+export async function acceptAssistantDraft(v: Viewer, slug: string, input: AssistantDraftInput): Promise<SaveResult> {
+  const content = sanitizeDoc(input.content);
+  const res = await save(v, slug, input.version, { content, force: false, summary: draftSummary(input.instruction, input.mode), author: "assistant" });
+  safeAudit(v, "wiki.assistant_draft", { type: "wiki_page", id: res.page.id }, { mode: input.mode, words: input.words ?? null, usedNarrower: !!input.usedNarrower });
+  try {
+    await logActivity({
+      graphId: v.graphId, userId: v.id, actor: "wiki", action: "edited_wiki",
+      summary: `${draftSummary(input.instruction, input.mode)} on “${res.page.title}”${input.sourceCount ? `, from ${input.sourceCount} ${input.sourceCount === 1 ? "source" : "sources"}` : ""}. ${v.name} accepted it.`,
+      subjectType: "wiki_page", subjectId: res.page.id, visibility: res.page.visibility, conversationId: input.conversationId,
+    });
+  } catch (e) {
+    console.warn("[wiki] activity log failed", e);
+  }
   return res;
 }

@@ -6,6 +6,8 @@ import type { Citation } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import * as mux from "@/lib/mux";
 import { peopleContext } from "@/lib/people";
+import { loadAssistantBriefInput } from "./assistant";
+import { assistantBriefNotes } from "./assistant-home";
 import { getCachedBrief, setCachedBrief, type CachedBrief } from "./cache";
 import { buildBriefContext, buildBriefMessages, pickCitations } from "./context";
 import { appTimeZone, dayKey } from "./dates";
@@ -41,18 +43,21 @@ export async function generateBrief(v: Viewer, opts: { refresh?: boolean; now?: 
     if (hit) return hit;
   }
 
-  const core = await loadTodayCore(v, now);
+  const started = Date.now();
+  const [core, assistant] = await Promise.all([loadTodayCore(v, now), loadAssistantBriefInput(v)]);
   const input = toBriefInput(v, core);
   try {
     input.people = await peopleContext(v, [], { now });
   } catch (err) {
     console.error("[briefs] peopleContext failed:", err);
   }
+  input.assistant = assistantBriefNotes({ now, tz, ...assistant });
   const ctx = buildBriefContext(input);
 
   let brief: CachedBrief;
   // People who need attention (low wellbeing, a birthday, no contact for a while) are worth a brief on their own.
   if (ctx.empty && /^Needs attention:/m.test(input.people ?? "")) ctx.empty = false;
+  if (ctx.empty && input.assistant?.trim()) ctx.empty = false;
   if (ctx.empty) {
     brief = { text: NOTHING_TO_BRIEF, citations: [], generatedAt: now.toISOString(), day, model: null, local: true };
   } else {
@@ -71,7 +76,10 @@ export async function generateBrief(v: Viewer, opts: { refresh?: boolean; now?: 
     }
     const picked = pickCitations(res.text ?? "", ctx.citations);
     if (!picked.text) throw new BriefUnavailableError("The assistant returned an empty brief. Please try again.");
-    brief = { text: picked.text, citations: picked.citations, generatedAt: new Date().toISOString(), day, model: res.model, local: false };
+    brief = {
+      text: picked.text, citations: picked.citations, generatedAt: new Date().toISOString(), day, model: res.model, local: false,
+      durationMs: Date.now() - started,
+    };
   }
   setCachedBrief(briefKey(v), brief);
   return brief;

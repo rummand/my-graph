@@ -13,12 +13,17 @@ import type { Viewer } from "@/lib/auth";
 import { writeAudit } from "@/lib/auth/audit";
 import { createAccount } from "@/lib/auth/members";
 import {
-  archiveProblem, DEFAULT_HUES, inviteState, memberChangeProblem, type GraphKind, type GraphRole,
+  archiveProblem, DEFAULT_HUES, inviteState, memberChangeProblem, type GraphKind, type GraphRole, type Role,
 } from "./pure";
+import { ensureSelfNode } from "./self";
 import { graphsOfUser, upsertMember, type GraphRecord } from "./store";
 
 export * from "./pure";
-export { graphsOfUser, resolveGraph, viewerFor, viewerInGraph, memberIds, familyGraphId } from "./store";
+export { graphsOfUser, resolveGraph, viewerFor, viewerInGraph, memberIds, familyGraphId, selfNodeIn } from "./store";
+export { ensureSelfNode, ensureSelfNodesForGraph, findSelfNodeId, memberSelfNodes } from "./self";
+
+/** A viewer as a member for self-node lookups (their Viewer.personNodeId belongs to the graph they were working in). */
+const asMember = (v: Viewer) => ({ id: v.id, name: v.name, householdId: v.householdId, role: v.role });
 
 export class GraphError extends Error {
   constructor(public status: 400 | 403 | 404 | 409 | 429, message: string, public extra?: Record<string, unknown>) {
@@ -88,6 +93,8 @@ export async function createGraph(v: Viewer, input: { name: string; description?
       color: input.color ?? DEFAULT_HUES[input.kind],
     }).returning();
     await upsertMember(tx, g.id, v.id, "owner", v.id);
+    // The owner is a person in their new graph from the start.
+    await ensureSelfNode(tx, asMember(v), { id: g.id, kind: g.kind, householdId: g.householdId }, { actorId: v.id, note: "Made this graph" });
     return g;
   });
   await writeAudit(v, "graph.create", { type: "graph", id: row.id }, { name: row.name, kind: row.kind });
@@ -144,11 +151,14 @@ export async function listMembers(v: Viewer, graphId: string): Promise<{ members
   return { members, invites };
 }
 
-async function addMemberRow(v: Viewer, g: GraphRecord, user: { id: string; name: string }, role: Exclude<GraphRole, "owner">, via: "direct" | "invite") {
+async function addMemberRow(v: Viewer, g: GraphRecord, user: { id: string; name: string; householdId: string; role: Role }, role: Exclude<GraphRole, "owner">, via: "direct" | "invite") {
   const [existing] = await db.select({ role: graphMembers.role }).from(graphMembers)
     .where(and(eq(graphMembers.graphId, g.id), eq(graphMembers.userId, user.id)));
   if (existing) throw new GraphError(409, `${user.name} is already in this graph.`);
-  await upsertMember(db, g.id, user.id, role, v.id);
+  await db.transaction(async (tx) => {
+    await upsertMember(tx, g.id, user.id, role, v.id);
+    await ensureSelfNode(tx, user, { id: g.id, kind: g.kind, householdId: g.householdId }, { actorId: v.id, note: "Added to this graph" });
+  });
   await writeAudit({ id: v.id, householdId: g.householdId }, "graph.member_add", { type: "graph", id: g.id }, { userId: user.id, name: user.name, role, via });
 }
 
@@ -156,7 +166,8 @@ async function addMemberRow(v: Viewer, g: GraphRecord, user: { id: string; name:
 export async function addMemberByEmail(v: Viewer, graphId: string, input: { email: string; role: Exclude<GraphRole, "owner"> }): Promise<GraphMember> {
   const g = await ownGraph(v, graphId);
   if (g.kind === "family") throw new GraphError(400, "People in the household are added in Family settings.");
-  const [u] = await db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(eq(users.email, input.email.toLowerCase())).limit(1);
+  const [u] = await db.select({ id: users.id, name: users.name, email: users.email, householdId: users.householdId, role: users.role })
+    .from(users).where(eq(users.email, input.email.toLowerCase())).limit(1);
   if (!u) throw new GraphError(404, "Nobody signs in with that email yet. Send them an invite link instead.", { canInvite: true });
   await addMemberRow(v, g, u, input.role, "direct");
   return { userId: u.id, name: u.name, email: u.email, role: input.role, isYou: u.id === v.id, addedAt: new Date().toISOString() };
@@ -274,6 +285,7 @@ export async function acceptInviteAsUser(v: Viewer, token: string): Promise<{ gr
     const [existing] = await tx.select({ id: graphMembers.id }).from(graphMembers)
       .where(and(eq(graphMembers.graphId, row.i.graphId), eq(graphMembers.userId, v.id)));
     if (!existing) await upsertMember(tx, row.i.graphId, v.id, row.i.role === "owner" ? "editor" : row.i.role, row.i.createdBy);
+    await ensureSelfNode(tx, asMember(v), { id: row.i.graphId, kind: row.graphKind, householdId: row.graphHousehold }, { actorId: v.id, note: "Joined with an invite" });
   });
   await writeAudit({ id: v.id, householdId: row.graphHousehold }, "graph.invite_accept", { type: "graph", id: row.i.graphId }, { inviteId: row.i.id, name: v.name });
   return { graphId: row.i.graphId };
@@ -297,6 +309,8 @@ export async function acceptInviteAsNewUser(token: string, input: { name: string
     if (!done.length) throw new GraphError(409, "This invite has already been used.");
     const acct = await createAccountWithOwnHousehold(tx, { name: input.name, email: row.i.email, passwordHash: input.passwordHash });
     await upsertMember(tx, row.i.graphId, acct.userId, row.i.role === "owner" ? "editor" : row.i.role, row.i.createdBy);
+    await ensureSelfNode(tx, { id: acct.userId, name: input.name, householdId: acct.householdId, role: "owner" },
+      { id: row.i.graphId, kind: row.graphKind, householdId: row.graphHousehold }, { actorId: acct.userId, note: "Joined with an invite" });
     await tx.update(graphInvites).set({ acceptedBy: acct.userId }).where(eq(graphInvites.id, row.i.id));
     return acct;
   });
@@ -321,6 +335,9 @@ export async function createAccountWithOwnHousehold(tx: Tx, input: { name: strin
   }, null);
   await tx.update(graphs).set({ ownerId: acct.userId }).where(eq(graphs.id, personal.id));
   await upsertMember(tx, personal.id, acct.userId, "owner", acct.userId);
+  // Their person node lives in the Personal graph: mark it as their self node there.
+  await ensureSelfNode(tx, { id: acct.userId, name: input.name, householdId: h.id, role: "owner", personNodeId: acct.personNodeId },
+    { id: personal.id, kind: "personal", householdId: h.id });
   return { userId: acct.userId, householdId: h.id, personalId: personal.id, personNodeId: acct.personNodeId };
 }
 

@@ -107,3 +107,16 @@ export function relationsToCenter(m: MetaModel, centerId: string, nodes: Map<str
   }
   return out;
 }
+
+/**
+ * How `person` relates to you over one edge between you, read from your side: "Your manager", "Reports to you",
+ * "Knows you", "Your colleague".
+ */
+export function relationToYou(m: MetaModel, e: PathEdge, person: PathNode): string {
+  return phrase(roleOf(m, e, person), { label: "you", isYou: true });
+}
+
+/** Where a fellow member of a graph sits in the circles when nothing else says: by what the graph is for. */
+export function memberCircle(graphKind: string | null | undefined): string {
+  return graphKind === "family" ? "family" : graphKind === "work" ? "work" : "other";
+}

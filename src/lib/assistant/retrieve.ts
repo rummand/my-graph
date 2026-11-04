@@ -13,6 +13,13 @@ import { getMeta } from "@/lib/meta";
 import { peopleContext } from "@/lib/people";
 import type { ContextItem } from "./context";
 import { whenLabel } from "./dates";
+import { itemLevel, maxLevel } from "./sensitivity";
+import { ALL_ON, flagsFrom, offWords, type RetrievalFlags } from "./steps";
+import type { PersonRef } from "./clarify";
+
+export { ALL_ON, flagsFrom, offWords };
+
+export type Retrieval = { items: ContextItem[]; hits: number; people: PersonRef[] };
 
 const NEIGHBOUR_HITS = 3;
 const MAX_FACTS = 24;
@@ -44,10 +51,11 @@ function nodeText(n: gbrain.GNode): string {
   return [n.summary ?? "", props.join("; ")].filter(Boolean).join(" — ");
 }
 
-function nodeItem(n: gbrain.GNode, tz: string): ContextItem {
+function nodeItem(n: gbrain.GNode, tz: string, viewerId: string): ContextItem {
   return {
     kind: "node", nodeId: n.id, nodeType: n.type, title: n.label, text: nodeText(n),
     when: n.startAt ? whenLabel(n.startAt, tz, n.timePrecision) : null, sensitive: n.sensitive,
+    level: itemLevel(n, viewerId),
   };
 }
 
@@ -60,22 +68,30 @@ async function safe<T>(p: Promise<T>, fallback: T, what: string): Promise<T> {
   }
 }
 
-export async function retrieve(v: Viewer, question: string, opts: { tz: string; now?: Date }): Promise<ContextItem[]> {
+export async function retrieve(v: Viewer, question: string, opts: { tz: string; now?: Date; flags?: RetrievalFlags }): Promise<Retrieval> {
   const now = opts.now ?? new Date();
   const tz = opts.tz;
-  const [hits, meta, upcoming, reminders] = await Promise.all([
+  const flags = opts.flags ?? ALL_ON;
+  const noEvents = { events: [] as gbrain.GNode[], involves: [] as { eventId: string; personId: string }[] };
+  const [rawHits, meta, upcoming, reminders] = await Promise.all([
     safe(gbrain.search(v, question, { limit: 12 }), [], "search"),
     safe(getMeta(v), null, "meta"),
-    safe(gbrain.timeline(v, { from: now, to: new Date(now.getTime() + 14 * 86_400_000), limit: 12 }), { events: [], involves: [] }, "timeline"),
-    safe(listReminders(v, { upcoming: true, days: 21, limit: 12, now }), [], "reminders"),
+    flags.timeline ? safe(gbrain.timeline(v, { from: now, to: new Date(now.getTime() + 14 * 86_400_000), limit: 12 }), noEvents, "timeline") : Promise.resolve(noEvents),
+    flags.reminders ? safe(listReminders(v, { upcoming: true, days: 21, limit: 12, now }), [], "reminders") : Promise.resolve([]),
   ]);
+  // Library off: no document passages or document nodes.
+  const hits = flags.library ? rawHits : rawHits.filter((h) => !h.chunk && h.node && h.node.type !== "document" && h.node.type !== "source");
 
-  // Sources behind passage hits: are they sensitive?
+  // Sources behind passage hits: how restricted are they?
   const chunkSourceIds = [...new Set(hits.filter((h) => h.chunk).map((h) => h.chunk!.sourceId))];
   const sensitiveSources = new Set<string>();
+  const sourceLevel = new Map<string, ReturnType<typeof itemLevel>>();
   if (chunkSourceIds.length) {
-    const rows = await safe(db.select({ id: sources.id, sensitive: sources.sensitive }).from(sources).where(inArray(sources.id, chunkSourceIds)), [], "source flags");
-    for (const r of rows) if (r.sensitive) sensitiveSources.add(r.id);
+    const rows = await safe(db.select({ id: sources.id, sensitive: sources.sensitive, visibility: sources.visibility, ownerId: sources.ownerId }).from(sources).where(inArray(sources.id, chunkSourceIds)), [], "source flags");
+    for (const r of rows) {
+      if (r.sensitive) sensitiveSources.add(r.id);
+      sourceLevel.set(r.id, itemLevel(r, v.id));
+    }
   }
 
   // Neighbourhoods of the top people / events / places among the hits.
@@ -101,7 +117,7 @@ export async function retrieve(v: Viewer, question: string, opts: { tz: string; 
     if (n.type === "person" && !people.some((p) => p.id === n.id)) people.push(n);
     if (people.length >= MAX_PEOPLE) break;
   }
-  const peopleText = people.length ? await safe(peopleContext(v, people.map((p) => p.id), { now }), "", "people context") : "";
+  const peopleText = flags.people && people.length ? await safe(peopleContext(v, people.map((p) => p.id), { now }), "", "people context") : "";
   const personLines = peopleLinesById(peopleText, people);
   const withPerson = (it: ContextItem): ContextItem => {
     if (it.kind !== "node" || it.nodeType !== "person") return it;
@@ -118,14 +134,15 @@ export async function retrieve(v: Viewer, question: string, opts: { tz: string; 
       items.push({
         kind: "passage", sourceId: h.chunk.sourceId, title: h.chunk.sourceTitle, text: h.chunk.text,
         locator: h.chunk.locator ?? {}, sensitive: sensitiveSources.has(h.chunk.sourceId),
+        level: sourceLevel.get(h.chunk.sourceId) ?? "normal",
       });
     } else if (h.node) {
-      items.push(withPerson(nodeItem(h.node, tz)));
+      items.push(withPerson(nodeItem(h.node, tz, v.id)));
     }
   }
   // People around the top hits that weren't hits themselves, when there is something to say about them.
   for (const p of people) {
-    if (personLines.has(p.id) && !items.some((i) => i.kind === "node" && i.nodeId === p.id)) items.push(withPerson(nodeItem(p, tz)));
+    if (personLines.has(p.id) && !items.some((i) => i.kind === "node" && i.nodeId === p.id)) items.push(withPerson(nodeItem(p, tz, v.id)));
   }
   // 2. Facts around the top hits, with the source each came from.
   for (const e of facts) {
@@ -137,17 +154,20 @@ export async function retrieve(v: Viewer, question: string, opts: { tz: string; 
       kind: "fact", edgeId: e.id, fromId: e.fromId, title: `${from.label} ${label(e.relation)} ${to.label}`, status: e.status,
       confidence: e.confidence, sourceId: p?.sourceId ?? null, sourceTitle: p?.sourceTitle ?? null, quote: p?.quote ?? null,
       locator: p?.locator ?? {}, sensitive: from.sensitive || to.sensitive,
+      level: maxLevel([itemLevel(e, v.id), itemLevel(from, v.id), itemLevel(to, v.id)]),
     });
   }
   // 3. What's coming up.
-  for (const ev of upcoming.events) items.push(nodeItem(ev, tz));
+  for (const ev of upcoming.events) items.push(nodeItem(ev, tz, v.id));
   for (const r of reminders) {
     items.push({
       kind: "reminder", title: r.title, due: whenLabel(new Date(r.dueAt), tz), about: r.aboutLabel,
-      nodeId: r.aboutNodeId ?? r.nodeId, sourceId: r.sourceId, sensitive: false,
+      nodeId: r.aboutNodeId ?? r.nodeId, sourceId: r.sourceId, sensitive: false, level: "normal",
     });
   }
-  return items;
+  // Everyone the viewer can see who came up, for "which Emma?" (people the search found by name).
+  const personRefs = [...nodeById.values()].filter((n) => n.type === "person").map((n) => ({ id: n.id, label: n.label, kind: n.kind ?? null }));
+  return { items, hits: hits.length, people: personRefs };
 }
 
 /** For the degraded answer (mux down): the best few items as a plain list. */

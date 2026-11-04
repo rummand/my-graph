@@ -14,7 +14,9 @@ const fmt = (iso: string) => format(new Date(iso), "d MMM yyyy");
 export function personLine(p: PersonSummary): string {
   const parts: string[] = [];
   const head = `${p.label}${p.kindLabel ? ` (${p.kindLabel.toLowerCase()})` : ""}`;
-  if (p.relation) parts.push(p.relation.label);
+  if (p.isViewer) parts.push("This is you, the person asking");
+  else if (p.relation) parts.push(p.relation.label);
+  if (!p.isViewer && p.householdMember) parts.push("A member of this graph");
   const last = p.wellbeing[p.wellbeing.length - 1];
   if (last) {
     const trend = p.wellbeing.length >= 2 ? p.wellbeing[p.wellbeing.length - 2].score : null;
@@ -35,8 +37,24 @@ export function personLine(p: PersonSummary): string {
 }
 
 /**
+ * Who "me" is, for the assistant: the viewer's own person node in this graph and how the closest people relate to
+ * them. "- You are Anna (person id …) in the graph "Work". Your manager: Bo. Works with you: Lise."
+ */
+export function selfLine(viewerName: string, graphName: string | null, me: PersonSummary | undefined, people: PersonSummary[]): string {
+  const where = graphName ? ` in the graph "${graphName}"` : "";
+  const id = me ? ` (person id ${me.id})` : "";
+  const around = people.filter((p) => !p.isViewer && p.relation?.hops === 1).slice(0, 12)
+    .map((p) => `${p.relation!.label}: ${p.label}`);
+  const members = people.filter((p) => !p.isViewer && p.householdMember).map((p) => p.label);
+  const parts = [`You are ${me?.label ?? viewerName}${id}${where}. When someone says "me", "I" or "my", they mean you.`];
+  if (around.length) parts.push(`${around.join(". ")}.`);
+  if (members.length) parts.push(`Also in this graph: ${members.join(", ")}.`);
+  return `- ${parts.join(" ")}`;
+}
+
+/**
  * Summary lines for the given people (in the given order). Unknown or invisible ids are skipped.
- * Pass an empty array to get the viewer's attention list plus the family circle.
+ * Pass an empty array to get who the viewer is, their attention list and the family circle.
  */
 export async function peopleContext(viewer: Viewer, personIds: string[], opts: { now?: Date } = {}): Promise<string> {
   const o = await peopleOverview(viewer, { now: opts.now });
@@ -47,8 +65,11 @@ export async function peopleContext(viewer: Viewer, personIds: string[], opts: {
     const ids = new Set([...o.attention.map((a) => a.personId), ...o.people.filter((p) => p.circle === "family" && !p.isViewer).map((p) => p.id)]);
     chosen = o.people.filter((p) => ids.has(p.id));
   }
-  if (chosen.length === 0) return "";
-  const lines = chosen.map(personLine);
+  const me = o.people.find((p) => p.isViewer);
+  const lines: string[] = [];
+  if (!personIds.length) lines.push(selfLine(viewer.name, viewer.graphName ?? null, me, o.people));
+  else if (chosen.length === 0) return "";
+  lines.push(...chosen.filter((p) => personIds.length || !p.isViewer).map(personLine));
   if (!personIds.length && o.attention.length) {
     const att = o.attention.slice(0, 8).map((a) =>
       a.reason === "wellbeing" ? `${a.label} seems ${WELLBEING_WORDS[a.score]?.toLowerCase() ?? "low"}` :
@@ -57,4 +78,10 @@ export async function peopleContext(viewer: Viewer, personIds: string[], opts: {
     lines.push(`Needs attention: ${att.join("; ")}.`);
   }
   return lines.join("\n");
+}
+
+/** Just who the viewer is in their current graph (for the assistant's system prompt): one line, or "" when unknown. */
+export async function selfContext(viewer: Viewer, opts: { now?: Date } = {}): Promise<string> {
+  const o = await peopleOverview(viewer, { now: opts.now });
+  return selfLine(viewer.name, viewer.graphName ?? null, o.people.find((p) => p.isViewer), o.people);
 }

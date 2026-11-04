@@ -9,10 +9,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Editor } from "@tiptap/react";
 import { clsx } from "clsx";
-import { AlertTriangle, ArrowLeft, Check, CloudOff, History, LoaderCircle, Lock, Pencil, Trash2, Users, Waypoints } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, CloudOff, History, LoaderCircle, Lock, Pencil, Sparkles, Trash2, Users, Waypoints } from "lucide-react";
 import { Button, buttonClass, Select } from "@/components/ui";
 import type { Doc } from "@/lib/wiki/doc";
 import { VISIBILITIES, VISIBILITY_HINT, VISIBILITY_LABEL, type Visibility } from "@/lib/wiki/labels";
+import type { AcceptInfo, AcceptResult } from "./cowrite/cowrite-panel";
+import { clearCowrite } from "./cowrite/extension";
 import { DocView, isEmptyDoc, type MentionInfo } from "./doc-view";
 import { fullWhen, sentenceWhen } from "./when";
 import { WikiEditor } from "./wiki-editor";
@@ -43,8 +45,10 @@ function When({ iso }: { iso: string }) {
   return <time dateTime={iso} title={fullWhen(d)} suppressHydrationWarning>{sentenceWhen(d)}</time>;
 }
 
-export function WikiPageClient({ initial, startEditing, mentions, children }: {
+export function WikiPageClient({ initial, startEditing, startAsking = false, mentions, children }: {
   initial: ClientPage; startEditing: boolean;
+  /** Open the editor with "Ask the assistant to write" ready (from ?assist=1). */
+  startAsking?: boolean;
   /** Type and access for each mentioned node, so mentions render as the right chip. */
   mentions?: { id: string; type: string; readable: boolean }[];
   /** The quiet side column: links and mentions. */
@@ -57,6 +61,9 @@ export function WikiPageClient({ initial, startEditing, mentions, children }: {
   const [state, setState] = useState<SaveState>({ kind: "saved" });
   const [visBusy, setVisBusy] = useState(false);
   const [visError, setVisError] = useState<string | null>(null);
+  const [askSignal, setAskSignal] = useState(startAsking && startEditing && initial.can.edit ? 1 : 0);
+  const [draftPending, setDraftPending] = useState(false);
+  const draftRef = useRef(false);
   const titleId = useId();
   const mentionInfo: MentionInfo = new Map((mentions ?? []).map((m) => [m.id, { type: m.type, readable: m.readable }]));
 
@@ -128,7 +135,7 @@ export function WikiPageClient({ initial, startEditing, mentions, children }: {
 
   // Warn before leaving with unsaved text.
   useEffect(() => {
-    const h = (e: BeforeUnloadEvent) => { if (dirty() || inFlight.current) { e.preventDefault(); e.returnValue = ""; } };
+    const h = (e: BeforeUnloadEvent) => { if (dirty() || inFlight.current || draftRef.current) { e.preventDefault(); e.returnValue = ""; } };
     window.addEventListener("beforeunload", h);
     return () => window.removeEventListener("beforeunload", h);
   }, []);
@@ -154,6 +161,7 @@ export function WikiPageClient({ initial, startEditing, mentions, children }: {
     doc.current = t.content;
     titleRef.current = t.title;
     setTitle(t.title);
+    if (editorRef.current) clearCowrite(editorRef.current);
     editorRef.current?.commands.setContent(t.content, { emitUpdate: false });
     savedEdits.current = edits.current;
     setPage((p) => ({ ...p, version: t.version, title: t.title, content: t.content }));
@@ -174,7 +182,38 @@ export function WikiPageClient({ initial, startEditing, mentions, children }: {
     return !dirty() && !inFlight.current;
   };
 
+  /**
+   * Keep the assistant's draft: first save the person's own edits (autosave never includes the draft), then save the
+   * whole page as the assistant's revision, so history shows exactly what each of them changed.
+   */
+  const acceptDraft = async (fullDoc: Doc, info: AcceptInfo): Promise<AcceptResult> => {
+    if (!(await flush())) return { ok: false, error: "Your own changes couldn't be saved first, so the draft isn't kept yet. Fix the save problem shown at the top, then accept again." };
+    try {
+      const res = await fetch(`/api/wiki/${encodeURIComponent(page.slug)}/cowrite/accept`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ version: version.current, content: fullDoc, ...info }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { ok: false, error: res.status === 409
+          ? `${data.error ?? "Someone else saved this page."} The draft is still here: copy what you need, then undo it and ask again.`
+          : data.error ?? "Couldn't keep the draft. Try again." };
+      }
+      version.current = data.page.version;
+      doc.current = fullDoc;
+      savedEdits.current = edits.current;
+      setPage((p) => ({ ...p, version: data.page.version, updatedAt: data.page.updatedAt, updatedByName: data.page.updatedByName }));
+      setState({ kind: "saved" });
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "You seem to be offline. The draft is still here; accept again when you're back." };
+    }
+  };
+
+  const onDraftPending = useCallback((p: boolean) => { draftRef.current = p; setDraftPending(p); }, []);
+
   const done = async () => {
+    if (draftRef.current) return; // the panel asks to accept or undo first
     if (!(await flush())) return; // the indicator shows why (error or conflict)
     setPage((p) => ({ ...p, content: doc.current, title: titleRef.current }));
     setEditing(false);
@@ -198,6 +237,7 @@ export function WikiPageClient({ initial, startEditing, mentions, children }: {
   };
 
   const beginEditing = () => { setTitle(page.title); titleRef.current = page.title; doc.current = page.content; setEditing(true); };
+  const beginAsking = () => { beginEditing(); setAskSignal((n) => n + 1); };
   const historyHref = `/wiki/${encodeURIComponent(page.slug)}/history`;
   const VisIcon = page.visibility === "private" ? Lock : Users;
 
@@ -219,6 +259,7 @@ export function WikiPageClient({ initial, startEditing, mentions, children }: {
           {!editing && (
             <div className="flex items-center gap-1.5">
               <Link href={historyHref} className={buttonClass("ghost", "sm")}><History aria-hidden className="size-4" />History</Link>
+              {page.can.edit && <Button size="sm" variant="ghost" onClick={beginAsking}><Sparkles aria-hidden className="size-4 text-accent" /><span className="hidden sm:inline">Ask the assistant</span><span className="sm:hidden">Ask</span></Button>}
               {page.can.edit && <Button size="sm" onClick={beginEditing}><Pencil aria-hidden className="size-3.5" />Edit</Button>}
             </div>
           )}
@@ -227,9 +268,11 @@ export function WikiPageClient({ initial, startEditing, mentions, children }: {
         <article className={clsx("rounded-lg bg-surface", !editing && "px-5 pb-14 pt-8 sm:px-12 sm:pt-12 lg:px-16")} aria-labelledby={editing ? undefined : `${titleId}-h`}>
           {editing ? (
             <WikiEditor pageId={page.id} pageVisibility={page.visibility} initialContent={doc.current} onChange={onDocChange} onReady={onReady} labelledBy={titleId}
+              cowrite={{ slug: page.slug, openSignal: askSignal, onAccept: acceptDraft, onPendingChange: onDraftPending }}
               toolbarEnd={<>
                 <SaveIndicator state={state} onRetry={() => void save()} />
-                <Button size="sm" onClick={() => void done()} disabled={state.kind === "conflict"}>Done</Button>
+                <Button size="sm" onClick={() => void done()} disabled={state.kind === "conflict" || draftPending}
+                  title={draftPending ? "Accept or undo the assistant's draft first" : undefined}>Done</Button>
               </>}>
               <label htmlFor={titleId} className="sr-only">Page title</label>
               <input id={titleId} value={title} maxLength={200} placeholder="Untitled page"
@@ -250,7 +293,10 @@ export function WikiPageClient({ initial, startEditing, mentions, children }: {
                   {page.can.edit && (
                     <>
                       <p className="mt-1">Type @ to mention a person, place or event, and [[ to link another page.</p>
-                      <Button className="mt-5 font-sans" variant="secondary" onClick={beginEditing}><Pencil aria-hidden className="size-3.5" />Start writing</Button>
+                      <div className="mt-5 flex flex-wrap gap-2 font-sans">
+                        <Button variant="secondary" onClick={beginEditing}><Pencil aria-hidden className="size-3.5" />Start writing</Button>
+                        <Button variant="ghost" onClick={beginAsking}><Sparkles aria-hidden className="size-4 text-accent" />Ask the assistant to draft it</Button>
+                      </div>
                     </>
                   )}
                 </div>

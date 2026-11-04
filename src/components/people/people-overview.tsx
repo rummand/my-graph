@@ -45,7 +45,9 @@ function Header({ data, canManageModel }: { data: Overview; canManageModel: bool
   );
 }
 
-export function PeopleOverview({ initial, canManageModel }: { initial: Overview; canManageModel: boolean }) {
+export function PeopleOverview({ initial, canManageModel, graph }: {
+  initial: Overview; canManageModel: boolean; graph?: { name: string; kind: string };
+}) {
   const [data, setData] = useState(initial);
   const [view, setView] = useState<View | null>(null);
   const [circles, setCircles] = useState<Set<string>>(new Set());
@@ -100,12 +102,19 @@ export function PeopleOverview({ initial, canManageModel }: { initial: Overview;
     .sort((a, b) => b.lastContactAt!.localeCompare(a.lastContactAt!)).slice(0, 5), [data.people, data.center]);
 
   if (data.people.length <= (data.center ? 1 : 0)) {
+    const you = data.center?.isViewer ? data.center : null;
+    const work = graph?.kind === "work";
     return (
       <>
         <Header data={data} canManageModel={canManageModel} />
-        <EmptyState title="No one here yet"
+        <EmptyState title={you ? "Just you so far" : "No one here yet"}
+          icon={you ? <Link href={`/people/${you.id}`} aria-label="Your page" className="block rounded-full"><PersonAvatar id={you.id} label={you.label} size={56} /></Link> : undefined}
           action={<Link href="/people/new" className={buttonClass("primary")}><Plus className="size-4" aria-hidden="true" />Add a person</Link>}>
-          Add the people around your family, like grandparents, teachers, the doctor and friends, and see them in circles around you.
+          {work
+            ? "Add the people you work with, like your manager, colleagues and clients, and see them in circles around you."
+            : graph && graph.kind !== "family"
+              ? `Add the people who matter in ${graph.name} and see them in circles around you.`
+              : "Add the people around your family, like grandparents, teachers, the doctor and friends, and see them in circles around you."}
         </EmptyState>
       </>
     );

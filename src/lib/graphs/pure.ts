@@ -165,3 +165,71 @@ export function pickGraph<T extends { id: string; kind: GraphKind; householdId: 
 }
 
 export const DEFAULT_HUES: Record<GraphKind, number> = { family: 28, personal: 265, work: 210, shared: 340, other: 160 };
+
+/* ── Members as people ───────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Every member of a graph is a person in it: their "self" node. It is a person node owned by the member and marked
+ * in props with `{ userId, self: true }` (no schema column). In the member's own household's family graph the self
+ * node is the existing `users.personNodeId` node (stamped with the same marker). Self nodes never leave their graph.
+ */
+export const SELF_PROP = "self";
+export const SELF_USER_PROP = "userId";
+
+/** Props keys only the system writes on person nodes (stripped from anything people send in). */
+export const RESERVED_PERSON_PROPS = [SELF_PROP, SELF_USER_PROP, "householdMember"] as const;
+
+export function selfProps(userId: string): Record<string, unknown> {
+  return { [SELF_USER_PROP]: userId, [SELF_PROP]: true };
+}
+
+/** The user a self node stands for, or null when the props are not a self marker. */
+export function selfUserOf(props: Record<string, unknown> | null | undefined): string | null {
+  if (!props || props[SELF_PROP] !== true) return null;
+  const u = props[SELF_USER_PROP];
+  return typeof u === "string" && u ? u : null;
+}
+
+/** True when `props` mark the self node of `userId`. */
+export function isSelfOf(props: Record<string, unknown> | null | undefined, userId: string): boolean {
+  return selfUserOf(props) === userId;
+}
+
+/** Props without the system-only keys (people can never claim to be someone's self node). */
+export function stripReservedProps<T extends Record<string, unknown>>(props: T): T {
+  const out = { ...props };
+  for (const k of RESERVED_PERSON_PROPS) delete (out as Record<string, unknown>)[k];
+  return out;
+}
+
+/**
+ * Who sees a member's self node. Outside the family graph: every member ("household" means the graph's members).
+ * In the family graph the household rules apply: guests stay private to themselves.
+ */
+export function selfVisibility(role: Role, family: boolean): "household" | "private" {
+  return family && role === "guest" ? "private" : "household";
+}
+
+/** Kind of a self node: children are "child" in their own family graph; otherwise none (they are "you"). */
+export function selfKind(role: Role, family: boolean): string | null {
+  return family && role === "child" ? "child" : null;
+}
+
+export type SelfCandidate = { id: string; label: string; props: Record<string, unknown>; mergedInto: string | null; ownerId: string; createdAt: Date };
+
+/**
+ * Which of the candidate rows is the member's self node: their family node when it is here and live, else the
+ * oldest live node marked as theirs, else (when `adoptName` is given) the oldest unmarked person node they own with
+ * their name, which is how people wrote themselves in before self nodes existed. Used by ./self.
+ */
+export function pickSelfNode(rows: SelfCandidate[], userId: string, homeNodeId: string | null | undefined, adoptName?: string): SelfCandidate | null {
+  const live = rows.filter((r) => !r.mergedInto).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  const home = homeNodeId ? live.find((r) => r.id === homeNodeId) : undefined;
+  if (home) return home;
+  const marked = live.find((r) => r.ownerId === userId && isSelfOf(r.props, userId));
+  if (marked) return marked;
+  if (!adoptName) return null;
+  const name = adoptName.trim().toLowerCase();
+  return live.find((r) => r.ownerId === userId && r.props.self === undefined
+    && r.label.trim().toLowerCase() === name) ?? null;
+}

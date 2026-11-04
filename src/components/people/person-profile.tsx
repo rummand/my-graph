@@ -14,6 +14,7 @@ import { PersonAvatar, WellbeingWord } from "./avatar";
 import { ago, api, compactDate, dayLabel, fieldErrors, inDays, shortDate, When, type FieldErrors } from "./format";
 import { relationOptions } from "./relation-options";
 import { WellbeingChart } from "./wellbeing-chart";
+import { MemoryPanel } from "@/components/memory/memory-panel";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -43,6 +44,7 @@ export function PersonProfileView({ initial }: { initial: PersonProfile }) {
         <div className="min-w-0 space-y-10">
           <Details profile={profile} onSaved={setProfile} />
           <Relationships profile={profile} onSaved={reload} />
+          <MemoryPanel aboutNodeId={id} aboutName={profile.person.label.split(" ")[0]} />
           <Milestones profile={profile} onSaved={reload} />
           {profile.provenance.length > 0 && (
             <Block title="Where this comes from">
@@ -112,8 +114,9 @@ function Header({ profile, onSaved }: { profile: PersonProfile; onSaved: (p: Per
           <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-muted">
             {p.relation && <span className="text-fg">{p.relation.label}</span>}
             {p.kindLabel && (!p.relation || !p.relation.label.toLowerCase().includes(p.kindLabel.toLowerCase())) && <span>{p.kindLabel}</span>}
-            {!p.relation && !p.kindLabel && <span>{CIRCLE_LABELS[circle as Circle]}</span>}
+            {!p.relation && !p.kindLabel && !p.isViewer && <span>{CIRCLE_LABELS[circle as Circle]}</span>}
             {p.aliases.length > 0 && <span>Also called {p.aliases.join(", ")}</span>}
+            {p.householdMember && !p.isViewer && <span>Member of this graph</span>}
           </p>
         </div>
         {!editing && p.canEdit && <Button variant="secondary" onClick={() => setEditing(true)}><Pencil className="size-4" aria-hidden="true" />Edit</Button>}
@@ -425,10 +428,14 @@ function Relationships({ profile, onSaved }: { profile: PersonProfile; onSaved: 
             <ul className="space-y-1.5">
               {g.items.map((it) => (
                 <li key={it.edgeId} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-                  <span className="text-muted">{it.label.charAt(0).toUpperCase() + it.label.slice(1)}</span>
-                  {it.other.type === "person"
-                    ? <PersonChip id={it.other.id} name={it.other.label} href={`/people/${it.other.id}`} />
-                    : <NodeChip type={it.other.type} label={it.other.label} href={`/node/${it.other.id}`} />}
+                  {it.toYou
+                    ? <Link href={`/people/${it.other.id}`} className="font-medium hover:underline underline-offset-4">{it.toYou}</Link>
+                    : <>
+                      <span className="text-muted">{it.label.charAt(0).toUpperCase() + it.label.slice(1)}</span>
+                      {it.other.type === "person"
+                        ? <PersonChip id={it.other.id} name={it.other.label} href={`/people/${it.other.id}`} />
+                        : <NodeChip type={it.other.type} label={it.other.label} href={`/node/${it.other.id}`} />}
+                    </>}
                   {it.status !== "confirmed" && <Badge tone="inferred">{it.status === "inferred" ? "Guess" : "Unconfirmed"}</Badge>}
                   {it.citations.slice(0, 1).map((c, i) => c.href ? <Cite key={i} c={c} /> : null)}
                 </li>
@@ -446,7 +453,7 @@ function Relationships({ profile, onSaved }: { profile: PersonProfile; onSaved: 
                 <Select value={otherId} onChange={(e) => { setOtherId(e.target.value); setRel(""); }}>
                   <option value="">Choose…</option>
                   <option value="__new">Someone new</option>
-                  {people.length > 0 && <optgroup label="People">{people.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}</optgroup>}
+                  {people.length > 0 && <optgroup label="People">{people.map((n) => <option key={n.id} value={n.id}>{n.isViewer ? `You (${n.label})` : n.label}</option>)}</optgroup>}
                   {places.length > 0 && <optgroup label="Places">{places.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}</optgroup>}
                 </Select>
               </Field>
@@ -465,7 +472,7 @@ function Relationships({ profile, onSaved }: { profile: PersonProfile; onSaved: 
                 <Field label={`${p.label} is…`}>
                   <Select value={rel} onChange={(e) => setRel(e.target.value)}>
                     <option value="">Choose…</option>
-                    {options.map((o) => <option key={o.value} value={o.value}>{o.phrase} {otherId === "__new" ? newName || "them" : other?.label}</option>)}
+                    {options.map((o) => <option key={o.value} value={o.value}>{o.phrase} {otherId === "__new" ? newName || "them" : other?.isViewer ? "you" : other?.label}</option>)}
                   </Select>
                 </Field>
               )}

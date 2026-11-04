@@ -26,6 +26,10 @@ export const PROSE = [
   "[&_hr]:my-10 [&_hr]:border-line",
   "[&_:not([data-type=mention])>a]:text-accent [&_:not([data-type=mention])>a]:underline [&_:not([data-type=mention])>a]:underline-offset-[3px]",
   "[&_strong]:font-semibold",
+  // Citations the assistant inserted (links to a library item, a graph item or another page): small cobalt marks,
+  // like CitationChip, so "where did this come from?" looks the same in a page as in an answer.
+  "[&_a[href^='/library/']]:rounded-[4px] [&_a[href^='/library/']]:bg-accent-tint [&_a[href^='/library/']]:px-1.5 [&_a[href^='/library/']]:py-px [&_a[href^='/library/']]:font-sans [&_a[href^='/library/']]:text-xs [&_a[href^='/library/']]:font-medium [&_a[href^='/library/']]:not-italic [&_a[href^='/library/']]:no-underline! [&_a[href^='/library/']]:align-[0.1em] [&_a[href^='/library/']]:hover:bg-accent [&_a[href^='/library/']]:hover:text-accent-fg",
+  "[&_a[href^='/node/']]:rounded-[4px] [&_a[href^='/node/']]:bg-accent-tint [&_a[href^='/node/']]:px-1.5 [&_a[href^='/node/']]:py-px [&_a[href^='/node/']]:font-sans [&_a[href^='/node/']]:text-xs [&_a[href^='/node/']]:font-medium [&_a[href^='/node/']]:not-italic [&_a[href^='/node/']]:no-underline! [&_a[href^='/node/']]:align-[0.1em] [&_a[href^='/node/']]:hover:bg-accent [&_a[href^='/node/']]:hover:text-accent-fg",
 ].join(" ");
 
 /** A [[page link]]: a cobalt link with a dotted underline, so it reads as "another page here", not the open web. */

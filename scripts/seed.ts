@@ -6,7 +6,7 @@
  *   Child   noah (born 2019)   / demo-demo-demo
  * Graphs: the household's Family graph (everyone above), Anna's "Work", and "For Sara" — owned by Anna and shared
  * with Sara (sara@example.com / demo-demo-demo, a household of her own) as editor.
- * Every member gets their own person node in their own brain; both parents get parent_of facts to both children,
+ * Every member of every graph gets their own ("self") person node in it; both parents get parent_of facts to both children,
  * each with a provenance row. Running it again changes nothing that is already there.
  */
 import { existsSync } from "node:fs";
@@ -29,13 +29,15 @@ const MEMBERS: Member[] = [
 const SARA = { email: "sara@example.com", name: "Sara" };
 
 async function main() {
-  const { and, eq } = await import("drizzle-orm");
+  const { and, eq, inArray } = await import("drizzle-orm");
   const { db, sql } = await import("@/db");
   const { edges, graphs, households, nodes, provenance, users } = await import("@/db/schema");
   const { createAccount, createPersonNode, linkParentOf } = await import("@/lib/auth/members");
   const { createAccountWithOwnHousehold } = await import("@/lib/graphs");
   const { DEFAULT_HUES } = await import("@/lib/graphs/pure");
   const { upsertMember } = await import("@/lib/graphs/store");
+  const { ensureSelfNode, ensureSelfNodesForGraph, findSelfNodeId } = await import("@/lib/graphs/self");
+  const { selfProps } = await import("@/lib/graphs/pure");
   const { hashPassword } = await import("@/lib/auth/passwords");
   const { writeAudit } = await import("@/lib/auth/audit");
 
@@ -136,8 +138,20 @@ async function main() {
       throw new Error(`${SARA.email} belongs to the demo household; she should have a household of her own.`);
     }
     await upsertMember(tx, forSara, sara.id, "editor", anna.userId);
-    const annaInSara = await node(forSara, anna.userId, { type: "person", label: "Anna", summary: "Made this graph for Sara" });
-    const saraNode = await node(forSara, anna.userId, { type: "person", label: "Sara" });
+    // Members are people in their graph: Anna's and Sara's own ("self") nodes. Older seeds wrote a "Sara" node owned
+    // by Anna; it becomes Sara's own node (owned by her) unless she already has one.
+    const forSaraGraph = { id: forSara, kind: "shared" as const, householdId };
+    if (!(await findSelfNodeId(tx, sara.id, forSara, sara.personNodeId))) {
+      const [old] = await tx.select({ id: nodes.id, props: nodes.props }).from(nodes)
+        .where(and(eq(nodes.graphId, forSara), eq(nodes.ownerId, anna.userId), eq(nodes.type, "person"), eq(nodes.label, SARA.name)));
+      if (old) {
+        await tx.update(nodes).set({ ownerId: sara.id, props: { ...old.props, ...selfProps(sara.id) } }).where(eq(nodes.id, old.id));
+        log.push(`made the "Sara" node in "For Sara" Sara's own`);
+      }
+    }
+    const annaUser = { id: anna.userId, name: MEMBERS[0].name, householdId, role: "owner" as const };
+    const annaInSara = await ensureSelfNode(tx, annaUser, forSaraGraph, { actorId: anna.userId, note: "Made this graph" });
+    const saraNode = await ensureSelfNode(tx, sara, forSaraGraph, { actorId: anna.userId, note: "Added to this graph" });
     const trip = await node(forSara, anna.userId, { type: "event", label: "Weekend in Skagen", startAt: new Date(Date.UTC(new Date().getUTCFullYear() + 1, 4, 16)) });
     const cafe = await node(forSara, anna.userId, { type: "place", label: "Café Norden", summary: "Where we first met" });
     await fact(forSara, anna.userId, trip, "involves", saraNode);
@@ -145,6 +159,13 @@ async function main() {
     await fact(forSara, anna.userId, annaInSara, "knows", saraNode);
     await fact(forSara, anna.userId, cafe, "about", saraNode);
     log.push(`ensured "For Sara" (shared with Sara as editor) and "Work" content`);
+
+    // Every member of every demo graph is a person in it (Family uses each member's own node).
+    const allGraphs = await tx.select({ id: graphs.id }).from(graphs)
+      .where(inArray(graphs.householdId, [householdId, sara.householdId]));
+    let selves = 0;
+    for (const g of allGraphs) selves += (await ensureSelfNodesForGraph(tx, g.id)).size;
+    log.push(`ensured ${selves} members' own person nodes across ${allGraphs.length} graphs`);
   });
 
   console.log(["Seeded the demo household:", ...log.map((l) => `  - ${l}`),

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { format, isToday } from "date-fns";
 import { clsx } from "clsx";
-import { ArrowLeft, Bot } from "lucide-react";
+import { ArrowLeft, Sparkles } from "lucide-react";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { DiffView } from "@/components/wiki/diff-view";
 import { RestoreButton } from "@/components/wiki/restore-button";
@@ -45,7 +45,7 @@ export default async function WikiHistory({ params, searchParams }: Props) {
         <ArrowLeft aria-hidden className="size-4" /><span className="max-w-[40ch] truncate">{page.title}</span>
       </Link>
       <PageHeader title="Version history"
-        lead={<>Every saved version of <span className="text-fg">{page.title}</span>, newest first. Edits made close together by one person count as one version. Restoring an old version adds it on top, so nothing is lost.</>} />
+        lead={<>Every saved version of <span className="text-fg">{page.title}</span>, newest first. Edits made close together by one person count as one version. Versions the assistant wrote show who asked for them. Restoring an old version adds it on top, so nothing is lost.</>} />
 
       {!selected ? (
         <EmptyState title="No versions yet"><p>Versions appear here once the page has been saved.</p></EmptyState>
@@ -61,12 +61,13 @@ export default async function WikiHistory({ params, searchParams }: Props) {
                 return (
                   <li key={r.id}>
                     <Link href={`?rev=${r.id}`} aria-current={active ? "true" : undefined} scroll={false}
-                      className={clsx("block rounded-lg px-3 py-2.5 transition-colors duration-150", active ? "bg-surface" : "hover:bg-surface-2")}>
+                      className={clsx("block rounded-lg px-3 py-2.5 transition-colors duration-150",
+                        r.authorKind === "assistant" && "shadow-[inset_2px_0_0_var(--accent)]",
+                        active ? "bg-surface" : "hover:bg-surface-2")}>
                       <span className="flex items-baseline justify-between gap-3">
-                        <span className="flex min-w-0 items-center gap-1.5 font-medium">
-                          {r.authorKind === "assistant" && <Bot aria-hidden className="size-4 shrink-0 self-center text-muted" />}
-                          <span className="truncate">{r.authorName}</span>
-                        </span>
+                        {r.authorKind === "assistant" ? <AssistantAuthor name={r.authorName} /> : (
+                          <span className="flex min-w-0 items-center gap-1.5 font-medium"><span className="truncate">{r.authorName}</span></span>
+                        )}
                         <time dateTime={r.createdAt.toISOString()} title={fullWhen(r.createdAt)} className="shrink-0 text-sm tabular-nums text-muted">{listWhen(r.createdAt)}</time>
                       </span>
                       <span className="mt-0.5 block text-sm text-muted">
@@ -87,7 +88,9 @@ export default async function WikiHistory({ params, searchParams }: Props) {
                   {selectedIdx === 0 ? `Version ${selected.version}, the current one` : `Version ${selected.version}`}
                 </h2>
                 <p className="mt-1 text-sm text-muted">
-                  {selected.authorName} saved it {sentenceWhen(selected.createdAt)}.{" "}
+                  {selected.authorKind === "assistant"
+                    ? <>The assistant wrote it{askedBy(selected.authorName) ? `, asked by ${askedBy(selected.authorName)}` : ""}, {sentenceWhen(selected.createdAt)}{selected.summary ? <>. {selected.summary}</> : null}.{" "}</>
+                    : <>{selected.authorName} saved it {sentenceWhen(selected.createdAt)}.{" "}</>}
                   {previous ? <>Compared with version {previous.version}.</> : <>This is the first version.</>}
                 </p>
               </div>
@@ -100,6 +103,22 @@ export default async function WikiHistory({ params, searchParams }: Props) {
         </div>
       )}
     </div>
+  );
+}
+
+/** "Assistant (asked by Anna)" → "Anna". */
+function askedBy(authorName: string): string | null {
+  return /\(asked by (.+)\)$/.exec(authorName)?.[1] ?? null;
+}
+
+function AssistantAuthor({ name }: { name: string }) {
+  const who = askedBy(name);
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <Sparkles aria-hidden className="size-3.5 shrink-0 self-center text-accent" />
+      <span className="shrink-0 font-medium">Assistant</span>
+      {who && <span className="truncate text-sm text-muted">asked by {who}</span>}
+    </span>
   );
 }
 

@@ -5,6 +5,9 @@ import { createHouseholdWithOwner } from "@/lib/auth/members";
 import { hashPassword, passwordProblem } from "@/lib/auth/passwords";
 import { setupBody } from "@/lib/auth/schemas";
 import { completeSignIn, findUserById } from "@/lib/auth/signin";
+import { db } from "@/db";
+import { familyGraphId } from "@/lib/graphs/store";
+import { ensureSelfNode } from "@/lib/graphs/self";
 
 /** POST: first run only — creates the household and its owner, then signs the owner in. */
 export async function POST(req: NextRequest) {
@@ -18,6 +21,12 @@ export async function POST(req: NextRequest) {
     if (!created) return errorJson(409, "My Graph is already set up. Sign in instead.");
     const owner = await findUserById(created.userId);
     if (!owner) return errorJson(500, "Setup didn't finish. Please try again.");
+    // The owner is the first person in the family graph (their own node, marked as theirs).
+    const fam = await familyGraphId(created.householdId);
+    if (fam) {
+      await ensureSelfNode(db, { id: owner.id, name: owner.name, householdId: owner.householdId, role: owner.role, personNodeId: created.personNodeId },
+        { id: fam, kind: "family", householdId: created.householdId });
+    }
     await audit(owner, "setup.complete", { type: "household", id: created.householdId }, { householdName: body.householdName });
     return completeSignIn(req, owner, "setup");
   });

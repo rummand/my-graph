@@ -6,8 +6,9 @@ import { firstIssue, handle, jsonError, proposalBodySchema, proposalParamsSchema
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/chat/[id]/proposals/[n] { messageId, action: "approve" | "dismiss" }
- * Approve writes the suggestion (inferred fact / reminder / wiki page); dismiss only records the decision.
+ * POST /api/chat/[id]/proposals/[n] { messageId, action: "approve" | "always" | "deny" | "dismiss" | "undo" }
+ * approve writes the suggestion; always also adds its kind to "Always allow"; deny/dismiss only records the decision;
+ * undo takes back what an approval created.
  */
 export function POST(req: Request, { params }: { params: Promise<{ id: string; n: string }> }) {
   return handle(async () => {
@@ -20,7 +21,7 @@ export function POST(req: Request, { params }: { params: Promise<{ id: string; n
     if (!parsed.success) return jsonError(400, firstIssue(parsed.error));
     try {
       const out = await decideProposal(v, { conversationId: p.data.id, messageId: parsed.data.messageId, n: p.data.n, action: parsed.data.action });
-      return NextResponse.json(out);
+      return NextResponse.json({ ok: true, ...out, label: out.result?.label, href: out.result?.href });
     } catch (e) {
       if (e instanceof ProposalError) return jsonError(e.status, e.message);
       throw e;

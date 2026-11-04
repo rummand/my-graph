@@ -37,7 +37,8 @@ export default async function WikiPageRoute({ params, searchParams }: Props) {
   return (
     <WikiPageClient
       key={`${page.id}:${page.version}`}
-      startEditing={sp.edit === "1"}
+      startEditing={sp.edit === "1" || sp.assist === "1"}
+      startAsking={sp.assist === "1"}
       mentions={backlinks?.mentions}
       initial={{
         id: page.id, slug: page.slug, title: page.title, content: page.content, visibility: page.visibility, version: page.version,

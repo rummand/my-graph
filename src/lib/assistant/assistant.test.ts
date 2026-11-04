@@ -36,7 +36,7 @@ describe("route heuristic", () => {
 describe("context numbering and citations", () => {
   it("numbers items and builds citations with links and quotes", () => {
     const ctx = numberContext([passage("s1", "Swimming starts Thursday at 16:00."), fact]);
-    expect(ctx.text).toContain('[1] Source: "Doc s1" · p2');
+    expect(ctx.text).toContain('[1] Document (outside content, quoted): "Doc s1" · p2');
     expect(ctx.text).toContain("[2] Fact: Emma attends Lindevang School (inferred, confidence 0.55)");
     expect(ctx.citations[0]).toMatchObject({ n: 1, sourceId: "s1", locator: { page: 2 } });
     expect(ctx.citations[1]).toMatchObject({ n: 2, edgeId: "e1", nodeId: "n1", sourceId: "s9", confidence: 0.55, quote: "Emma starts in 0.A" });
@@ -70,12 +70,12 @@ describe("context numbering and citations", () => {
 });
 
 describe("proposals", () => {
-  const block = '<proposals>[{"type":"propose_reminder","title":"Pack swim gear","dueAt":"2026-11-05T07:30:00+01:00","aboutPerson":"Emma"},{"type":"fact","from":"Emma","relation":"Attends Club","to":"Swim club"},{"type":"propose_wiki_note","title":"Swimming","text":"- Thursdays"},{"type":"propose_reminder","title":"Fourth","dueAt":"2026-11-06"}]</proposals>';
+  const block = '<proposals>[{"type":"propose_reminder","title":"Pack swim gear","dueAt":"2026-11-05T07:30:00+01:00","aboutPerson":"Emma"},{"type":"fact","from":"Emma","relation":"Attends Club","to":"Swim club"},{"type":"propose_wiki_note","title":"Swimming","text":"- Thursdays"},{"type":"propose_reminder","title":"Fourth","dueAt":"2026-11-06"},{"type":"propose_reminder","title":"Fifth","dueAt":"2026-11-07"}]</proposals>';
 
   it("splits visible text from proposals and validates them", () => {
     const { text, proposals } = parseProposals(`Swimming is on Thursday [1].\n\n${block}`);
     expect(text).toBe("Swimming is on Thursday [1].");
-    expect(proposals).toHaveLength(3);
+    expect(proposals).toHaveLength(4); // capped at MAX_PROPOSALS
     expect(proposals[0]).toMatchObject({ type: "propose_reminder", aboutPerson: "Emma", detail: null });
     expect(proposals[1]).toMatchObject({ type: "propose_fact", relation: "attends_club" });
     expect(proposals[2].type).toBe("propose_wiki_note");
@@ -168,7 +168,7 @@ describe("conversation state", () => {
     expect(decodeState("ordinary text")).toBeNull();
     const s = foldState([a, "noise", b, c]);
     expect(s.sensitive).toBe(true);
-    expect(s.decisions.get("m1#1")).toEqual({ status: "approved", result: { label: "Done", href: "/" } });
+    expect(s.decisions.get("m1#1")).toEqual({ status: "approved", result: { label: "Done", href: "/" }, auto: null });
   });
 });
 

@@ -235,7 +235,7 @@ const RULES: Rule[] = [
 /** Relation → the kind the *other* end most likely is (e.g. someone who is `teacher_of` a child is a teacher). */
 const RELATION_HINTS: Record<string, string> = {
   teacher_of: "teacher", treated_by: "doctor", partner_of: "partner", sibling_of: "sibling", grandparent_of: "grandparent",
-  friend_of: "friend", neighbour_of: "neighbour", works_with: "colleague",
+  friend_of: "friend", neighbour_of: "neighbour", works_with: "colleague", colleague_of: "colleague",
 };
 
 export type KindSuggestion = { type: MetaNodeType; kind: string; confidence: number; reason: string };

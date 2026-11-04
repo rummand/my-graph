@@ -15,7 +15,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
   return (
     <div className="mx-auto max-w-6xl">
       <GraphWelcome viewer={v} />
-      <PeopleOverview initial={data} canManageModel={isParent(v)} />
+      <PeopleOverview initial={data} canManageModel={isParent(v)} graph={{ name: v.graphName, kind: v.graphKind }} />
     </div>
   );
 }

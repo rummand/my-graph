@@ -14,11 +14,13 @@ import { PluginKey } from "@tiptap/pm/state";
 import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion";
 import { clsx } from "clsx";
 import {
-  AtSign, Bold, Code, FileText, Heading2, Heading3, Italic, Link2, List, ListChecks, ListOrdered, Plus, Quote, Redo2, SquareCode, Strikethrough, Undo2,
+  AtSign, Bold, Code, FileText, Heading2, Heading3, Italic, Link2, List, ListChecks, ListOrdered, Plus, Quote, Redo2, Sparkles, SquareCode, Strikethrough, Undo2,
 } from "lucide-react";
 import { Avatar, Button } from "@/components/ui";
 import type { Doc } from "@/lib/wiki/doc";
 import type { Visibility } from "@/lib/wiki/labels";
+import { CowritePanel, savedDocOf, type AcceptInfo, type AcceptResult } from "./cowrite/cowrite-panel";
+import { Cowrite, COWRITE_CLASSES, isCowriteTr } from "./cowrite/extension";
 import { mentionChip, PAGE_LINK_CLASS, PROSE } from "./prose";
 
 /* ── Suggestion data ───────────────────────────────────────────────────────────────────────────────────── */
@@ -152,7 +154,7 @@ function LinkEditor({ editor, onClose }: { editor: Editor; onClose: () => void }
   );
 }
 
-function Toolbar({ editor, end }: { editor: Editor; end?: ReactNode }) {
+function Toolbar({ editor, end, onAsk }: { editor: Editor; end?: ReactNode; onAsk?: () => void }) {
   // Re-render on selection/content changes so active states stay correct.
   const [, force] = useState(0);
   const [linking, setLinking] = useState(false);
@@ -185,6 +187,7 @@ function Toolbar({ editor, end }: { editor: Editor; end?: ReactNode }) {
           <Gap />
           <ToolButton label="Mention someone" keys="@" onClick={() => c().insertContent(" @").run()}><AtSign className={icon} /></ToolButton>
           <ToolButton label="Link another page" keys="[[" onClick={() => c().insertContent(" [[").run()}><FileText className={icon} /></ToolButton>
+          {onAsk && <><Gap /><ToolButton label="Ask the assistant to write" keys="Ctrl+J" onClick={onAsk}><Sparkles className={clsx(icon, "text-accent")} /></ToolButton></>}
           <Gap />
           <ToolButton label="Undo" keys="Ctrl+Z" disabled={!editor.can().undo()} onClick={() => c().undo().run()}><Undo2 className={icon} /></ToolButton>
           <ToolButton label="Redo" keys="Ctrl+Shift+Z" disabled={!editor.can().redo()} onClick={() => c().redo().run()}><Redo2 className={icon} /></ToolButton>
@@ -209,10 +212,21 @@ export type WikiEditorProps = {
   toolbarEnd?: ReactNode;
   /** Rendered on the page above the text: the title field. */
   children?: ReactNode;
+  /** Co-writing with the assistant. Omit to hide it (e.g. for people who can't edit). */
+  cowrite?: {
+    slug: string;
+    /** Bump to open the composer from outside (e.g. "Ask the assistant" on the read view). */
+    openSignal?: number;
+    onAccept: (fullDoc: Doc, info: AcceptInfo) => Promise<AcceptResult>;
+    onPendingChange?: (pending: boolean) => void;
+  };
 };
 
-export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, onReady, labelledBy, toolbarEnd, children }: WikiEditorProps) {
+export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, onReady, labelledBy, toolbarEnd, children, cowrite }: WikiEditorProps) {
   const [popup, setPopup] = useState<Popup | null>(null);
+  const [asking, setAsking] = useState(false);
+  const openSignal = cowrite?.openSignal ?? 0;
+  useEffect(() => { if (openSignal > 0) setAsking(true); }, [openSignal]);
   const [index, setIndex] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const popupRef = useRef<Popup | null>(null);
@@ -262,6 +276,7 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
       }),
       TaskList,
       TaskItem.configure({ nested: true }),
+      Cowrite,
       Placeholder.configure({
         placeholder: ({ node }) => node.type.name === "heading" ? "Heading" : "Start writing. Type @ to mention someone, [[ to link another page.",
         emptyEditorClass: "is-editor-empty",
@@ -344,7 +359,7 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
     ],
     editorProps: {
       attributes: {
-        class: clsx(PROSE, "min-h-[50vh] pb-24 outline-none caret-accent",
+        class: clsx(PROSE, COWRITE_CLASSES, "min-h-[50vh] pb-24 outline-none caret-accent",
           "[&_p.is-editor-empty:first-child]:before:pointer-events-none [&_p.is-editor-empty:first-child]:before:float-left [&_p.is-editor-empty:first-child]:before:h-0 [&_p.is-editor-empty:first-child]:before:text-muted [&_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]"),
         role: "textbox",
         // Writing on the page itself: the caret shows focus, not a ring around the whole text.
@@ -353,7 +368,8 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
         ...(labelledBy ? { "aria-labelledby": labelledBy } : { "aria-label": "Page text" }),
       },
     },
-    onUpdate: ({ editor }) => onChangeRef.current(editor.getJSON() as Doc),
+    // Autosave never stores the assistant's draft: only the person's own text, until they accept the draft.
+    onUpdate: ({ editor, transaction }) => { if (!isCowriteTr(transaction)) onChangeRef.current(savedDocOf(editor)); },
   });
 
   useEffect(() => {
@@ -393,11 +409,15 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
   }
   return (
     <div>
-      <Toolbar editor={editor} end={toolbarEnd} />
+      <Toolbar editor={editor} end={toolbarEnd} onAsk={cowrite ? () => setAsking(true) : undefined} />
       <div className={sheet}>
         {children}
         <EditorContent editor={editor} className="mt-6" />
       </div>
+      {cowrite && (
+        <CowritePanel editor={editor} slug={cowrite.slug} pageVisibility={pageVisibility} open={asking} onOpenChange={setAsking}
+          onAccept={cowrite.onAccept} onPendingChange={cowrite.onPendingChange} />
+      )}
       {popup && <SuggestionList popup={popup} index={index} onHover={move} listId={listId} />}
       <p role="status" aria-live="polite" className={clsx("fixed bottom-24 left-1/2 z-40 -translate-x-1/2 rounded-lg bg-fg px-4 py-2.5 text-sm text-bg shadow-float lg:bottom-8", !notice && "sr-only")}>{notice}</p>
     </div>

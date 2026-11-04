@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { groupByRecency, locatorWords, shortModel, starterQuestions } from "./recency";
+import { groupByRecency, groupForInbox, locatorWords, shortModel, starterQuestions } from "./recency";
 
 const now = new Date(2026, 10, 18, 15, 0); // Wed 18 Nov 2026, local time
 const at = (y: number, m: number, d: number, h = 12) => new Date(y, m, d, h).toISOString();
@@ -50,5 +50,18 @@ describe("labels", () => {
     expect(locatorWords({ page: 3 })).toBe("page 3");
     expect(locatorWords({ timeStartSec: 80 })).toBe("at 1:20");
     expect(locatorWords({})).toBeNull();
+  });
+});
+
+describe("groupForInbox", () => {
+  it("puts pinned conversations first, then groups the rest by recency", () => {
+    const now = new Date("2026-11-04T12:00:00Z");
+    const g = groupForInbox([
+      { id: "a", updatedAt: "2026-11-04T10:00:00Z", pinned: false },
+      { id: "b", updatedAt: "2026-10-01T10:00:00Z", pinned: true },
+      { id: "c", updatedAt: "2026-11-03T10:00:00Z" },
+    ], now);
+    expect(g.map((x) => x.label)).toEqual(["Pinned", "Today", "Yesterday"]);
+    expect(g[0].items.map((x) => x.id)).toEqual(["b"]);
   });
 });

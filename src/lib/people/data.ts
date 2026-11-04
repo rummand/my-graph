@@ -12,7 +12,8 @@ import { scopeOf } from "@/lib/graphs/pure";
 import { canModify, canSee, isParentRole, visibleWhere } from "./access";
 import { attentionItems, nextBirthday } from "./attention";
 import { normaliseCircle } from "./circles";
-import { relationsToCenter, type PathEdge, type PathNode } from "./relpath";
+import { memberCircle, relationsToCenter, relationToYou, type PathEdge, type PathNode } from "./relpath";
+import { memberSelfNodes } from "@/lib/graphs/self";
 import type {
   CenterOption, Citation, FeedItem, Observation, PeopleOverview, PersonProfile, PersonSummary, RelationshipGroup,
 } from "./types";
@@ -24,7 +25,10 @@ const DEAD_EDGE = ["rejected", "superseded"];
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
-/** The viewer's own person node: users.personNodeId, else a person node they own with their name. */
+/**
+ * The viewer's own person node in the current graph: their self node (`viewer.personNodeId`, set in every graph),
+ * else a person node they own with their name.
+ */
 export async function viewerPersonId(v: Viewer): Promise<string | null> {
   if (v.personNodeId) return v.personNodeId;
   const [row] = await db.select({ id: nodes.id }).from(nodes).where(and(eq(nodes.graphId, v.graphId), eq(nodes.ownerId, v.id), eq(nodes.type, "person"),
@@ -55,18 +59,18 @@ async function edgesTouching(v: Viewer, ids: string[], relations?: string[]): Pr
   ));
 }
 
-async function householdPersonIds(v: Viewer): Promise<Set<string>> {
-  // People who are members of this graph (in the family graph: the household).
-  const rows = await db.select({ p: users.personNodeId }).from(users)
-    .where(sql`exists (select 1 from graph_members gm where gm.user_id = ${users.id} and gm.graph_id = ${v.graphId})`);
-  return new Set(rows.map((r) => r.p).filter((p): p is string => !!p));
+/** Person nodes of the current members of this graph (their self nodes; in the family graph: the household). */
+async function memberPersonIds(v: Viewer): Promise<Set<string>> {
+  return new Set((await memberSelfNodes(v.graphId)).values());
 }
 
-function circleFor(meta: Meta, n: Pick<NodeRow, "kind">, relCategory: string | undefined): string {
+function circleFor(meta: Meta, n: Pick<NodeRow, "kind">, relCategory: string | undefined, isMember: boolean, graphKind: Viewer["graphKind"]): string {
   const k = meta.kind("person", n.kind);
   if (k?.circle) return normaliseCircle(k.circle);
   const byCat: Record<string, string> = { family: "family", school: "school", care: "care", social: "social", work: "work" };
-  return normaliseCircle(relCategory ? byCat[relCategory] : null);
+  if (relCategory && byCat[relCategory]) return normaliseCircle(byCat[relCategory]);
+  // A fellow member with no recorded relation sits where the graph puts its people.
+  return normaliseCircle(isMember ? memberCircle(graphKind) : null);
 }
 
 type Built = {
@@ -83,7 +87,7 @@ type Built = {
 async function buildPeople(v: Viewer, opts: { centerId?: string | null; now?: Date } = {}): Promise<Built> {
   const now = opts.now ?? new Date();
   const [meta, persons, viewerNodeId, members] = await Promise.all([
-    getMeta(v), visibleNodes(v, ["person"]), viewerPersonId(v), householdPersonIds(v),
+    getMeta(v), visibleNodes(v, ["person"]), viewerPersonId(v), memberPersonIds(v),
   ]);
   const nodesById = new Map(persons.map((n) => [n.id, n]));
   const ids = persons.map((p) => p.id);
@@ -150,7 +154,7 @@ async function buildPeople(v: Viewer, opts: { centerId?: string | null; now?: Da
     const r = rel.get(p.id) ?? null;
     return {
       id: p.id, label: p.label, kind: p.kind, kindLabel: kind?.label ?? null,
-      circle: circleFor(meta, p, relToViewer.get(p.id)?.category),
+      circle: circleFor(meta, p, relToViewer.get(p.id)?.category, members.has(p.id), v.graphKind),
       visibility: p.visibility, sensitive: p.sensitive, ownerId: p.ownerId,
       householdMember: members.has(p.id), isViewer: p.id === viewerNodeId,
       relation: r, lastContactAt: iso(lastContact?.at), lastContactSource: lastContact?.src ?? null,
@@ -274,8 +278,10 @@ export async function personProfile(v: Viewer, id: string): Promise<PersonProfil
     const category = r?.category ?? "other";
     if (category === "document" || category === "time") continue;
     const g = groups.get(category) ?? groups.set(category, { category, label: CATEGORY_LABELS[category] ?? category, items: [] }).get(category)!;
+    const toYou = other.id === b.viewerNodeId && id !== b.viewerNodeId
+      ? relationToYou(meta.model, e, { id: node.id, label: node.label, type: node.type, kind: node.kind }) : null;
     g.items.push({
-      edgeId: e.id, relation: e.relation, label: meta.relationLabel(e.relation, out ? "out" : "in"), direction: out ? "out" : "in",
+      edgeId: e.id, relation: e.relation, label: meta.relationLabel(e.relation, out ? "out" : "in"), direction: out ? "out" : "in", toYou,
       other: { id: other.id, label: other.label, type: other.type, kind: other.kind, kindLabel: meta.kind(other.type, other.kind)?.label ?? null },
       status: e.status, confidence: e.confidence, citations: edgeCites.get(e.id) ?? [],
     });
@@ -307,7 +313,8 @@ export async function personProfile(v: Viewer, id: string): Promise<PersonProfil
 
   const { attributes, props } = redactForViewer(v, node.ownerId, meta.attributesFor("person", node.kind), node.props);
   const nodeOptions = (await visibleNodes(v, ["person", "place", "event", "topic"], 2000))
-    .filter((n) => n.id !== id).map((n) => ({ id: n.id, label: n.label, type: n.type, kind: n.kind }));
+    .filter((n) => n.id !== id).map((n) => ({ id: n.id, label: n.label, type: n.type, kind: n.kind, isViewer: n.id === b.viewerNodeId }))
+    .sort((a, c) => Number(c.isViewer) - Number(a.isViewer));
 
   return {
     person: { ...summary, props, summary: node.summary, aliases: node.aliases, canEdit: await canEditNode(v, node), createdAt: node.createdAt.toISOString() },

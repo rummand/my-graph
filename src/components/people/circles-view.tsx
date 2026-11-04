@@ -39,6 +39,7 @@ function describe(p: PersonSummary, overdueDays: number | null | undefined): str
   const parts = [
     p.label,
     p.relation?.label ?? p.kindLabel,
+    p.householdMember ? "member of this graph" : null,
     `last in touch ${ago(p.lastContactAt)}`,
     latest ? `feeling ${WELLBEING_WORDS[latest.score].toLowerCase()}` : "no check-in yet",
   ];
@@ -127,7 +128,9 @@ export function CirclesView({ people, center, overdue }: Props) {
                   <PersonAvatar id={p.id} label={p.label} size={s} score={latest} overdue={isOverdue}
                     className="transition-transform duration-150 ease-out group-hover:scale-[1.06] group-active:scale-[0.97]" />
                   <span className="mt-1.5 max-w-full truncate text-[13px] font-medium leading-tight">{firstName(p.label)}</span>
-                  {isOverdue && <span className="text-xs leading-tight text-warn">{od == null ? "never logged" : daysWords(od)}</span>}
+                  {isOverdue
+                    ? <span className="text-xs leading-tight text-warn">{od == null ? "never logged" : daysWords(od)}</span>
+                    : p.householdMember && <span className="text-xs leading-tight text-muted">member</span>}
                 </Link>
               </motion.div>
             );
@@ -159,6 +162,7 @@ function Tip({ p, overdueDays }: { p: PersonSummary; overdueDays: number | null 
     <>
       <div className="font-medium">{p.label}</div>
       <div className="text-muted">{p.relation?.label ?? p.kindLabel ?? "No relation recorded"}</div>
+      {p.householdMember && <div className="text-[13px] text-muted">Member of this graph</div>}
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[13px]">
         <dt className="text-muted">In touch</dt>
         <dd className={overdueDays !== undefined ? "text-warn" : undefined} suppressHydrationWarning>{ago(p.lastContactAt)}</dd>

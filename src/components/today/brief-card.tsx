@@ -5,6 +5,7 @@ import { Button, CitationChip } from "@/components/ui";
 import type { Citation } from "@/db/schema";
 import type { CachedBrief } from "@/lib/briefs";
 import { splitCitations } from "@/lib/briefs/context";
+import { workedFor } from "@/lib/briefs/assistant-home";
 import { formatTime } from "@/lib/briefs/dates";
 import { hrefs } from "./section";
 
@@ -68,6 +69,7 @@ export function BriefCard({ initial, tz }: { initial: CachedBrief | null; tz: st
           {brief && (
             <span className="truncate text-sm text-muted">
               {brief.local ? `Checked at ${when}` : `Written at ${when}`}{brief.model ? ` by ${brief.model}` : ""}
+              {!brief.local && workedFor(brief.durationMs) ? `, ${workedFor(brief.durationMs)}` : ""}
             </span>
           )}
         </div>

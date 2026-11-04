@@ -7,6 +7,7 @@ import { graphMembers, graphs, users } from "@/db/schema";
 import {
   DEFAULT_HUES, familyGraphRole, pickGraph, type GraphContext, type GraphKind, type GraphRole, type Role,
 } from "./pure";
+import { ensureSelfNode } from "./self";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 export type Exec = typeof db | Tx;
@@ -108,32 +109,50 @@ export async function contextIn(user: { id: string; householdId: string; role: R
 }
 
 /**
- * The same person working in another graph (background jobs that must write where their source lives). Null when
- * they are not a member of it. `personNodeId` is kept only in their own family graph.
+ * The member's own person node in graph `g` (their "self" node), created on first use. In their own family graph it
+ * is `users.personNodeId`. Null only if it can't be made right now (the database refused); never from another graph.
  */
-export async function viewerInGraph<T extends { id: string; householdId: string; role: Role; personNodeId: string | null }>(
+export async function selfNodeIn(
+  user: { id: string; householdId: string; role: Role; personNodeId: string | null; name?: string }, g: GraphContext,
+  opts: { personNodeIdIsHome?: boolean } = {},
+): Promise<string | null> {
+  try {
+    let name = user.name;
+    if (!name) {
+      const [u] = await db.select({ name: users.name }).from(users).where(eq(users.id, user.id));
+      name = u?.name ?? "Me";
+    }
+    // `personNodeId` on a Viewer is the self node of the graph it was working in, so unless the caller says it is
+    // straight from the users row, the home node is read from the users row inside.
+    const home = opts.personNodeIdIsHome ? { personNodeId: user.personNodeId } : {};
+    return await ensureSelfNode(db, { id: user.id, name, householdId: user.householdId, role: user.role, ...home }, { id: g.graphId, kind: g.graphKind, householdId: g.graphHouseholdId });
+  } catch (e) {
+    console.error("[graphs] could not resolve the member's own person node", e);
+    return null;
+  }
+}
+
+/**
+ * The same person working in another graph (background jobs that must write where their source lives). Null when
+ * they are not a member of it. `personNodeId` is their self node in that graph.
+ */
+export async function viewerInGraph<T extends { id: string; householdId: string; role: Role; personNodeId: string | null; name?: string }>(
   v: T, graphId: string,
 ): Promise<(T & GraphContext) | null> {
   if ((v as Partial<GraphContext>).graphId === graphId) return v as T & GraphContext;
   const g = await contextIn(v, graphId);
   if (!g) return null;
-  let personNodeId: string | null = null;
-  if (g.graphKind === "family" && g.graphHouseholdId === v.householdId) {
-    const [u] = await db.select({ p: users.personNodeId }).from(users).where(eq(users.id, v.id));
-    personNodeId = u?.p ?? null;
-  }
-  return { ...v, personNodeId, ...g };
+  return { ...v, personNodeId: await selfNodeIn(v, g), ...g };
 }
 
 /** A user row as a Viewer in their default graph, or in `graphId` (scripts, self-checks and DB tests). */
-export async function viewerFor<T extends { id: string; householdId: string; role: Role; personNodeId: string | null }>(
+export async function viewerFor<T extends { id: string; householdId: string; role: Role; personNodeId: string | null; name?: string }>(
   row: T, graphId?: string,
 ): Promise<T & GraphContext> {
   const g = await resolveGraph(row, graphId ?? null);
   if (!g) throw new Error(`user ${row.id} has no graph`);
   if (graphId && g.graphId !== graphId) throw new Error(`user ${row.id} is not a member of graph ${graphId}`);
-  const inFamily = g.graphKind === "family" && g.graphHouseholdId === row.householdId;
-  return { ...row, personNodeId: inFamily ? row.personNodeId : null, ...g };
+  return { ...row, personNodeId: await selfNodeIn(row, g), ...g };
 }
 
 /** User ids of every member of a graph. */

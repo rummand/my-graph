@@ -14,6 +14,8 @@ export type CachedBrief = {
   model: string | null;
   /** True when it was produced without calling a model (nothing to brief on). */
   local: boolean;
+  /** How long writing it took, in ms (absent for cached briefs from before this field existed). */
+  durationMs?: number;
 };
 
 const g = globalThis as unknown as { __briefCache?: Map<string, CachedBrief> };

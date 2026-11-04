@@ -3,31 +3,86 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { AnimatePresence, motion } from "motion/react";
-import { Check, Pencil, SquarePen, Trash2, X } from "lucide-react";
+import { Check, Pencil, Pin, PinOff, Search, SquarePen, Trash2, X } from "lucide-react";
 import type { ConversationSummary } from "@/lib/assistant/store";
-import { groupByRecency } from "./recency";
+import { groupForInbox } from "./recency";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-/** Conversations, newest first, grouped by when they were last used. Rename and delete happen in the row. */
-export function ConversationList({ list, activeId, onNew, onRename, onDelete, onNavigate, busy }: {
+type RowActions = {
+  onRename: (id: string, title: string) => Promise<boolean>;
+  onDelete: (id: string) => Promise<boolean>;
+  onPin: (id: string, pinned: boolean) => Promise<boolean>;
+};
+
+/** Conversations like an inbox: search, pinned first, then by when they were last used. Unread ones are bold. */
+export function ConversationList({ list, activeId, onNew, onRename, onDelete, onPin, onNavigate, busy }: {
   list: ConversationSummary[];
   activeId: string | null;
   onNew: (e: MouseEvent) => void;
-  onRename: (id: string, title: string) => Promise<boolean>;
-  onDelete: (id: string) => Promise<boolean>;
   onNavigate?: () => void;
   busy: boolean;
-}) {
-  const groups = useMemo(() => groupByRecency(list), [list]);
+} & RowActions) {
+  const groups = useMemo(() => groupForInbox(list), [list]);
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<ConversationSummary[] | null>(null);
+  const [searching, setSearching] = useState(false);
+
+  // Search titles and message text (debounced; own conversations in this graph only, server-side).
+  useEffect(() => {
+    const needle = q.trim();
+    if (!needle) { setResults(null); setSearching(false); return; }
+    setSearching(true);
+    const ac = new AbortController();
+    const t = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/chat?q=${encodeURIComponent(needle)}`, { signal: ac.signal });
+        const body = await res.json().catch(() => ({}));
+        setResults(res.ok && Array.isArray(body.conversations) ? body.conversations : []);
+      } catch { /* aborted or offline */ } finally {
+        if (!ac.signal.aborted) setSearching(false);
+      }
+    }, 220);
+    return () => { ac.abort(); window.clearTimeout(t); };
+  }, [q]);
+
+  // Keep search results in step with renames, pins and deletes made from them.
+  const shown: ConversationSummary[] | null = results
+    ? results.flatMap((r) => { const cur = list.find((c) => c.id === r.id); return cur ? [{ ...cur, snippet: r.snippet }] : []; })
+    : null;
+  const actions = { onRename, onDelete, onPin };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <Link href="/chat" onClick={onNew}
-        className="mb-4 inline-flex h-9 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-fg transition-colors hover:bg-surface-2">
+        className="mb-2 inline-flex h-9 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-fg transition-colors hover:bg-surface-2">
         <SquarePen aria-hidden className="size-4 text-muted" /> New conversation
       </Link>
+      {list.length > 0 && (
+        <div className="relative mb-4">
+          <Search aria-hidden className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted" />
+          <label htmlFor="chat-search" className="sr-only">Search conversations</label>
+          <input id="chat-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} maxLength={200}
+            onKeyDown={(e) => { if (e.key === "Escape") setQ(""); }}
+            placeholder="Search conversations"
+            className="h-8 w-full rounded-md bg-surface-2 pl-8 pr-2 text-sm outline-none placeholder:text-muted/80 focus-visible:bg-surface focus-visible:ring-1 focus-visible:ring-accent" />
+        </div>
+      )}
       <nav aria-label="Conversations" className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-4">
-        {list.length === 0 ? (
+        {shown ? (
+          <section aria-label="Search results">
+            <h2 className="mb-1 px-2.5 text-xs font-medium text-muted">
+              {searching && !shown.length ? "Searching…" : shown.length ? `${shown.length} ${shown.length === 1 ? "conversation" : "conversations"}` : `Nothing matches “${q.trim()}”`}
+            </h2>
+            <ul>
+              {shown.map((c) => (
+                <li key={c.id}>
+                  <Row c={c} active={c.id === activeId} busy={busy && c.id === activeId} {...actions} onNavigate={onNavigate} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : list.length === 0 ? (
           <p className="px-2.5 text-sm leading-relaxed text-muted">Questions you ask are kept here, so you can come back to an answer and its sources.</p>
         ) : (
           groups.map((g) => (
@@ -37,8 +92,7 @@ export function ConversationList({ list, activeId, onNew, onRename, onDelete, on
                 <AnimatePresence initial={false}>
                   {g.items.map((c) => (
                     <motion.li key={c.id} layout="position" exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18, ease: EASE }}>
-                      <Row c={c} active={c.id === activeId} busy={busy && c.id === activeId}
-                        onRename={onRename} onDelete={onDelete} onNavigate={onNavigate} />
+                      <Row c={c} active={c.id === activeId} busy={busy && c.id === activeId} {...actions} onNavigate={onNavigate} />
                     </motion.li>
                   ))}
                 </AnimatePresence>
@@ -51,12 +105,9 @@ export function ConversationList({ list, activeId, onNew, onRename, onDelete, on
   );
 }
 
-function Row({ c, active, busy, onRename, onDelete, onNavigate }: {
-  c: ConversationSummary; active: boolean; busy: boolean;
-  onRename: (id: string, title: string) => Promise<boolean>;
-  onDelete: (id: string) => Promise<boolean>;
-  onNavigate?: () => void;
-}) {
+function Row({ c, active, busy, onRename, onDelete, onPin, onNavigate }: {
+  c: ConversationSummary; active: boolean; busy: boolean; onNavigate?: () => void;
+} & RowActions) {
   const [mode, setMode] = useState<"view" | "rename" | "delete">("view");
   const [draft, setDraft] = useState(c.title);
   const [saving, setSaving] = useState(false);
@@ -114,11 +165,20 @@ function Row({ c, active, busy, onRename, onDelete, onNavigate }: {
     <div className={clsx("group/row relative rounded-md transition-colors",
       active ? "bg-surface text-fg" : "text-fg/80 hover:bg-surface-2 hover:text-fg")}>
       <Link href={`/chat/${c.id}`} aria-current={active ? "page" : undefined} onClick={onNavigate} title={c.title}
-        className={clsx("block truncate py-2 pl-2.5 pr-2.5 text-sm [@media(hover:hover)]:group-hover/row:pr-16 [@media(hover:hover)]:group-focus-within/row:pr-16 max-[1023px]:pr-16", active && "font-medium")}>
-        {c.title}
+        className={clsx("block py-2 pl-2.5 pr-2.5 text-sm [@media(hover:hover)]:group-hover/row:pr-[92px] [@media(hover:hover)]:group-focus-within/row:pr-[92px] max-[1023px]:pr-[92px]",
+          (active || c.unread) && "font-medium", c.unread && "font-semibold text-fg")}>
+        <span className="flex items-center gap-1.5">
+          {c.unread && <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-accent" />}
+          <span className="truncate">{c.title}</span>
+          {c.unread && <span className="sr-only">(unread)</span>}
+        </span>
+        {c.snippet && <span className="mt-0.5 line-clamp-2 text-xs font-normal text-muted">{c.snippet}</span>}
       </Link>
-      <div className={clsx("absolute inset-y-0 right-1 flex items-center transition-opacity",
+      <div className={clsx("absolute right-1 top-1 flex items-center transition-opacity",
         "[@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover/row:opacity-100 [@media(hover:hover)]:group-focus-within/row:opacity-100")}>
+        <RowButton label={c.pinned ? `Unpin ${c.title}` : `Pin ${c.title}`} onClick={() => void onPin(c.id, !c.pinned)}>
+          {c.pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
+        </RowButton>
         <RowButton label={`Rename ${c.title}`} onClick={() => setMode("rename")}><Pencil className="size-3.5" /></RowButton>
         <RowButton label={`Delete ${c.title}`} onClick={() => setMode("delete")} disabled={busy}><Trash2 className="size-3.5" /></RowButton>
       </div>

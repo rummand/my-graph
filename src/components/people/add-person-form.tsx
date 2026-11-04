@@ -9,7 +9,7 @@ import { CIRCLE_LABELS, type Circle, type MetaAttribute, type MetaKind, type Met
 import { VISIBILITY_LABELS, type Visibility } from "@/lib/people/types";
 import { AttributeField } from "./attribute-field";
 import { api, fieldErrors, type FieldErrors } from "./format";
-import { KIND_RELATION, relationOptions } from "./relation-options";
+import { KIND_RELATION, relationOptions, youPresets, type YouPreset } from "./relation-options";
 
 type PersonOpt = { id: string; label: string; isViewer: boolean; kindLabel: string | null };
 
@@ -19,17 +19,25 @@ const VIS_HELP: Record<Visibility, string> = {
   household: "Everyone in the household, children included.",
 };
 
+/** Outside the family graph the same settings mean the graph's members (the owner and editors for "parents"). */
+const VIS_HELP_GRAPH: Record<Visibility, string> = {
+  private: "Only you can see them.",
+  parents: "You, the graph’s owner and its editors.",
+  household: "Everyone in this graph.",
+};
+
 function defaultVisibility(circle: string | null | undefined): Visibility {
   return circle === "family" || circle === "school" || circle === "care" ? "household" : "private";
 }
 
-export function AddPersonForm({ kinds, relations, model, people, defaultOtherId, defaultName, isGuest }: {
+export function AddPersonForm({ kinds, relations, model, people, defaultOtherId, defaultName, isGuest, graphKind }: {
   kinds: MetaKind[]; relations: MetaRelation[]; attributes: MetaAttribute[]; model: MetaModel; people: PersonOpt[];
-  defaultOtherId: string | null; defaultName: string; isGuest: boolean;
+  defaultOtherId: string | null; defaultName: string; isGuest: boolean; graphKind?: string;
 }) {
   const router = useRouter();
   const [label, setLabel] = useState(defaultName);
   const [kind, setKind] = useState("");
+  const [kindTouched, setKindTouched] = useState(false);
   const [otherId, setOtherId] = useState(defaultOtherId ?? "");
   const [rel, setRel] = useState("");
   const [relTouched, setRelTouched] = useState(false);
@@ -49,11 +57,28 @@ export function AddPersonForm({ kinds, relations, model, people, defaultOtherId,
     return [...groups.entries()];
   }, [kinds]);
   const otherName = people.find((p) => p.id === otherId);
+  const you = people.find((p) => p.isViewer) ?? null;
+  const presets = useMemo(() => (you ? youPresets(graphKind, options, kinds.map((k) => k.key)) : []), [you, graphKind, options, kinds]);
+  const activePreset = you && otherId === you.id ? presets.find((p) => p.rel === rel)?.id ?? null : null;
 
-  function pickKind(k: string) {
+  function applyKind(k: string) {
     setKind(k);
     const circle = kinds.find((x) => x.key === k)?.circle;
     if (!visTouched) setVisibility(defaultVisibility(circle));
+  }
+
+  /** One click: they relate to you this way (and get the matching kind, unless you picked one yourself). */
+  function pickPreset(p: YouPreset) {
+    setRelTouched(true);
+    if (activePreset === p.id) { setRel(""); return; }
+    setRel(p.rel);
+    setOtherId(you!.id);
+    if (!kindTouched) applyKind(p.kind ?? "");
+  }
+
+  function pickKind(k: string) {
+    setKindTouched(true);
+    applyKind(k);
     if (!relTouched) {
       const guess = KIND_RELATION[k];
       setRel(guess && options.some((o) => o.value === guess) ? guess : "");
@@ -109,7 +134,24 @@ export function AddPersonForm({ kinds, relations, model, people, defaultOtherId,
         </div>
       </FormBlock>
 
-      <FormBlock title="How are they connected?">
+      <FormBlock title={presets.length ? "How do they know you?" : "How are they connected?"}>
+        {presets.length > 0 && (
+          <>
+            <div role="group" aria-label="How do they know you?" className="flex flex-wrap items-center gap-1.5">
+              {presets.map((p) => {
+                const on = activePreset === p.id;
+                return (
+                  <button key={p.id} type="button" aria-pressed={on} onClick={() => pickPreset(p)}
+                    className={clsx("inline-flex h-9 items-center rounded-full px-3.5 text-sm transition-colors active:scale-[0.97]",
+                      on ? "bg-fg text-bg" : "bg-surface-2 text-muted hover:text-fg")}>
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mb-2 mt-4 text-[13px] text-muted">Or describe it in your own words, to you or someone else:</p>
+          </>
+        )}
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium">{label.trim() || "This person"}</span>
           <span className="text-muted">is</span>
@@ -140,7 +182,7 @@ export function AddPersonForm({ kinds, relations, model, people, defaultOtherId,
               <label key={v} className={clsx("flex cursor-pointer gap-2.5 rounded-md p-3 text-sm transition-colors",
                 visibility === v ? "bg-surface ring-2 ring-inset ring-fg" : "bg-surface-2/60 hover:bg-surface-2")}>
                 <input type="radio" name="vis" value={v} checked={visibility === v} onChange={() => { setVisibility(v); setVisTouched(true); }} className="mt-0.5 accent-[var(--fg)]" />
-                <span><span className="block font-medium">{VISIBILITY_LABELS[v]}</span><span className="block text-[13px] text-muted">{VIS_HELP[v]}</span></span>
+                <span><span className="block font-medium">{VISIBILITY_LABELS[v]}</span><span className="block text-[13px] text-muted">{graphKind && graphKind !== "family" ? VIS_HELP_GRAPH[v] : VIS_HELP[v]}</span></span>
               </label>
             ))}
           </div>

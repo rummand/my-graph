@@ -1,23 +1,26 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { ChatInputError, prepareTurn, runTurn } from "@/lib/assistant/chat";
-import { chatRequestSchema, firstIssue, handle, jsonError, readJson } from "@/lib/assistant/http";
-import { listConversations } from "@/lib/assistant/store";
+import { chatRequestSchema, firstIssue, handle, jsonError, readJson, searchQuerySchema } from "@/lib/assistant/http";
+import { listConversations, searchConversations } from "@/lib/assistant/store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-/** GET /api/chat — the viewer's conversations, newest first. */
-export function GET() {
+/** GET /api/chat?q= — the viewer's conversations in this graph, newest first; with q, those matching title or text. */
+export function GET(req: Request) {
   return handle(async () => {
     const v = await requireUser();
-    return NextResponse.json({ conversations: await listConversations(v) });
+    const q = searchQuerySchema.safeParse(new URL(req.url).searchParams.get("q") ?? undefined);
+    if (!q.success) return jsonError(400, firstIssue(q.error));
+    const conversations = q.data ? await searchConversations(v, q.data) : await listConversations(v);
+    return NextResponse.json({ conversations });
   });
 }
 
 /**
  * POST /api/chat { conversationId?, question } — ask; answers as a Server-Sent Events stream
- * (events: start, delta, done, error — see src/lib/assistant/chat.ts).
+ * (events: start, step, sources, sensitivity, delta, done, error — see src/lib/assistant/chat.ts).
  */
 export function POST(req: Request) {
   return handle(async () => {

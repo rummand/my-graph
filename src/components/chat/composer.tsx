@@ -5,12 +5,13 @@ import { ArrowUp, Lock, Square } from "lucide-react";
 import { Kbd } from "@/components/ui";
 
 /** The question box, pinned under the thread. Grows with what you type, up to about ten lines. */
-export function Composer({ value, onChange, onSend, onStop, streaming, sensitive, empty, inputRef }: {
+export function Composer({ value, onChange, onSend, onStop, streaming, stopping = false, sensitive, empty, inputRef }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
   onStop: () => void;
   streaming: boolean;
+  stopping?: boolean;
   sensitive: boolean;
   empty: boolean;
   inputRef: RefObject<HTMLTextAreaElement | null>;
@@ -41,7 +42,7 @@ export function Composer({ value, onChange, onSend, onStop, streaming, sensitive
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
         maxLength={4000}
-        placeholder={empty ? "Ask about school, health, plans or anything you've saved" : "Ask a follow-up"}
+        placeholder={streaming ? "Type a follow-up. It's sent when this answer is done" : empty ? "Ask about school, health, plans or anything you've saved" : "Ask a follow-up"}
         className="block max-h-[260px] min-h-[52px] w-full resize-none bg-transparent px-4 pb-1 pt-3.5 text-[15.5px] leading-relaxed outline-none placeholder:text-muted/80 focus-visible:outline-none"
       />
       <div className="flex items-center gap-3 px-2 pb-2 pl-4">
@@ -53,10 +54,18 @@ export function Composer({ value, onChange, onSend, onStop, streaming, sensitive
           )}
         </p>
         {streaming ? (
-          <button type="button" onClick={onStop} aria-label="Stop the answer"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md bg-surface-2 px-3 text-sm font-medium text-fg transition-[background-color,transform] hover:bg-line active:scale-[0.97]">
-            <Square aria-hidden className="size-3 fill-current" /> Stop
-          </button>
+          <span className="flex items-center gap-1.5">
+            {value.trim() && (
+              <button type="submit" aria-label="Send after this answer"
+                className="inline-flex h-8 items-center gap-1.5 rounded-md bg-fg px-3 text-sm font-medium text-bg transition-transform active:scale-[0.97]">
+                <ArrowUp aria-hidden className="size-4" strokeWidth={2.2} /> Queue
+              </button>
+            )}
+            <button type="button" onClick={onStop} disabled={stopping} aria-label="Stop the answer"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md bg-surface-2 px-3 text-sm font-medium text-fg transition-[background-color,transform] hover:bg-line active:scale-[0.97] disabled:opacity-60">
+              <Square aria-hidden className="size-3 fill-current" /> {stopping ? "Stopping…" : "Stop"}
+            </button>
+          </span>
         ) : (
           <button type="submit" disabled={!value.trim()} aria-label="Send question"
             className={clsx("inline-flex size-8 items-center justify-center rounded-md transition-[background-color,color,transform] duration-150 active:scale-[0.94]",
