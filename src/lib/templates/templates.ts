@@ -84,7 +84,7 @@ const PRACTICE: GraphTemplate = {
   noun: "practice graph",
   builtins: { kinds: { person: ["colleague", "doctor", "other"], place: ["clinic"], event: [], topic: [] }, relationCategories: ["care", "work", "time", "document"] },
   kinds: [
-    { nodeType: "person", key: "client", label: "Client", pluralLabel: "Clients", circle: "clients", icon: "user", description: "Someone in therapy with the practice." },
+    { nodeType: "person", key: "client", label: "Therapy client", pluralLabel: "Therapy clients", circle: "clients", icon: "user", description: "Someone in therapy with the practice." },
     { nodeType: "person", key: "patient", label: "Patient", pluralLabel: "Patients", circle: "patients", icon: "user", description: "Someone the practice treats medically." },
     { nodeType: "person", key: "clinician", label: "Clinician", pluralLabel: "Clinicians", circle: "practice", icon: "stethoscope", description: "A psychologist, therapist, doctor or nurse in the practice." },
     { nodeType: "event", key: "session", label: "Session", pluralLabel: "Sessions", icon: "calendar", description: "A therapy session." },

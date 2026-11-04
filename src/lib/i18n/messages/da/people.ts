@@ -370,7 +370,7 @@ const messages: MessageTree = {
     "Family home": "Familiens hjem", "Holiday place": "Feriested", Appointment: "Aftale", "School event": "Skolebegivenhed",
     Birthday: "Fødselsdag", Trip: "Rejse", "Activity or practice": "Aktivitet eller træning", Milestone: "Milepæl", Decision: "Beslutning",
     Purchase: "Køb", Health: "Helbred", Activities: "Aktiviteter", Finances: "Økonomi", Household: "Husholdning", Legal: "Jura",
-    Company: "Virksomhed", Association: "Forening", Team: "Team", Client: "Kunde", Supplier: "Leverandør",
+    Company: "Virksomhed", Association: "Forening", Team: "Team", Client: "Kunde", "Therapy client": "Klient", Patient: "Patient", Supplier: "Leverandør",
     "Client contact": "Kundekontakt", "Partner contact": "Partnerkontakt", Meeting: "Møde", Deadline: "Deadline", System: "System",
     Goal: "Mål", Belonging: "Ejendel", Interest: "Interesse", Anniversary: "Årsdag", Date: "Kæresteaften", "Favourite place": "Yndlingssted",
     Wish: "Ønske", Plan: "Plan", Workstream: "Arbejdsspor", Deliverable: "Leverance", Risk: "Risiko",
