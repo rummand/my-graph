@@ -35,19 +35,18 @@ export default async function WikiPageRoute({ params, searchParams }: Props) {
   }
 
   return (
-    <div>
-      <WikiPageClient
-        key={`${page.id}:${page.version}`}
-        startEditing={sp.edit === "1"}
-        initial={{
-          id: page.id, slug: page.slug, title: page.title, content: page.content, visibility: page.visibility, version: page.version,
-          ownerName: page.ownerName, isOwner: page.ownerId === v.id, updatedAt: page.updatedAt.toISOString(),
-          updatedByName: page.updatedByName, can: page.can,
-        }}>
-        {backlinks
-          ? <BacklinksPanel backlinks={backlinks} nodeId={page.nodeId} />
-          : <p className="text-sm text-muted">Links to and from this page couldn&apos;t be loaded right now.</p>}
-      </WikiPageClient>
-    </div>
+    <WikiPageClient
+      key={`${page.id}:${page.version}`}
+      startEditing={sp.edit === "1"}
+      mentions={backlinks?.mentions}
+      initial={{
+        id: page.id, slug: page.slug, title: page.title, content: page.content, visibility: page.visibility, version: page.version,
+        ownerName: page.ownerName, isOwner: page.ownerId === v.id, updatedAt: page.updatedAt.toISOString(),
+        updatedByName: page.updatedByName, nodeId: page.nodeId, can: page.can,
+      }}>
+      {backlinks
+        ? <BacklinksPanel backlinks={backlinks} />
+        : <p className="text-muted">Links to and from this page couldn&apos;t be loaded right now.</p>}
+    </WikiPageClient>
   );
 }

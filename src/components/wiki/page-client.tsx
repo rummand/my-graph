@@ -8,17 +8,18 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Editor } from "@tiptap/react";
-import { format, isThisYear } from "date-fns";
-import { AlertTriangle, Check, History, LoaderCircle, Pencil, Trash2 } from "lucide-react";
-import { Button, Select } from "@/components/ui";
+import { clsx } from "clsx";
+import { AlertTriangle, ArrowLeft, Check, CloudOff, History, LoaderCircle, Lock, Pencil, Trash2, Users, Waypoints } from "lucide-react";
+import { Button, buttonClass, Select } from "@/components/ui";
 import type { Doc } from "@/lib/wiki/doc";
 import { VISIBILITIES, VISIBILITY_HINT, VISIBILITY_LABEL, type Visibility } from "@/lib/wiki/labels";
-import { DocView, isEmptyDoc } from "./doc-view";
+import { DocView, isEmptyDoc, type MentionInfo } from "./doc-view";
+import { fullWhen, sentenceWhen } from "./when";
 import { WikiEditor } from "./wiki-editor";
 
 export type ClientPage = {
   id: string; slug: string; title: string; content: Doc; visibility: Visibility; version: number;
-  ownerName: string; isOwner: boolean; updatedAt: string; updatedByName: string | null;
+  ownerName: string; isOwner: boolean; updatedAt: string; updatedByName: string | null; nodeId?: string | null;
   can: { edit: boolean; delete: boolean; changeVisibility: boolean };
 };
 
@@ -31,18 +32,24 @@ type SaveState =
 const AUTOSAVE_MS = 1500;
 
 /** Who can see a page, as a sentence for the line under the title. */
-const VISIBILITY_SENTENCE: Partial<Record<Visibility, string>> = {
-  private: "Only you can see it",
-  parents: "Parents can see it",
-  household: "The whole family can see it",
+const VISIBILITY_SENTENCE: Record<Visibility, string> = {
+  private: "Only you can see this page.",
+  parents: "You and the other parents can see this page.",
+  household: "Everyone in the family can see this page.",
 };
 
 function When({ iso }: { iso: string }) {
   const d = new Date(iso);
-  return <time dateTime={iso} title={d.toLocaleString()} suppressHydrationWarning>{format(d, isThisYear(d) ? "EEE d MMM 'at' HH:mm" : "d MMM yyyy")}</time>;
+  return <time dateTime={iso} title={fullWhen(d)} suppressHydrationWarning>{sentenceWhen(d)}</time>;
 }
 
-export function WikiPageClient({ initial, startEditing, children }: { initial: ClientPage; startEditing: boolean; children?: React.ReactNode }) {
+export function WikiPageClient({ initial, startEditing, mentions, children }: {
+  initial: ClientPage; startEditing: boolean;
+  /** Type and access for each mentioned node, so mentions render as the right chip. */
+  mentions?: { id: string; type: string; readable: boolean }[];
+  /** The quiet side column: links and mentions. */
+  children?: React.ReactNode;
+}) {
   const router = useRouter();
   const [page, setPage] = useState(initial);
   const [editing, setEditing] = useState(startEditing && initial.can.edit);
@@ -51,6 +58,7 @@ export function WikiPageClient({ initial, startEditing, children }: { initial: C
   const [visBusy, setVisBusy] = useState(false);
   const [visError, setVisError] = useState<string | null>(null);
   const titleId = useId();
+  const mentionInfo: MentionInfo = new Map((mentions ?? []).map((m) => [m.id, { type: m.type, readable: m.readable }]));
 
   // Mutable save machinery (refs so the debounced callbacks always see the latest values).
   const doc = useRef<Doc>(initial.content);
@@ -189,98 +197,115 @@ export function WikiPageClient({ initial, startEditing, children }: { initial: C
     }
   };
 
-  const lastEdited = (
-    <>Edited <When iso={page.updatedAt} />{page.updatedByName ? <> by {page.updatedByName}</> : null}</>
-  );
-  const seenBy = VISIBILITY_SENTENCE[page.visibility] ?? `Visible to ${VISIBILITY_LABEL[page.visibility]}`;
-  const meta = (
-    <>{lastEdited}. {seenBy}.{!page.isOwner && <> Started by {page.ownerName}.</>}</>
+  const beginEditing = () => { setTitle(page.title); titleRef.current = page.title; doc.current = page.content; setEditing(true); };
+  const historyHref = `/wiki/${encodeURIComponent(page.slug)}/history`;
+  const VisIcon = page.visibility === "private" ? Lock : Users;
+
+  const byline = (
+    <p className="mt-3 text-sm text-muted">
+      {page.updatedByName ?? "Someone"} edited this <When iso={page.updatedAt} />.
+      {!page.isOwner && <> {page.ownerName} started it.</>}
+    </p>
   );
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_16rem]">
-      <article className="min-w-0">
-        <nav aria-label="Breadcrumb" className="mb-4 text-sm text-muted">
-          <Link href="/wiki" className="hover:text-fg hover:underline">Wiki</Link>
-          <span aria-hidden> / </span>
-          <span className="text-fg">{title || "Untitled"}</span>
-        </nav>
+    <div className="grid gap-x-12 gap-y-10 xl:grid-cols-[minmax(0,1fr)_16rem]">
+      <div className="min-w-0">
+        {/* Above the sheet: the way back, and what you can do with the page. */}
+        <div className="mb-3 flex min-h-9 items-center justify-between gap-3">
+          <Link href="/wiki" className="-ml-2 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-fg">
+            <ArrowLeft aria-hidden className="size-4" />Wiki
+          </Link>
+          {!editing && (
+            <div className="flex items-center gap-1.5">
+              <Link href={historyHref} className={buttonClass("ghost", "sm")}><History aria-hidden className="size-4" />History</Link>
+              {page.can.edit && <Button size="sm" onClick={beginEditing}><Pencil aria-hidden className="size-3.5" />Edit</Button>}
+            </div>
+          )}
+        </div>
 
-        <header className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 flex-1">
-            {editing ? (
-              <>
-                <label htmlFor={titleId} className="sr-only">Page title</label>
-                <input id={titleId} value={title} maxLength={200} placeholder="Page title"
-                  onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) { titleRef.current = e.target.value; changed(); } }}
-                  className="w-full max-w-[70ch] rounded-md border border-transparent bg-transparent px-0 py-0.5 text-[28px]/[1.15] font-semibold tracking-[-0.02em] outline-none placeholder:text-muted focus:border-line focus:px-2" />
-              </>
-            ) : (
-              <h1 className="break-words text-[28px]/[1.15] font-semibold tracking-[-0.02em]">{page.title}</h1>
-            )}
-            <p className="mt-2 text-sm text-muted">{meta}</p>
-          </div>
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
-            {editing && <SaveIndicator state={state} onRetry={() => void save()} />}
-            <Link href={`/wiki/${encodeURIComponent(page.slug)}/history`}
-              className="inline-flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-muted hover:bg-surface-2 hover:text-fg">
-              <History aria-hidden className="size-4" />History
-            </Link>
-            {page.can.edit && (editing
-              ? <Button onClick={() => void done()} disabled={state.kind === "conflict"}><Check aria-hidden className="size-4" />Done</Button>
-              : <Button onClick={() => { setTitle(page.title); titleRef.current = page.title; doc.current = page.content; setEditing(true); }}><Pencil aria-hidden className="size-4" />Edit</Button>)}
-          </div>
-        </header>
-
-        {editing && !title.trim() && <p className="mb-2 text-sm text-warn" role="alert">A page needs a title. We&apos;ll keep the old one until you add a new one.</p>}
-
-        {editing ? (
-          <WikiEditor pageId={page.id} pageVisibility={page.visibility} initialContent={doc.current} onChange={onDocChange} onReady={onReady} labelledBy={titleId} />
-        ) : isEmptyDoc(page.content) ? (
-          <div className="mt-6 max-w-[70ch] rounded-lg border border-dashed border-line p-6 text-sm text-muted">
-            <p className="font-medium text-fg">This page is empty.</p>
-            {page.can.edit
-              ? <p className="mt-1">Click <span className="font-medium">Edit</span> to start writing. Type @ to mention a person, place or event, and [[ to link another page.</p>
-              : <p className="mt-1">Nothing has been written here yet.</p>}
-          </div>
-        ) : (
-          <DocView doc={page.content} className="mt-4" />
-        )}
+        <article className={clsx("rounded-lg bg-surface", !editing && "px-5 pb-14 pt-8 sm:px-12 sm:pt-12 lg:px-16")} aria-labelledby={editing ? undefined : `${titleId}-h`}>
+          {editing ? (
+            <WikiEditor pageId={page.id} pageVisibility={page.visibility} initialContent={doc.current} onChange={onDocChange} onReady={onReady} labelledBy={titleId}
+              toolbarEnd={<>
+                <SaveIndicator state={state} onRetry={() => void save()} />
+                <Button size="sm" onClick={() => void done()} disabled={state.kind === "conflict"}>Done</Button>
+              </>}>
+              <label htmlFor={titleId} className="sr-only">Page title</label>
+              <input id={titleId} value={title} maxLength={200} placeholder="Untitled page"
+                onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) { titleRef.current = e.target.value; changed(); } }}
+                onKeyDown={(e) => { if (e.key === "Enter" || (e.key === "ArrowDown" && e.currentTarget.selectionStart === e.currentTarget.value.length)) { e.preventDefault(); editorRef.current?.commands.focus("start"); } }}
+                className="block w-full max-w-[68ch] bg-transparent p-0 text-[28px]/[1.2] font-semibold tracking-[-0.02em] text-fg caret-accent outline-none placeholder:text-muted/60" style={{ outline: "none" }} />
+              {!title.trim()
+                ? <p className="mt-3 text-sm text-warn" role="alert">A page needs a title. The old one stays until you type a new one.</p>
+                : byline}
+            </WikiEditor>
+          ) : (
+            <>
+              <h1 id={`${titleId}-h`} className="max-w-[68ch] break-words text-[28px]/[1.2] font-semibold tracking-[-0.02em]">{page.title}</h1>
+              {byline}
+              {isEmptyDoc(page.content) ? (
+                <div className="mt-8 max-w-[68ch] font-read text-[17px] leading-[1.75] text-muted">
+                  <p>Nothing is written here yet.</p>
+                  {page.can.edit && (
+                    <>
+                      <p className="mt-1">Type @ to mention a person, place or event, and [[ to link another page.</p>
+                      <Button className="mt-5 font-sans" variant="secondary" onClick={beginEditing}><Pencil aria-hidden className="size-3.5" />Start writing</Button>
+                    </>
+                  )}
+                </div>
+              ) : (
+                <DocView doc={page.content} mentions={mentionInfo} className="mt-8" />
+              )}
+            </>
+          )}
+        </article>
 
         <dialog ref={conflictRef} aria-labelledby={`${titleId}-conflict`} onCancel={(e) => e.preventDefault()}
-          className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-lg border border-line bg-surface p-5 text-fg shadow-xl backdrop:bg-black/40">
-          <h2 id={`${titleId}-conflict`} className="flex items-center gap-2 text-lg font-semibold"><AlertTriangle aria-hidden className="size-5 text-warn" />This page changed while you were editing</h2>
+          className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-lg bg-surface p-6 text-fg shadow-float backdrop:bg-fg/30">
+          <h2 id={`${titleId}-conflict`} className="flex items-center gap-2 text-lg font-semibold"><AlertTriangle aria-hidden className="size-5 text-warn" />Someone else just saved this page</h2>
           <p className="mt-2 text-sm text-muted">{state.kind === "conflict" ? state.message : null} Choose which version to keep.</p>
-          <ul className="mt-3 space-y-2 text-sm">
-            <li><span className="font-medium">Load their version</span> — your unsaved changes since your last save are dropped.</li>
-            <li><span className="font-medium">Keep mine</span> — your version replaces theirs. Theirs stays in the page history, so nothing is lost for good.</li>
-          </ul>
-          <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <dl className="mt-4 space-y-3 text-sm">
+            <div><dt className="font-medium">Load their version</dt><dd className="text-muted">Changes you made since your last save are dropped.</dd></div>
+            <div><dt className="font-medium">Keep mine</dt><dd className="text-muted">Your version replaces theirs. Theirs stays in the history, so nothing is lost for good.</dd></div>
+          </dl>
+          <div className="mt-6 flex flex-wrap justify-end gap-2">
             <Button variant="secondary" onClick={loadTheirs}>Load their version</Button>
             <Button onClick={overwrite}>Keep mine</Button>
           </div>
         </dialog>
-      </article>
+      </div>
 
-      <aside className="space-y-8 lg:pt-10" aria-label="About this page">
+      {/* The quiet column: who can see it, what links here, who is mentioned. */}
+      <aside className="space-y-8 text-sm xl:pt-12" aria-label="About this page">
+        <section aria-labelledby={`${titleId}-vis-h`}>
+          <h2 id={`${titleId}-vis-h`} className="mb-2 font-semibold">Who can see this</h2>
+          {page.can.changeVisibility ? (
+            <>
+              <label htmlFor={`${titleId}-vis`} className="sr-only">Who can see this</label>
+              <Select id={`${titleId}-vis`} value={page.visibility} disabled={visBusy} aria-describedby={`${titleId}-vis-hint`} className="h-8 text-sm"
+                onChange={(e) => void changeVisibility(e.target.value as Visibility)}>
+                {VISIBILITIES.map((v) => <option key={v} value={v}>{VISIBILITY_LABEL[v]}</option>)}
+              </Select>
+              <p id={`${titleId}-vis-hint`} className="mt-2 text-muted">{VISIBILITY_HINT[page.visibility]}</p>
+              {visError && <p role="alert" className="mt-2 text-danger">{visError}</p>}
+            </>
+          ) : (
+            <p className="flex items-start gap-2 text-muted"><VisIcon aria-hidden className="mt-0.5 size-4 shrink-0" />{VISIBILITY_SENTENCE[page.visibility]}</p>
+          )}
+        </section>
         {children}
-        {(page.can.changeVisibility || page.can.delete) && (
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold">Page settings</h2>
-            {page.can.changeVisibility && (
-              <div>
-                <label htmlFor={`${titleId}-vis`} className="mb-1 block text-sm">Who can see this</label>
-                <Select id={`${titleId}-vis`} value={page.visibility} disabled={visBusy} aria-describedby={`${titleId}-vis-hint`}
-                  onChange={(e) => void changeVisibility(e.target.value as Visibility)}>
-                  {VISIBILITIES.map((v) => <option key={v} value={v}>{VISIBILITY_LABEL[v]}</option>)}
-                </Select>
-                <p id={`${titleId}-vis-hint`} className="mt-1 text-xs text-muted">{VISIBILITY_HINT[page.visibility]}</p>
-                {visError && <p role="alert" className="mt-1 text-xs text-danger">{visError}</p>}
-              </div>
-            )}
-            {page.can.delete && <DeleteButton slug={page.slug} title={page.title} />}
-          </section>
-        )}
+        <section className="space-y-1" aria-label="More">
+          <Link href={historyHref} className="-ml-2 flex h-8 items-center gap-2 rounded-md px-2 text-muted transition-colors hover:bg-surface-2 hover:text-fg">
+            <History aria-hidden className="size-4" />Every saved version
+          </Link>
+          {page.nodeId && (
+            <Link href={`/node/${page.nodeId}`} className="-ml-2 flex h-8 items-center gap-2 rounded-md px-2 text-muted transition-colors hover:bg-surface-2 hover:text-fg">
+              <Waypoints aria-hidden className="size-4" />Show in the graph
+            </Link>
+          )}
+          {page.can.delete && <DeleteButton slug={page.slug} title={page.title} />}
+        </section>
       </aside>
     </div>
   );
@@ -288,16 +313,15 @@ export function WikiPageClient({ initial, startEditing, children }: { initial: C
 
 function SaveIndicator({ state, onRetry }: { state: SaveState; onRetry: () => void }) {
   return (
-    <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5 text-sm">
-      {state.kind === "saved" && <><Check aria-hidden className="size-4 text-accent" /><span className="text-muted">Saved</span></>}
-      {state.kind === "saving" && <><LoaderCircle aria-hidden className="size-4 animate-spin text-muted" /><span className="text-muted">Saving…</span></>}
-      {state.kind === "conflict" && <><AlertTriangle aria-hidden className="size-4 text-warn" /><span className="text-warn">Not saved — someone else edited</span></>}
+    <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm">
+      {state.kind === "saved" && <><Check aria-hidden className="size-4 text-muted" /><span className="text-muted">Saved</span></>}
+      {state.kind === "saving" && <><LoaderCircle aria-hidden className="size-4 animate-spin text-muted" /><span className="text-muted">Saving</span></>}
+      {state.kind === "conflict" && <><AlertTriangle aria-hidden className="size-4 text-warn" /><span className="text-warn">Not saved<span className="hidden sm:inline">: someone else edited</span></span></>}
       {state.kind === "error" && (
         <>
-          <AlertTriangle aria-hidden className="size-4 text-danger" />
-          <span className="text-danger" title={state.message}>Couldn&apos;t save</span>
-          <span aria-hidden className="text-muted">—</span>
-          <button type="button" onClick={onRetry} className="font-medium text-accent underline underline-offset-2">Retry</button>
+          <CloudOff aria-hidden className="size-4 text-danger" />
+          <span className="hidden text-danger sm:inline" title={state.message}>Not saved</span>
+          <button type="button" onClick={onRetry} className="rounded font-medium text-danger underline underline-offset-2">Retry</button>
           <span className="sr-only">{state.message}</span>
         </>
       )}
@@ -327,15 +351,15 @@ function DeleteButton({ slug, title }: { slug: string; title: string }) {
   };
   return (
     <>
-      <Button variant="ghost" className="px-0 text-danger hover:bg-transparent hover:text-danger hover:underline" onClick={() => ref.current?.showModal()}>
+      <button type="button" className="-ml-2 flex h-8 items-center gap-2 rounded-md px-2 text-muted transition-colors hover:bg-danger-tint hover:text-danger" onClick={() => ref.current?.showModal()}>
         <Trash2 aria-hidden className="size-4" />Delete page
-      </Button>
+      </button>
       <dialog ref={ref} aria-labelledby={id}
-        className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-lg border border-line bg-surface p-5 text-fg shadow-xl backdrop:bg-black/40">
+        className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-lg bg-surface p-6 text-fg shadow-float backdrop:bg-fg/30">
         <h2 id={id} className="text-lg font-semibold">Delete “{title}”?</h2>
         <p className="mt-2 text-sm text-muted">The page and its whole history are removed for everyone. Links to it from other pages will stop working. This can&apos;t be undone.</p>
         {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-6 flex justify-end gap-2">
           <Button variant="secondary" onClick={() => ref.current?.close()} disabled={busy}>Cancel</Button>
           <Button variant="danger" onClick={() => void remove()} disabled={busy}>{busy ? "Deleting…" : "Delete page"}</Button>
         </div>

@@ -5,7 +5,7 @@
  *   [[  link to another wiki page (GET /api/wiki?q=), or create one
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { EditorContent, useEditor, type Editor } from "@tiptap/react";
+import { EditorContent, mergeAttributes, useEditor, type Editor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import Mention, { type MentionNodeAttrs } from "@tiptap/extension-mention";
@@ -14,11 +14,12 @@ import { PluginKey } from "@tiptap/pm/state";
 import type { SuggestionKeyDownProps, SuggestionProps } from "@tiptap/suggestion";
 import { clsx } from "clsx";
 import {
-  Bold, Code, FileText, Heading2, Heading3, Italic, Link2, List, ListChecks, ListOrdered, Plus, Quote, Redo2, SquareCode, Strikethrough, Undo2,
+  AtSign, Bold, Code, FileText, Heading2, Heading3, Italic, Link2, List, ListChecks, ListOrdered, Plus, Quote, Redo2, SquareCode, Strikethrough, Undo2,
 } from "lucide-react";
+import { Avatar, Button } from "@/components/ui";
 import type { Doc } from "@/lib/wiki/doc";
 import type { Visibility } from "@/lib/wiki/labels";
-import { MENTION_CLASS, PAGE_LINK_CLASS, PROSE } from "./prose";
+import { mentionChip, PAGE_LINK_CLASS, PROSE } from "./prose";
 
 /* ── Suggestion data ───────────────────────────────────────────────────────────────────────────────────── */
 
@@ -61,60 +62,100 @@ async function fetchPages(q: string, excludeId: string): Promise<PageItem[]> {
 type Popup = { trigger: "@" | "[["; items: Item[]; query: string; rect: DOMRect | null; select: (item: Item) => void };
 
 function SuggestionList({ popup, index, onHover, listId }: { popup: Popup; index: number; onHover: (i: number) => void; listId: string }) {
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
   useEffect(() => {
     if (!popup.rect) return;
     const width = Math.min(320, window.innerWidth - 16);
-    const left = Math.max(8, Math.min(popup.rect.left, window.innerWidth - width - 8));
-    const below = popup.rect.bottom + 6;
-    const top = below + 260 > window.innerHeight ? Math.max(8, popup.rect.top - 266) : below;
-    setPos({ top, left });
+    const left = Math.max(8, Math.min(popup.rect.left - 8, window.innerWidth - width - 8));
+    // Open below the caret; if there isn't room, open above it, anchored to the line so a short list stays close.
+    const roomBelow = window.innerHeight - popup.rect.bottom;
+    setPos(roomBelow < 300 && popup.rect.top > roomBelow
+      ? { bottom: window.innerHeight - popup.rect.top + 8, left }
+      : { top: popup.rect.bottom + 8, left });
   }, [popup.rect]);
 
-  const empty = popup.trigger === "@"
-    ? popup.query.trim() ? `Nothing in the graph matches “${popup.query}”.` : "Type a name to mention someone or something."
-    : "No pages yet.";
+  const mention = popup.trigger === "@";
+  const empty = mention
+    ? popup.query.trim() ? `Nobody and nothing called “${popup.query}” yet.` : "Start typing a name."
+    : "No other pages yet. Keep typing to make one.";
 
   return (
-    <div role="listbox" id={listId} aria-label={popup.trigger === "@" ? "Mention from the graph" : "Link to a page"}
-      className="fixed z-50 max-h-64 w-[min(320px,calc(100vw-16px))] overflow-y-auto rounded-lg border border-line bg-surface p-1 shadow-lg"
-      style={pos ? { top: pos.top, left: pos.left } : { visibility: "hidden" }}>
-      {popup.items.length === 0 && <p className="px-3 py-2 text-sm text-muted">{empty}</p>}
-      {popup.items.map((item, i) => (
-        <button key={item.kind === "create" ? "create" : item.id} type="button" role="option" aria-selected={i === index} id={`${listId}-${i}`}
-          onMouseDown={(e) => { e.preventDefault(); popup.select(item); }} onMouseEnter={() => onHover(i)}
-          className={clsx("flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm", i === index ? "bg-accent-tint text-accent" : "hover:bg-surface-2")}>
-          {item.kind === "node" && (
-            <>
-              <span className="size-2 shrink-0 rounded-full" style={{ background: `var(--t-${item.type}, var(--muted))` }} aria-hidden />
-              <span className="min-w-0 flex-1 truncate">{item.label}</span>
-              <span className="shrink-0 text-xs text-muted">{TYPE_LABEL[item.type] ?? item.type}</span>
-            </>
-          )}
-          {item.kind === "page" && (<><FileText aria-hidden className="size-4 shrink-0 text-muted" /><span className="min-w-0 flex-1 truncate">{item.label}</span></>)}
-          {item.kind === "create" && (<><Plus aria-hidden className="size-4 shrink-0" /><span className="min-w-0 flex-1 truncate">Create page “{item.label}”</span></>)}
-        </button>
-      ))}
+    <div className="fixed z-50 w-[min(320px,calc(100vw-16px))] rounded-lg bg-surface p-1.5 font-sans shadow-float"
+      style={pos ?? { visibility: "hidden" }}>
+      <p className="px-2.5 pb-1 pt-1 text-xs text-muted">{mention ? "Mention a person, place or event" : "Link to a page"}</p>
+      <div role="listbox" id={listId} aria-label={mention ? "Mention from the graph" : "Link to a page"} className="max-h-64 overflow-y-auto">
+        {popup.items.length === 0 && <p className="px-2.5 py-2 text-sm text-muted">{empty}</p>}
+        {popup.items.map((item, i) => {
+          const on = i === index;
+          return (
+            <button key={item.kind === "create" ? "create" : item.id} type="button" role="option" aria-selected={on} id={`${listId}-${i}`}
+              onMouseDown={(e) => { e.preventDefault(); popup.select(item); }} onMouseEnter={() => onHover(i)}
+              className={clsx("flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm", on ? "bg-surface-2 text-fg" : "text-fg")}>
+              {item.kind === "node" && (
+                <>
+                  {item.type === "person"
+                    ? <Avatar id={item.id} name={item.label} size={22} />
+                    : <span className="flex size-[22px] shrink-0 items-center justify-center" aria-hidden><span className="size-2 rounded-full" style={{ background: `var(--t-${item.type}, var(--muted))` }} /></span>}
+                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                  <span className="shrink-0 text-xs text-muted">{TYPE_LABEL[item.type] ?? item.type}</span>
+                </>
+              )}
+              {item.kind === "page" && (<><FileText aria-hidden className="size-4 shrink-0 text-muted" /><span className="min-w-0 flex-1 truncate">{item.label}</span></>)}
+              {item.kind === "create" && (<><Plus aria-hidden className="size-4 shrink-0 text-accent" /><span className="min-w-0 flex-1 truncate">New page called <span className="font-medium">{item.label}</span></span></>)}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
 /* ── Toolbar ───────────────────────────────────────────────────────────────────────────────────────────── */
 
-function ToolButton({ label, active, disabled, onClick, children }: { label: string; active?: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
+function ToolButton({ label, keys, active, disabled, onClick, children }: { label: string; keys?: string; active?: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
+  const tip = keys ? `${label} (${keys})` : label;
   return (
-    <button type="button" aria-label={label} title={label} aria-pressed={active} disabled={disabled}
+    <button type="button" aria-label={label} title={tip} aria-pressed={active} disabled={disabled}
       onMouseDown={(e) => e.preventDefault()} onClick={onClick}
-      className={clsx("inline-flex size-9 items-center justify-center rounded-md disabled:opacity-40",
-        active ? "bg-accent-tint text-accent" : "text-muted hover:bg-surface-2 hover:text-fg")}>
+      className={clsx("inline-flex size-8 shrink-0 items-center justify-center rounded-md transition-colors duration-150 disabled:opacity-35",
+        active ? "bg-fg text-bg" : "text-muted hover:bg-surface-2 hover:text-fg")}>
       {children}
     </button>
   );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+const Gap = () => <span aria-hidden className="w-2 shrink-0" />;
+
+/** A small popover under the toolbar for adding, changing or removing a link (instead of the browser's prompt). */
+function LinkEditor({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+  const prev = editor.getAttributes("link").href as string | undefined;
+  const [url, setUrl] = useState(prev ?? "");
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { inputRef.current?.focus(); inputRef.current?.select(); }, []);
+  const apply = (e: React.FormEvent) => {
+    e.preventDefault();
+    const v = url.trim();
+    const c = editor.chain().focus().extendMarkRange("link");
+    if (!v) c.unsetLink().run();
+    else c.setLink({ href: /^(https?:|mailto:|tel:|\/)/i.test(v) ? v : `https://${v}` }).run();
+    onClose();
+  };
+  return (
+    <form onSubmit={apply} onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); editor.commands.focus(); onClose(); } }}
+      className="absolute left-2 top-[calc(100%+6px)] z-20 flex w-[min(26rem,calc(100vw-3rem))] items-center gap-1.5 rounded-lg bg-surface p-1.5 shadow-float">
+      <label htmlFor="wiki-link-url" className="sr-only">Link address</label>
+      <input id="wiki-link-url" ref={inputRef} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste or type a link"
+        className="h-8 min-w-0 flex-1 rounded-md bg-surface-2 px-2.5 text-sm outline-none placeholder:text-muted focus:ring-2 focus:ring-accent" />
+      <Button type="submit" size="sm">{prev ? "Update" : "Add link"}</Button>
+      {prev && <Button type="button" size="sm" variant="ghost" onClick={() => { editor.chain().focus().extendMarkRange("link").unsetLink().run(); onClose(); }}>Remove</Button>}
+    </form>
+  );
+}
+
+function Toolbar({ editor, end }: { editor: Editor; end?: ReactNode }) {
   // Re-render on selection/content changes so active states stay correct.
   const [, force] = useState(0);
+  const [linking, setLinking] = useState(false);
   useEffect(() => {
     const f = () => force((n) => n + 1);
     editor.on("transaction", f);
@@ -122,34 +163,35 @@ function Toolbar({ editor }: { editor: Editor }) {
   }, [editor]);
 
   const c = () => editor.chain().focus();
-  const setLink = () => {
-    const prev = editor.getAttributes("link").href as string | undefined;
-    const url = window.prompt("Link address (leave empty to remove the link)", prev ?? "https://");
-    if (url === null) return;
-    if (!url.trim() || url.trim() === "https://") { c().extendMarkRange("link").unsetLink().run(); return; }
-    const href = /^(https?:|mailto:|tel:|\/)/i.test(url.trim()) ? url.trim() : `https://${url.trim()}`;
-    c().extendMarkRange("link").setLink({ href }).run();
-  };
   const icon = "size-4";
   return (
-    <div role="toolbar" aria-label="Formatting" className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-0.5 border-b border-line bg-surface/95 px-1 py-1 backdrop-blur">
-      <ToolButton label="Heading" active={editor.isActive("heading", { level: 2 })} onClick={() => c().toggleHeading({ level: 2 }).run()}><Heading2 className={icon} /></ToolButton>
-      <ToolButton label="Subheading" active={editor.isActive("heading", { level: 3 })} onClick={() => c().toggleHeading({ level: 3 }).run()}><Heading3 className={icon} /></ToolButton>
-      <span className="mx-1 h-5 w-px bg-line" aria-hidden />
-      <ToolButton label="Bold" active={editor.isActive("bold")} onClick={() => c().toggleBold().run()}><Bold className={icon} /></ToolButton>
-      <ToolButton label="Italic" active={editor.isActive("italic")} onClick={() => c().toggleItalic().run()}><Italic className={icon} /></ToolButton>
-      <ToolButton label="Strikethrough" active={editor.isActive("strike")} onClick={() => c().toggleStrike().run()}><Strikethrough className={icon} /></ToolButton>
-      <ToolButton label="Inline code" active={editor.isActive("code")} onClick={() => c().toggleCode().run()}><Code className={icon} /></ToolButton>
-      <ToolButton label="Link" active={editor.isActive("link")} onClick={setLink}><Link2 className={icon} /></ToolButton>
-      <span className="mx-1 h-5 w-px bg-line" aria-hidden />
-      <ToolButton label="Bulleted list" active={editor.isActive("bulletList")} onClick={() => c().toggleBulletList().run()}><List className={icon} /></ToolButton>
-      <ToolButton label="Numbered list" active={editor.isActive("orderedList")} onClick={() => c().toggleOrderedList().run()}><ListOrdered className={icon} /></ToolButton>
-      <ToolButton label="Checklist" active={editor.isActive("taskList")} onClick={() => c().toggleTaskList().run()}><ListChecks className={icon} /></ToolButton>
-      <ToolButton label="Quote" active={editor.isActive("blockquote")} onClick={() => c().toggleBlockquote().run()}><Quote className={icon} /></ToolButton>
-      <ToolButton label="Code block" active={editor.isActive("codeBlock")} onClick={() => c().toggleCodeBlock().run()}><SquareCode className={icon} /></ToolButton>
-      <span className="mx-1 h-5 w-px bg-line" aria-hidden />
-      <ToolButton label="Undo" disabled={!editor.can().undo()} onClick={() => c().undo().run()}><Undo2 className={icon} /></ToolButton>
-      <ToolButton label="Redo" disabled={!editor.can().redo()} onClick={() => c().redo().run()}><Redo2 className={icon} /></ToolButton>
+    <div className="sticky top-[56px] z-20 rounded-t-lg bg-surface lg:top-0">
+      <div className="flex items-center gap-3 border-b border-line px-3 py-2 sm:px-6">
+        <div role="toolbar" aria-label="Formatting" className="-my-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto py-1 [scrollbar-width:none]">
+          <ToolButton label="Heading" keys="Ctrl+Alt+2" active={editor.isActive("heading", { level: 2 })} onClick={() => c().toggleHeading({ level: 2 }).run()}><Heading2 className={icon} /></ToolButton>
+          <ToolButton label="Subheading" keys="Ctrl+Alt+3" active={editor.isActive("heading", { level: 3 })} onClick={() => c().toggleHeading({ level: 3 }).run()}><Heading3 className={icon} /></ToolButton>
+          <Gap />
+          <ToolButton label="Bold" keys="Ctrl+B" active={editor.isActive("bold")} onClick={() => c().toggleBold().run()}><Bold className={icon} /></ToolButton>
+          <ToolButton label="Italic" keys="Ctrl+I" active={editor.isActive("italic")} onClick={() => c().toggleItalic().run()}><Italic className={icon} /></ToolButton>
+          <ToolButton label="Strikethrough" keys="Ctrl+Shift+S" active={editor.isActive("strike")} onClick={() => c().toggleStrike().run()}><Strikethrough className={icon} /></ToolButton>
+          <ToolButton label="Inline code" keys="Ctrl+E" active={editor.isActive("code")} onClick={() => c().toggleCode().run()}><Code className={icon} /></ToolButton>
+          <ToolButton label="Link" active={editor.isActive("link") || linking} onClick={() => setLinking((v) => !v)}><Link2 className={icon} /></ToolButton>
+          <Gap />
+          <ToolButton label="Bulleted list" active={editor.isActive("bulletList")} onClick={() => c().toggleBulletList().run()}><List className={icon} /></ToolButton>
+          <ToolButton label="Numbered list" active={editor.isActive("orderedList")} onClick={() => c().toggleOrderedList().run()}><ListOrdered className={icon} /></ToolButton>
+          <ToolButton label="Checklist" active={editor.isActive("taskList")} onClick={() => c().toggleTaskList().run()}><ListChecks className={icon} /></ToolButton>
+          <ToolButton label="Quote" active={editor.isActive("blockquote")} onClick={() => c().toggleBlockquote().run()}><Quote className={icon} /></ToolButton>
+          <ToolButton label="Code block" active={editor.isActive("codeBlock")} onClick={() => c().toggleCodeBlock().run()}><SquareCode className={icon} /></ToolButton>
+          <Gap />
+          <ToolButton label="Mention someone" keys="@" onClick={() => c().insertContent(" @").run()}><AtSign className={icon} /></ToolButton>
+          <ToolButton label="Link another page" keys="[[" onClick={() => c().insertContent(" [[").run()}><FileText className={icon} /></ToolButton>
+          <Gap />
+          <ToolButton label="Undo" keys="Ctrl+Z" disabled={!editor.can().undo()} onClick={() => c().undo().run()}><Undo2 className={icon} /></ToolButton>
+          <ToolButton label="Redo" keys="Ctrl+Shift+Z" disabled={!editor.can().redo()} onClick={() => c().redo().run()}><Redo2 className={icon} /></ToolButton>
+        </div>
+        {end && <div className="flex shrink-0 items-center gap-3">{end}</div>}
+      </div>
+      {linking && <LinkEditor editor={editor} onClose={() => setLinking(false)} />}
     </div>
   );
 }
@@ -163,9 +205,13 @@ export type WikiEditorProps = {
   onChange: (doc: Doc) => void;
   onReady?: (editor: Editor) => void;
   labelledBy?: string;
+  /** Shown at the right end of the toolbar: the save state and Done. */
+  toolbarEnd?: ReactNode;
+  /** Rendered on the page above the text: the title field. */
+  children?: ReactNode;
 };
 
-export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, onReady, labelledBy }: WikiEditorProps) {
+export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, onReady, labelledBy, toolbarEnd, children }: WikiEditorProps) {
   const [popup, setPopup] = useState<Popup | null>(null);
   const [index, setIndex] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
@@ -217,7 +263,7 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
       TaskList,
       TaskItem.configure({ nested: true }),
       Placeholder.configure({
-        placeholder: ({ node }) => node.type.name === "heading" ? "Heading" : "Write here. Type @ to mention someone, [[ to link a page.",
+        placeholder: ({ node }) => node.type.name === "heading" ? "Heading" : "Start writing. Type @ to mention someone, [[ to link another page.",
         emptyEditorClass: "is-editor-empty",
       }),
       Mention.extend({
@@ -228,9 +274,11 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
           };
         },
       }).configure({
-        HTMLAttributes: { class: MENTION_CLASS },
         renderText: ({ node }) => `@${node.attrs.label ?? ""}`,
-        renderHTML: ({ options, node }) => ["span", options.HTMLAttributes, `@${node.attrs.label ?? ""}`],
+        renderHTML: ({ options, node }) => {
+          const chip = mentionChip(String(node.attrs.id ?? ""), node.attrs.nodeType as string | null);
+          return ["span", mergeAttributes(options.HTMLAttributes, chip), String(node.attrs.label ?? "")];
+        },
         suggestion: {
           char: "@",
           allowSpaces: false,
@@ -296,9 +344,11 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
     ],
     editorProps: {
       attributes: {
-        class: clsx(PROSE, "min-h-[40vh] py-4 outline-none",
+        class: clsx(PROSE, "min-h-[50vh] pb-24 outline-none caret-accent",
           "[&_p.is-editor-empty:first-child]:before:pointer-events-none [&_p.is-editor-empty:first-child]:before:float-left [&_p.is-editor-empty:first-child]:before:h-0 [&_p.is-editor-empty:first-child]:before:text-muted [&_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]"),
         role: "textbox",
+        // Writing on the page itself: the caret shows focus, not a ring around the whole text.
+        style: "outline: none",
         "aria-multiline": "true",
         ...(labelledBy ? { "aria-labelledby": labelledBy } : { "aria-label": "Page text" }),
       },
@@ -328,15 +378,28 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
     }
   }, [editor, popup, index, listId]);
 
+  const sheet = "px-5 pt-8 sm:px-12 sm:pt-12 lg:px-16";
   if (!editor) {
-    return <div className="min-h-[40vh] animate-pulse rounded-md bg-surface-2" aria-busy="true"><span className="sr-only">Loading the editor…</span></div>;
+    return (
+      <div aria-busy="true">
+        <div className="h-[49px] rounded-t-lg border-b border-line" />
+        <div className={sheet}>
+          {children}
+          <div className="mt-6 max-w-[68ch] space-y-3">{[92, 100, 76].map((w) => <div key={w} className="h-4 animate-pulse rounded bg-surface-2" style={{ width: `${w}%` }} />)}</div>
+          <span className="sr-only">Loading the editor…</span>
+        </div>
+      </div>
+    );
   }
   return (
     <div>
-      <Toolbar editor={editor} />
-      <EditorContent editor={editor} />
+      <Toolbar editor={editor} end={toolbarEnd} />
+      <div className={sheet}>
+        {children}
+        <EditorContent editor={editor} className="mt-6" />
+      </div>
       {popup && <SuggestionList popup={popup} index={index} onHover={move} listId={listId} />}
-      <p role="status" aria-live="polite" className="text-sm text-muted">{notice}</p>
+      <p role="status" aria-live="polite" className={clsx("fixed bottom-24 left-1/2 z-40 -translate-x-1/2 rounded-lg bg-fg px-4 py-2.5 text-sm text-bg shadow-float lg:bottom-8", !notice && "sr-only")}>{notice}</p>
     </div>
   );
 }

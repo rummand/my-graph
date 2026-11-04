@@ -5,8 +5,12 @@
 import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
+import { NodeChip, PersonChip } from "@/components/ui";
 import { safeHref, type DocMark, type DocNode } from "@/lib/wiki/doc";
-import { MENTION_CLASS, PAGE_LINK_CLASS, PROSE } from "./prose";
+import { PAGE_LINK_CLASS, PROSE } from "./prose";
+
+/** What the server knows about a mentioned node: its type, and whether this viewer may open it. */
+export type MentionInfo = Map<string, { type: string; readable: boolean }>;
 
 function withMarks(text: ReactNode, marks: DocMark[] | undefined, key: string): ReactNode {
   let out = text;
@@ -29,8 +33,8 @@ function withMarks(text: ReactNode, marks: DocMark[] | undefined, key: string): 
   return <Fragment key={key}>{out}</Fragment>;
 }
 
-function render(n: DocNode, key: string): ReactNode {
-  const kids = () => (n.content ?? []).map((c, i) => render(c, `${key}.${i}`));
+function render(n: DocNode, key: string, info?: MentionInfo): ReactNode {
+  const kids = () => (n.content ?? []).map((c, i) => render(c, `${key}.${i}`, info));
   switch (n.type) {
     case "text": return withMarks(n.text ?? "", n.marks, key);
     case "hardBreak": return <br key={key} />;
@@ -49,7 +53,7 @@ function render(n: DocNode, key: string): ReactNode {
       const checked = n.attrs?.checked === true;
       return (
         <li key={key} data-type="taskItem" data-checked={checked}>
-          <label><input type="checkbox" checked={checked} readOnly disabled aria-label={checked ? "Done" : "Not done"} /></label>
+          <label className="pointer-events-none"><input type="checkbox" checked={checked} readOnly tabIndex={-1} aria-readonly aria-label={checked ? "Done" : "Not done"} /></label>
           <div>{kids()}</div>
         </li>
       );
@@ -60,7 +64,17 @@ function render(n: DocNode, key: string): ReactNode {
     case "mention": {
       const id = String(n.attrs?.id ?? "");
       const label = String(n.attrs?.label ?? "someone");
-      return <Link key={key} href={`/node/${id}`} data-type="mention" className={MENTION_CLASS}>@{label}</Link>;
+      const known = info?.get(id);
+      const type = known?.type ?? (typeof n.attrs?.nodeType === "string" ? n.attrs.nodeType : "topic");
+      const readable = known ? known.readable : true;
+      // Chips use the interface face so a name reads as a thing you can open, not as part of the sentence.
+      return (
+        <span key={key} data-type="mention" className="font-sans not-italic">
+          {type === "person"
+            ? <PersonChip id={id} name={label} href={readable ? `/people/${id}` : undefined} className="align-[0.05em]" />
+            : <NodeChip type={type} label={label} href={readable ? `/node/${id}` : undefined} />}
+        </span>
+      );
     }
     case "pageLink": {
       const slug = typeof n.attrs?.slug === "string" ? n.attrs.slug : null;
@@ -73,8 +87,8 @@ function render(n: DocNode, key: string): ReactNode {
   }
 }
 
-export function DocView({ doc, className }: { doc: DocNode; className?: string }) {
-  return <div className={clsx(PROSE, className)}>{(doc.content ?? []).map((c, i) => render(c, String(i)))}</div>;
+export function DocView({ doc, mentions, className }: { doc: DocNode; mentions?: MentionInfo; className?: string }) {
+  return <div className={clsx(PROSE, className)}>{(doc.content ?? []).map((c, i) => render(c, String(i), mentions))}</div>;
 }
 
 /** True when a document has no visible content. */

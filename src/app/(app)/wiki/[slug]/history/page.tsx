@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { format } from "date-fns";
+import { format, isToday } from "date-fns";
 import { clsx } from "clsx";
-import { Bot } from "lucide-react";
-import { EmptyState } from "@/components/ui";
+import { ArrowLeft, Bot } from "lucide-react";
+import { EmptyState, PageHeader } from "@/components/ui";
 import { DiffView } from "@/components/wiki/diff-view";
 import { RestoreButton } from "@/components/wiki/restore-button";
+import { fullWhen, sentenceWhen, shortWhen } from "@/components/wiki/when";
 import { requireUser } from "@/lib/auth";
 import { diffStats, wordDiff } from "@/lib/wiki/diff";
 import { getPage, listRevisions } from "@/lib/wiki";
@@ -40,22 +41,19 @@ export default async function WikiHistory({ params, searchParams }: Props) {
 
   return (
     <div>
-      <nav aria-label="Breadcrumb" className="mb-3 text-sm text-muted">
-        <Link href="/wiki" className="hover:text-fg hover:underline">Wiki</Link><span aria-hidden> / </span>
-        <Link href={pageHref} className="hover:text-fg hover:underline">{page.title}</Link><span aria-hidden> / </span>
-        <span className="text-fg">History</span>
-      </nav>
-      <header className="mb-8">
-        <h1 className="text-[28px]/[1.15] font-semibold tracking-[-0.02em]">History of “{page.title}”</h1>
-        <p className="mt-2 max-w-[60ch] text-muted">Every saved version, newest first. Edits made close together by the same person are grouped into one version. Restoring a version adds it as a new one, so nothing is lost.</p>
-      </header>
+      <Link href={pageHref} className="-ml-2 mb-3 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-fg">
+        <ArrowLeft aria-hidden className="size-4" /><span className="max-w-[40ch] truncate">{page.title}</span>
+      </Link>
+      <PageHeader title="Version history"
+        lead={<>Every saved version of <span className="text-fg">{page.title}</span>, newest first. Edits made close together by one person count as one version. Restoring an old version adds it on top, so nothing is lost.</>} />
 
       {!selected ? (
-        <EmptyState title="No history yet"><p>Versions appear here once the page is saved.</p></EmptyState>
+        <EmptyState title="No versions yet"><p>Versions appear here once the page has been saved.</p></EmptyState>
       ) : (
-        <div className="grid gap-8 lg:grid-cols-[18rem_minmax(0,1fr)]">
-          <nav aria-label="Versions">
-            <ol className="space-y-1">
+        <div className="grid gap-x-10 gap-y-8 lg:grid-cols-[17rem_minmax(0,1fr)]">
+          <nav aria-label="Versions" className="order-2 lg:order-1">
+            <h2 className="mb-2 text-sm font-semibold text-muted lg:sr-only">All versions</h2>
+            <ol className="-mx-1 space-y-0.5">
               {revisions.map((r, i) => {
                 const prev = revisions[i + 1];
                 const stats = diffStats(wordDiff(prev?.contentText ?? "", r.contentText ?? ""));
@@ -63,20 +61,17 @@ export default async function WikiHistory({ params, searchParams }: Props) {
                 return (
                   <li key={r.id}>
                     <Link href={`?rev=${r.id}`} aria-current={active ? "true" : undefined} scroll={false}
-                      className={clsx("block rounded-md px-3 py-2 text-sm", active ? "bg-accent-tint" : "hover:bg-surface-2")}>
-                      <span className="flex items-center justify-between gap-2">
-                        <span className={clsx("flex min-w-0 items-center gap-1.5 font-medium", active && "text-accent")}>
-                          {r.authorKind === "assistant" && <Bot aria-hidden className="size-4 shrink-0" />}
+                      className={clsx("block rounded-lg px-3 py-2.5 transition-colors duration-150", active ? "bg-surface" : "hover:bg-surface-2")}>
+                      <span className="flex items-baseline justify-between gap-3">
+                        <span className="flex min-w-0 items-center gap-1.5 font-medium">
+                          {r.authorKind === "assistant" && <Bot aria-hidden className="size-4 shrink-0 self-center text-muted" />}
                           <span className="truncate">{r.authorName}</span>
                         </span>
-                        <span className="shrink-0 text-xs tabular-nums text-muted">Version {r.version}</span>
+                        <time dateTime={r.createdAt.toISOString()} title={fullWhen(r.createdAt)} className="shrink-0 text-sm tabular-nums text-muted">{listWhen(r.createdAt)}</time>
                       </span>
-                      <span className="block text-xs text-muted">
-                        <time dateTime={r.createdAt.toISOString()} title={format(r.createdAt, "PPpp")}>{format(r.createdAt, "EEE d MMM, HH:mm")}</time>
-                        {i === 0 && ", the current one"}
-                      </span>
-                      <span className="block text-xs text-muted">
-                        {r.summary ?? (prev ? `+${stats.added} / −${stats.removed} words` : "First version")}
+                      <span className="mt-0.5 block text-sm text-muted">
+                        {i === 0 && <span className="font-medium text-fg">Current. </span>}
+                        {r.summary ?? (prev ? <ChangeCount added={stats.added} removed={stats.removed} /> : "First version")}
                       </span>
                     </Link>
                   </li>
@@ -85,24 +80,40 @@ export default async function WikiHistory({ params, searchParams }: Props) {
             </ol>
           </nav>
 
-          <section aria-labelledby="rev-heading" className="min-w-0">
-            <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <h2 id="rev-heading" className="text-lg font-semibold tracking-[-0.01em]">Version {selected.version}{selectedIdx === 0 ? " (current)" : ""}</h2>
-                <p className="text-sm text-muted">
-                  Saved by {selected.authorName} on {format(selected.createdAt, "EEE d MMM 'at' HH:mm")}.{" "}
+          <section aria-labelledby="rev-heading" className="order-1 min-w-0 rounded-lg bg-surface px-5 pb-12 pt-7 sm:px-10 lg:order-2 lg:px-12">
+            <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0">
+                <h2 id="rev-heading" className="text-lg font-semibold tracking-[-0.01em]">
+                  {selectedIdx === 0 ? `Version ${selected.version}, the current one` : `Version ${selected.version}`}
+                </h2>
+                <p className="mt-1 text-sm text-muted">
+                  {selected.authorName} saved it {sentenceWhen(selected.createdAt)}.{" "}
                   {previous ? <>Compared with version {previous.version}.</> : <>This is the first version.</>}
                 </p>
               </div>
               {selectedIdx > 0 && page.can.edit && (
-                <RestoreButton slug={page.slug} revisionId={selected.id} revisionVersion={selected.version} pageVersion={page.version} />
+                <RestoreButton key={selected.id} slug={page.slug} revisionId={selected.id} revisionVersion={selected.version} pageVersion={page.version} />
               )}
             </div>
             <DiffView before={previous?.contentText ?? ""} after={selected.contentText ?? ""} beforeTitle={previous?.title} afterTitle={selected.title} />
           </section>
         </div>
       )}
-      <p className="mt-8 text-sm"><Link href={pageHref} className="text-accent hover:underline">Back to the page</Link></p>
     </div>
   );
+}
+
+function ChangeCount({ added, removed }: { added: number; removed: number }) {
+  if (added === 0 && removed === 0) return <>No text changes</>;
+  return (
+    <>
+      {added > 0 && <span className="text-accent">{added} {added === 1 ? "word" : "words"} added</span>}
+      {added > 0 && removed > 0 && ", "}
+      {removed > 0 && <span className="text-danger">{removed}{added > 0 ? "" : removed === 1 ? " word" : " words"} removed</span>}
+    </>
+  );
+}
+
+function listWhen(d: Date): string {
+  return isToday(d) ? format(d, "HH:mm") : `${shortWhen(d)}, ${format(d, "HH:mm")}`;
 }
