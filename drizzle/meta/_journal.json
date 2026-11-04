@@ -29,6 +29,13 @@
       "when": 1793755048967,
       "tag": "0003_recipe_runs",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793757224081,
+      "tag": "0004_memories_ask_first",
+      "breakpoints": true
     }
   ]
 }

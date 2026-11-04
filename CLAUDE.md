@@ -23,6 +23,13 @@ OpenAI-compatible `/v1/chat/completions`, `/v1/embeddings` (route/model `embed`,
 The app must still work (degraded: no extraction, keyword-only search, assistant says mux is unreachable) when mux is down.
 mux's own GBrain is unrelated — do not use it.
 
+## Agents propose, humans decide
+
+This is the rule for everything. Anything an agent produces that would change the graph (facts, people, memories,
+reminders, merges, wiki edits, new kinds/relations in the meta model, connector imports, web findings) is a proposal
+with evidence and provenance. A person approves, edits or denies it. "Always allow" is itself a human decision and
+must stay revocable. Never auto-apply by default.
+
 ## GBrain (ours)
 
 `src/lib/gbrain` is My Graph's own brain on Postgres. One brain per login (`ownerId`), with `visibility`

@@ -39,7 +39,7 @@ export type AssistantSettings = {
   tone: "warm" | "brief" | "detailed"; dailySuggestionCap: number; onboardedAt: Date | null;
 };
 export const DEFAULT_SETTINGS: AssistantSettings = {
-  autoSaveMemories: true, alwaysAllow: [], capabilities: { library: true, timeline: true, people: true, wiki_write: true, reminders: true },
+  autoSaveMemories: false, alwaysAllow: [], capabilities: { library: true, timeline: true, people: true, wiki_write: true, reminders: true },
   tone: "warm", dailySuggestionCap: 5, onboardedAt: null,
 };
 

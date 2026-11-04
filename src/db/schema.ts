@@ -592,7 +592,7 @@ export const assistantSettings = pgTable("assistant_settings", {
   graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
   userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   /** Save memories it learns in chat without asking (facts still always need approval). */
-  autoSaveMemories: boolean("auto_save_memories").notNull().default(true),
+  autoSaveMemories: boolean("auto_save_memories").notNull().default(false),
   /** Kinds of action the person chose "Always allow" for, e.g. "reminder.create", "memory.save". */
   alwaysAllow: jsonb("always_allow").$type<string[]>().notNull().default([]),
   /** Capabilities the assistant may use at all: library, timeline, people, wiki_write, reminders. Off = tool removed. */
