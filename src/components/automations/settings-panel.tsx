@@ -12,7 +12,7 @@ type SettingsView = Omit<AssistantSettings, "onboardedAt"> & { onboardedAt: stri
 
 /** Capabilities, and whether their hint differs between a family graph and other graphs. */
 const CAPS: { key: string; varied?: boolean }[] = [
-  { key: "library", varied: true }, { key: "timeline" }, { key: "people", varied: true }, { key: "reminders" }, { key: "wiki_write" },
+  { key: "library", varied: true }, { key: "timeline" }, { key: "people", varied: true }, { key: "reminders" }, { key: "wiki_write" }, { key: "web" },
 ];
 /** Action keys whose label differs in a family graph. */
 const VARIED_ACTIONS = new Set(["rule.save"]);

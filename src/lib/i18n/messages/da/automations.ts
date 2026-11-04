@@ -207,6 +207,7 @@ const messages: MessageTree = {
       people: { label: "Læse om personer", hint: { family: "Fødselsdage, hvordan folk har det, hvem I ser", other: "Hvem folk er, hvordan du kender dem, hvornår I sidst talte sammen" } },
       reminders: { label: "Foreslå påmindelser", hint: "Spørger altid først" },
       wiki_write: { label: "Foreslå wikinoter", hint: "Spørger altid først" },
+      web: { label: "Slå ting op på nettet", hint: "Kun navne og emnet forlader grafen. Sider den læser, gemmes som kilder, og det den finder, venter på dig som et forslag" },
     },
     howItWrites: "Sådan skriver den",
     tone: { warm: "Varmt", brief: "Kort", detailed: "Grundigt" },

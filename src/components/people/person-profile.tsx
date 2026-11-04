@@ -6,15 +6,18 @@ import { ArrowLeft, CalendarDays, FileText, MessageCircle, Pencil, Phone, Plus, 
 import { clsx } from "clsx";
 import { Badge, Button, CitationChip, Field, IconButton, Input, NodeChip, PersonChip, Select, Textarea } from "@/components/ui";
 import { personStyle } from "@/lib/ui/person-color";
-import { CIRCLE_LABELS, type Circle } from "@/lib/meta/types";
-import { normaliseCircle, WELLBEING_WORDS } from "@/lib/people/circles";
-import { VISIBILITY_LABELS, type Citation, type FeedItem, type PersonProfile } from "@/lib/people/types";
+import { getTemplate } from "@/lib/templates/templates";
+import { circleIn } from "@/lib/people/circles";
+import type { Citation, FeedItem, PersonProfile } from "@/lib/people/types";
+import { attrName, circleName, kindName, relLabel, rolePhrase, tagName, visibilityName, wellbeingWord } from "@/lib/people/words";
 import { AttributeField, formatAttr } from "./attribute-field";
 import { PersonAvatar, WellbeingWord } from "./avatar";
-import { ago, api, compactDate, dayLabel, fieldErrors, inDays, shortDate, When, type FieldErrors } from "./format";
+import { api, fieldErrors, useFmt, When, type Fmt, type FieldErrors } from "./format";
 import { relationOptions } from "./relation-options";
 import { WellbeingChart } from "./wellbeing-chart";
 import { MemoryPanel } from "@/components/memory/memory-panel";
+import { AlsoInSection } from "@/components/links/also-in";
+import { HistoryCard, WhoSaidField } from "@/components/history/live";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -23,33 +26,38 @@ export function PersonProfileView({ initial }: { initial: PersonProfile }) {
   const id = profile.person.id;
   const reload = async () => setProfile(await api<PersonProfile>(`/api/people/${id}`));
   const canWrite = profile.viewer.role !== "guest";
+  const { t } = useFmt();
+  const family = profile.graph?.family ?? true;
 
   return (
     <div style={personStyle(id) as CSSProperties}>
       <Link href="/people" className="mb-5 inline-flex items-center gap-1 rounded text-sm text-muted transition-colors hover:text-fg">
-        <ArrowLeft className="size-4" aria-hidden="true" />People
+        <ArrowLeft className="size-4" aria-hidden="true" />{t("people.profile.back")}
       </Link>
       <Header profile={profile} onSaved={setProfile} />
       <div className="mt-10 grid gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-10">
-          <Block title="How they’ve been">
+          <Block title={t("people.profile.howTheyveBeen")}>
             <div className="rounded-lg bg-surface p-4 sm:p-5">
               <WellbeingChart personId={id} observations={profile.observations} />
-              {canWrite && <CheckIn personId={id} name={profile.person.label} isSelf={profile.person.isViewer} onSaved={reload} />}
+              {canWrite && <CheckIn personId={id} name={profile.person.label} isSelf={profile.person.isViewer} family={family} onSaved={reload} />}
             </div>
           </Block>
           <ContactLog profile={profile} onSaved={reload} />
-          <ActivityFeed items={profile.feed} />
+          <ActivityFeed items={profile.feed} family={family} />
         </div>
         <div className="min-w-0 space-y-10">
           <Details profile={profile} onSaved={setProfile} />
           <Relationships profile={profile} onSaved={reload} />
-          <MemoryPanel title="Memory" aboutNodeId={id} aboutName={profile.person.label.split(" ")[0]} />
+          <AlsoInSection nodeId={id} hrefBase="/people/" />
+          <MemoryPanel title={t("people.profile.memory")} aboutNodeId={id} aboutName={profile.person.label.split(" ")[0]} graphKind={profile.graph?.template} />
           <Milestones profile={profile} onSaved={reload} />
+          <WhoSaidField nodeId={id} />
+          <HistoryCard subjectId={id} name={profile.person.label} />
           {profile.provenance.length > 0 && (
-            <Block title="Where this comes from">
+            <Block title={t("people.profile.whereFrom")}>
               <div className="flex flex-wrap gap-1.5">{profile.provenance.map((c, i) => <Cite key={i} c={c} n={i + 1} />)}</div>
-              <Link href={`/node/${id}`} className="mt-3 inline-block text-sm text-accent hover:underline">Open in the graph</Link>
+              <Link href={`/node/${id}`} className="mt-3 inline-block text-sm text-accent hover:underline">{t("people.profile.openInGraph")}</Link>
             </Block>
           )}
         </div>
@@ -72,9 +80,24 @@ function Block({ title, action, children, id }: { title: string; action?: ReactN
 }
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/** A citation's title in the reader's language when it is a generic one ("Added by hand"). */
+function citeTitle(t: Fmt["t"], c: Citation): string {
+  switch (c.code) {
+    case "source": return t("people.cite.source");
+    case "logged_by": return c.who ? t("people.cite.loggedBy", { name: c.who }) : t("people.cite.loggedByYou");
+    case "logged_by_hand": return t("people.cite.loggedByHand");
+    case "by_hand": return t("people.cite.byHand");
+    case "assistant": return t("people.cite.assistant");
+    case "rule": return t("people.cite.rule");
+    case "hidden_source": return t("people.cite.hiddenSource");
+    default: return c.title;
+  }
+}
+
 function Cite({ c, n }: { c: Citation; n?: number }) {
-  const detail = c.detail && ISO_DAY.test(c.detail) ? compactDate(`${c.detail}T12:00:00`) : c.detail;
-  return <CitationChip n={n} title={c.title} detail={detail} confidence={c.confidence} href={c.href || undefined} />;
+  const f = useFmt();
+  const detail = c.detail && ISO_DAY.test(c.detail) ? f.compactDate(`${c.detail}T12:00:00Z`) : c.detail;
+  return <CitationChip n={n} title={citeTitle(f.t, c)} detail={detail} confidence={c.confidence} href={c.href || undefined} />;
 }
 
 /* ── Header ───────────────────────────────────────────────────────────────────────────────────────────── */
@@ -87,9 +110,15 @@ function Header({ profile, onSaved }: { profile: PersonProfile; onSaved: (p: Per
   const [visibility, setVisibility] = useState(p.visibility);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const f = useFmt();
+  const { t } = f;
   const latest = p.wellbeing[p.wellbeing.length - 1];
-  const circle = normaliseCircle(p.circle);
+  const template = profile.graph?.template ?? "family";
+  const family = profile.graph?.family ?? true;
+  const circle = circleIn(getTemplate(template), p.circle);
   const canChangeVisibility = p.ownerId === profile.viewer.id;
+  const relText = p.relation ? rolePhrase(t, f.locale, p.relation.role, p.relation.label) : null;
+  const kindText = p.kindLabel ? kindName(t, p.kindLabel) : null;
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -109,17 +138,17 @@ function Header({ profile, onSaved }: { profile: PersonProfile; onSaved: (p: Per
         <PersonAvatar id={p.id} label={p.label} size={72} score={latest?.score} className="[--ring-bg:var(--bg)]" />
         <div className="min-w-0 flex-1">
           <h1 className="text-[28px]/[1.15] font-semibold tracking-[-0.02em]">
-            {p.label}{p.isViewer && <span className="ml-2 text-lg font-normal text-muted">you</span>}
+            {p.label}{p.isViewer && <span className="ml-2 text-lg font-normal text-muted">{t("people.youLower")}</span>}
           </h1>
           <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-muted">
-            {p.relation && <span className="text-fg">{p.relation.label}</span>}
-            {p.kindLabel && (!p.relation || !p.relation.label.toLowerCase().includes(p.kindLabel.toLowerCase())) && <span>{p.kindLabel}</span>}
-            {!p.relation && !p.kindLabel && !p.isViewer && <span>{CIRCLE_LABELS[circle as Circle]}</span>}
-            {p.aliases.length > 0 && <span>Also called {p.aliases.join(", ")}</span>}
-            {p.householdMember && !p.isViewer && <span>Member of this graph</span>}
+            {relText && <span className="text-fg">{relText}</span>}
+            {kindText && (!relText || !relText.toLowerCase().includes(kindText.toLowerCase())) && <span>{kindText}</span>}
+            {!p.relation && !p.kindLabel && !p.isViewer && <span>{circleName(t, template, circle)}</span>}
+            {p.aliases.length > 0 && <span>{t("people.profile.alsoCalled", { names: p.aliases.join(", ") })}</span>}
+            {p.householdMember && !p.isViewer && <span>{t("people.memberOfGraph")}</span>}
           </p>
         </div>
-        {!editing && p.canEdit && <Button variant="secondary" onClick={() => setEditing(true)}><Pencil className="size-4" aria-hidden="true" />Edit</Button>}
+        {!editing && p.canEdit && <Button variant="secondary" onClick={() => setEditing(true)}><Pencil className="size-4" aria-hidden="true" />{t("people.profile.edit")}</Button>}
       </div>
 
       <AnimatePresence initial={false}>
@@ -127,24 +156,24 @@ function Header({ profile, onSaved }: { profile: PersonProfile; onSaved: (p: Per
           <motion.form key="edit" onSubmit={save} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.22, ease: EASE }} className="overflow-hidden">
             <div className="mt-5 grid gap-4 rounded-lg bg-surface p-4 sm:grid-cols-[minmax(0,1fr)_200px_200px] sm:items-end">
-              <Field label="Name"><Input value={label} onChange={(e) => setLabel(e.target.value)} required /></Field>
-              <Field label="Kind">
+              <Field label={t("people.profile.name")}><Input value={label} onChange={(e) => setLabel(e.target.value)} required /></Field>
+              <Field label={t("people.profile.kind")}>
                 <Select value={kind} onChange={(e) => setKind(e.target.value)}>
-                  <option value="">Not set</option>
-                  {profile.kinds.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+                  <option value="">{t("people.profile.notSet")}</option>
+                  {profile.kinds.map((k) => <option key={k.key} value={k.key}>{kindName(t, k.label)}</option>)}
                 </Select>
               </Field>
               {canChangeVisibility ? (
-                <Field label="Who can see them">
+                <Field label={t("people.profile.whoCanSee")}>
                   <Select value={visibility} onChange={(e) => setVisibility(e.target.value as typeof visibility)}>
-                    {(["private", "parents", "household"] as const).map((v) => <option key={v} value={v}>{VISIBILITY_LABELS[v]}</option>)}
+                    {(["private", "parents", "household"] as const).map((v) => <option key={v} value={v}>{visibilityName(t, family, v)}</option>)}
                   </Select>
                 </Field>
               ) : <div />}
               <div className="flex items-center justify-end gap-2 sm:col-span-3">
                 {error && <p role="alert" className="mr-auto text-sm text-danger">{error}</p>}
-                <Button type="button" variant="ghost" onClick={cancel}>Cancel</Button>
-                <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+                <Button type="button" variant="ghost" onClick={cancel}>{t("people.profile.cancel")}</Button>
+                <Button type="submit" disabled={saving}>{saving ? t("people.profile.saving") : t("people.profile.save")}</Button>
               </div>
             </div>
           </motion.form>
@@ -152,24 +181,25 @@ function Header({ profile, onSaved }: { profile: PersonProfile; onSaved: (p: Per
       </AnimatePresence>
 
       <dl className="mt-7 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-4">
-        <Fact label="Feeling">
+        <Fact label={t("people.profile.feeling")}>
           <WellbeingWord score={latest?.score} />
-          {latest && <span className="block text-[13px] text-muted" suppressHydrationWarning>{ago(latest.at)}</span>}
+          {latest && <span className="block text-[13px] text-muted" suppressHydrationWarning>{f.ago(latest.at)}</span>}
         </Fact>
-        <Fact label="Last in touch">
+        <Fact label={t("people.profile.lastInTouch")}>
           <When iso={p.lastContactAt} />
-          {p.contactCount90 > 0 && <span className="block text-[13px] text-muted tabular-nums">{p.contactCount90} time{p.contactCount90 === 1 ? "" : "s"} in 90 days</span>}
+          {p.contactCount90 > 0 && <span className="block text-[13px] text-muted tabular-nums">{t("people.profile.times90", { count: p.contactCount90 })}</span>}
         </Fact>
-        <Fact label="Next birthday">
+        <Fact label={t("people.profile.nextBirthday")}>
           {p.nextBirthday ? (
-            <span suppressHydrationWarning>{dayLabel(p.nextBirthday.date)}
-              <span className="block text-[13px] text-muted">{`${inDays(p.nextBirthday.daysUntil)}${p.nextBirthday.turning !== null ? `, turns ${p.nextBirthday.turning}` : ""}`}</span>
+            <span suppressHydrationWarning>{f.dayLabel(p.nextBirthday.date)}
+              <span className="block text-[13px] text-muted">{p.nextBirthday.turning !== null
+                ? t("people.table.turnsIn", { when: f.inDays(p.nextBirthday.daysUntil), age: p.nextBirthday.turning }) : f.inDays(p.nextBirthday.daysUntil)}</span>
             </span>
-          ) : <span className="text-muted">Not recorded</span>}
+          ) : <span className="text-muted">{t("people.profile.notRecorded")}</span>}
         </Fact>
-        <Fact label="Who can see them">
-          {VISIBILITY_LABELS[p.visibility]}
-          {p.openReminders > 0 && <span className="block text-[13px] text-muted tabular-nums">{p.openReminders} open reminder{p.openReminders === 1 ? "" : "s"}</span>}
+        <Fact label={t("people.profile.whoCanSee")}>
+          {visibilityName(t, family, p.visibility)}
+          {p.openReminders > 0 && <span className="block text-[13px] text-muted tabular-nums">{t("people.profile.openReminders", { count: p.openReminders })}</span>}
         </Fact>
       </dl>
     </header>
@@ -187,9 +217,13 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 
 /* ── Check-in ─────────────────────────────────────────────────────────────────────────────────────────── */
 
+/** Tags offered on a check-in (stored in English, shown translated). Outside a family graph: work-life tags. */
 const SUGGESTED_TAGS = ["sleep", "school", "friends", "health", "mood", "family", "activities", "work"];
+const SUGGESTED_TAGS_GRAPH = ["workload", "stress", "health", "mood", "sleep", "family", "work"];
 
-function CheckIn({ personId, name, isSelf, onSaved }: { personId: string; name: string; isSelf: boolean; onSaved: () => Promise<void> }) {
+function CheckIn({ personId, name, isSelf, family, onSaved }: { personId: string; name: string; isSelf: boolean; family: boolean; onSaved: () => Promise<void> }) {
+  const { t } = useFmt();
+  const suggested = family ? SUGGESTED_TAGS : SUGGESTED_TAGS_GRAPH;
   const [score, setScore] = useState<number | null>(null);
   const [note, setNote] = useState("");
   const [tags, setTags] = useState<string[]>([]);
@@ -198,12 +232,12 @@ function CheckIn({ personId, name, isSelf, onSaved }: { personId: string; name: 
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!score) { setMsg({ ok: false, text: "Pick how they are first." }); return; }
+    if (!score) { setMsg({ ok: false, text: t("people.checkin.pickFirst") }); return; }
     setSaving(true); setMsg(null);
     try {
       await api(`/api/people/${personId}/observations`, { method: "POST", json: { kind: "wellbeing", score, note: note || null, tags } });
       setScore(null); setNote(""); setTags([]);
-      setMsg({ ok: true, text: "Saved. Thanks for checking in." });
+      setMsg({ ok: true, text: t("people.checkin.saved") });
       await onSaved();
     } catch (err) { setMsg({ ok: false, text: (err as Error).message }); } finally { setSaving(false); }
   }
@@ -216,14 +250,14 @@ function CheckIn({ personId, name, isSelf, onSaved }: { personId: string; name: 
   return (
     <form onSubmit={save} className="mt-5 border-t border-line pt-4">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h3 id="checkin-h" className="text-[15px] font-medium">{isSelf ? "How are you today?" : `How is ${name} today?`}</h3>
+        <h3 id="checkin-h" className="text-[15px] font-medium">{isSelf ? t("people.checkin.howAreYou") : t("people.checkin.howIs", { name })}</h3>
         <div role="radiogroup" aria-labelledby="checkin-h" className="inline-flex flex-wrap rounded-md bg-surface-2 p-0.5">
           {[1, 2, 3, 4, 5].map((s) => (
             <button key={s} type="button" role="radio" aria-checked={score === s} tabIndex={score === s || (score === null && s === 3) ? 0 : -1}
               onClick={() => setScore(s)} onKeyDown={(e) => onKey(e, s)}
               className={clsx("h-8 rounded-[5px] px-3 text-sm transition-colors active:scale-[0.97]",
                 score === s ? "bg-fg font-medium text-bg" : "text-muted hover:text-fg")}>
-              {WELLBEING_WORDS[s]}
+              {wellbeingWord(t, s)}
             </button>
           ))}
         </div>
@@ -233,19 +267,19 @@ function CheckIn({ personId, name, isSelf, onSaved }: { personId: string; name: 
           <motion.div key="more" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2, ease: EASE }} className="overflow-hidden">
             <div className="space-y-3 pt-3">
-              <label htmlFor="ci-note" className="sr-only">Note</label>
-              <Textarea id="ci-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="What’s going on? (optional)" maxLength={4000} />
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Tags">
-                {SUGGESTED_TAGS.map((t) => (
-                  <button key={t} type="button" aria-pressed={tags.includes(t)} onClick={() => setTags((ts) => (ts.includes(t) ? ts.filter((x) => x !== t) : [...ts, t]))}
-                    className={clsx("h-7 rounded-full px-2.5 text-[13px] transition-colors", tags.includes(t) ? "bg-fg text-bg" : "bg-surface-2 text-muted hover:text-fg")}>{t}</button>
+              <label htmlFor="ci-note" className="sr-only">{t("people.checkin.note")}</label>
+              <Textarea id="ci-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("people.checkin.notePlaceholder")} maxLength={4000} />
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label={t("people.checkin.tags")}>
+                {suggested.map((tag) => (
+                  <button key={tag} type="button" aria-pressed={tags.includes(tag)} onClick={() => setTags((ts) => (ts.includes(tag) ? ts.filter((x) => x !== tag) : [...ts, tag]))}
+                    className={clsx("h-7 rounded-full px-2.5 text-[13px] transition-colors", tags.includes(tag) ? "bg-fg text-bg" : "bg-surface-2 text-muted hover:text-fg")}>{tagName(t, tag)}</button>
                 ))}
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-[13px] text-muted">Check-ins are seen by you and the parents.</p>
+                <p className="text-[13px] text-muted">{t(family ? "people.checkin.seenFamily" : "people.checkin.seenGraph")}</p>
                 <div className="flex gap-2">
-                  <Button type="button" variant="ghost" onClick={() => { setScore(null); setMsg(null); }}>Cancel</Button>
-                  <Button type="submit" disabled={saving || !score}>{saving ? "Saving…" : "Save check-in"}</Button>
+                  <Button type="button" variant="ghost" onClick={() => { setScore(null); setMsg(null); }}>{t("people.checkin.cancel")}</Button>
+                  <Button type="submit" disabled={saving || !score}>{saving ? t("people.checkin.saving") : t("people.checkin.save")}</Button>
                 </div>
               </div>
             </div>
@@ -260,11 +294,10 @@ function CheckIn({ personId, name, isSelf, onSaved }: { personId: string; name: 
 /* ── Contact log ──────────────────────────────────────────────────────────────────────────────────────── */
 
 const CONTACTS = [
-  { tag: "talked", label: "Talked", icon: Phone },
-  { tag: "met", label: "Met", icon: Users },
-  { tag: "messaged", label: "Messaged", icon: MessageCircle },
+  { tag: "talked", icon: Phone },
+  { tag: "met", icon: Users },
+  { tag: "messaged", icon: MessageCircle },
 ];
-const CONTACT_WORD: Record<string, string> = { talked: "Talked", met: "Met", messaged: "Messaged" };
 
 function ContactLog({ profile, onSaved }: { profile: PersonProfile; onSaved: () => Promise<void> }) {
   const [busy, setBusy] = useState<string | null>(null);
@@ -272,6 +305,8 @@ function ContactLog({ profile, onSaved }: { profile: PersonProfile; onSaved: () 
   const [error, setError] = useState<string | null>(null);
   const contacts = profile.observations.filter((o) => o.kind === "contact").slice(0, 6);
   const canLog = profile.viewer.role !== "guest";
+  const f = useFmt();
+  const { t } = f;
 
   async function log(tag: string) {
     setBusy(tag); setError(null);
@@ -283,15 +318,15 @@ function ContactLog({ profile, onSaved }: { profile: PersonProfile; onSaved: () 
   }
 
   return (
-    <Block title="Keeping in touch">
+    <Block title={t("people.contact.title")}>
       {canLog && (
         <div className="mb-4 flex flex-wrap items-center gap-2">
-          <label htmlFor="contact-note" className="sr-only">Note for this contact</label>
-          <Input id="contact-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="What did you talk about? (optional)" maxLength={4000} className="min-w-[14rem] flex-1" />
-          <span className="text-sm text-muted">Today we</span>
-          {CONTACTS.map(({ tag, label, icon: Icon }) => (
+          <label htmlFor="contact-note" className="sr-only">{t("people.contact.noteLabel")}</label>
+          <Input id="contact-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("people.contact.notePlaceholder")} maxLength={4000} className="min-w-[14rem] flex-1" />
+          <span className="text-sm text-muted">{t("people.contact.todayWe")}</span>
+          {CONTACTS.map(({ tag, icon: Icon }) => (
             <Button key={tag} type="button" variant="secondary" disabled={!!busy} onClick={() => log(tag)}>
-              <Icon className="size-4" aria-hidden="true" />{busy === tag ? "Saving…" : label}
+              <Icon className="size-4" aria-hidden="true" />{busy === tag ? t("people.contact.saving") : t(`people.contact.${tag}`)}
             </Button>
           ))}
           {error && <p role="alert" className="w-full text-sm text-danger">{error}</p>}
@@ -303,21 +338,21 @@ function ContactLog({ profile, onSaved }: { profile: PersonProfile; onSaved: () 
             {contacts.map((c, i) => (
               <motion.li key={c.id} layout="position" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
                 transition={{ duration: 0.22, ease: EASE }} className="grid grid-cols-[92px_16px_minmax(0,1fr)] gap-x-3">
-                <time dateTime={c.at} className="pt-2 text-right text-[13px] text-muted tabular-nums" suppressHydrationWarning>{compactDate(c.at)}</time>
+                <time dateTime={c.at} className="pt-2 text-right text-[13px] text-muted tabular-nums" suppressHydrationWarning>{f.compactDate(c.at)}</time>
                 <span className="relative flex justify-center" aria-hidden="true">
                   {i < contacts.length - 1 && <span className="absolute bottom-0 top-4 w-px bg-line" />}
                   <span className="relative mt-[13px] size-2 rounded-full bg-[var(--person)]" />
                 </span>
                 <div className="min-w-0 pb-3 pt-1.5">
-                  <span className="font-medium">{CONTACT_WORD[c.tags[0] ?? ""] ?? "In touch"}</span>
-                  {c.authorName && <span className="text-sm text-muted"> by {c.authorName}</span>}
+                  <span className="font-medium">{["talked", "met", "messaged"].includes(c.tags[0] ?? "") ? t(`people.contact.${c.tags[0]}`) : t("people.contact.inTouch")}</span>
+                  {c.authorName && <span className="text-sm text-muted"> {c.byViewer ? t("people.contact.byYou") : t("people.contact.by", { name: c.authorName })}</span>}
                   {c.note && <p className="text-sm text-muted">{c.note}</p>}
                 </div>
               </motion.li>
             ))}
           </AnimatePresence>
         </ol>
-      ) : <p className="text-sm text-muted">No calls or visits logged yet. Log one above and it starts the timeline.</p>}
+      ) : <p className="text-sm text-muted">{t("people.contact.empty")}</p>}
     </Block>
   );
 }
@@ -332,7 +367,11 @@ function Details({ profile, onSaved }: { profile: PersonProfile; onSaved: (p: Pe
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const attrs = profile.attributes;
-  const filled = attrs.filter((a) => formatAttr(a, p.props[a.key]) !== "");
+  const f = useFmt();
+  const { t } = f;
+  const family = profile.graph?.family ?? true;
+  const show = (a: (typeof attrs)[number]) => formatAttr(a, p.props[a.key], t, f.locale);
+  const filled = attrs.filter((a) => show(a) !== "");
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -351,35 +390,35 @@ function Details({ profile, onSaved }: { profile: PersonProfile; onSaved: (p: Pe
   }
 
   return (
-    <Block title="Details" action={p.canEdit && !editing
-      ? <IconButton label="Edit details" onClick={() => { setValues(p.props); setEditing(true); }}><Pencil className="size-4" /></IconButton> : undefined}>
+    <Block title={t("people.details.title")} action={p.canEdit && !editing
+      ? <IconButton label={t("people.details.edit")} onClick={() => { setValues(p.props); setEditing(true); }}><Pencil className="size-4" /></IconButton> : undefined}>
       {editing ? (
         <form onSubmit={save} className="space-y-3 rounded-lg bg-surface p-4" noValidate>
           <div className="grid gap-3">
-            {attrs.map((a) => <AttributeField key={a.key} attr={a} value={values[a.key]} error={errors[a.key]} onChange={(v) => setValues((s) => ({ ...s, [a.key]: v }))} />)}
+            {attrs.map((a) => <AttributeField key={a.key} attr={a} family={family} value={values[a.key]} error={errors[a.key]} onChange={(v) => setValues((s) => ({ ...s, [a.key]: v }))} />)}
           </div>
           {error && <p role="alert" className="text-sm text-danger">{error}</p>}
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={() => { setEditing(false); setErrors({}); }}>Cancel</Button>
-            <Button type="submit" disabled={saving}>{saving ? "Saving…" : "Save details"}</Button>
+            <Button type="button" variant="ghost" onClick={() => { setEditing(false); setErrors({}); }}>{t("people.details.cancel")}</Button>
+            <Button type="submit" disabled={saving}>{saving ? t("people.details.saving") : t("people.details.save")}</Button>
           </div>
         </form>
       ) : filled.length ? (
         <dl className="divide-y divide-line text-sm">
           {filled.map((a) => (
             <div key={a.key} className="grid grid-cols-[112px_minmax(0,1fr)] gap-x-4 py-2">
-              <dt className="text-muted">{a.label}</dt>
+              <dt className="text-muted">{attrName(t, a.label)}</dt>
               <dd className="whitespace-pre-line break-words">
-                {a.dataType === "phone" ? <a className="hover:underline" href={`tel:${String(p.props[a.key]).replace(/\s/g, "")}`}>{formatAttr(a, p.props[a.key])}</a>
-                  : a.dataType === "email" ? <a className="hover:underline" href={`mailto:${p.props[a.key]}`}>{formatAttr(a, p.props[a.key])}</a>
-                  : <span suppressHydrationWarning>{formatAttr(a, p.props[a.key])}</span>}
-                {a.sensitive && <Badge className="ml-1.5">Parents only</Badge>}
+                {a.dataType === "phone" ? <a className="hover:underline" href={`tel:${String(p.props[a.key]).replace(/\s/g, "")}`}>{show(a)}</a>
+                  : a.dataType === "email" ? <a className="hover:underline" href={`mailto:${p.props[a.key]}`}>{show(a)}</a>
+                  : <span suppressHydrationWarning>{show(a)}</span>}
+                {a.sensitive && <Badge className="ml-1.5">{t(family ? "people.field.parentsOnly" : "people.field.editorsOnly")}</Badge>}
               </dd>
             </div>
           ))}
         </dl>
       ) : (
-        <p className="text-sm text-muted">{p.canEdit ? "No details yet. Add a birthday, phone number or how you know them." : "No details recorded."}</p>
+        <p className="text-sm text-muted">{p.canEdit ? t("people.details.emptyEdit") : t("people.details.empty")}</p>
       )}
     </Block>
   );
@@ -401,6 +440,8 @@ function Relationships({ profile, onSaved }: { profile: PersonProfile; onSaved: 
   const options = useMemo(() => relationOptions(profile.relationOptions, "person", otherType), [profile.relationOptions, otherType]);
   const people = profile.nodeOptions.filter((n) => n.type === "person");
   const places = profile.nodeOptions.filter((n) => n.type === "place");
+  const f = useFmt();
+  const { t } = f;
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -418,25 +459,25 @@ function Relationships({ profile, onSaved }: { profile: PersonProfile; onSaved: 
   }
 
   return (
-    <Block title="Relationships" action={profile.viewer.role !== "guest" && !adding
-      ? <IconButton label="Add a relationship" onClick={() => setAdding(true)}><Plus className="size-4" /></IconButton> : undefined}>
-      {profile.relationships.length === 0 && !adding && <p className="text-sm text-muted">No relationships recorded yet.</p>}
+    <Block title={t("people.relationships.title")} action={profile.viewer.role !== "guest" && !adding
+      ? <IconButton label={t("people.relationships.add")} onClick={() => setAdding(true)}><Plus className="size-4" /></IconButton> : undefined}>
+      {profile.relationships.length === 0 && !adding && <p className="text-sm text-muted">{t("people.relationships.empty")}</p>}
       <div className="space-y-4">
         {profile.relationships.map((g) => (
-          <section key={g.category} aria-label={g.label}>
-            <h3 className="mb-1.5 text-[13px] text-muted">{g.label}</h3>
+          <section key={g.category} aria-label={t(`model.category.${g.category}`, undefined, g.label)}>
+            <h3 className="mb-1.5 text-[13px] text-muted">{t(`model.category.${g.category}`, undefined, g.label)}</h3>
             <ul className="space-y-1.5">
               {g.items.map((it) => (
                 <li key={it.edgeId} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
                   {it.toYou
-                    ? <Link href={`/people/${it.other.id}`} className="font-medium hover:underline underline-offset-4">{it.toYou}</Link>
+                    ? <Link href={`/people/${it.other.id}`} className="font-medium hover:underline underline-offset-4">{rolePhrase(t, f.locale, it.toYouRole, it.toYou)}</Link>
                     : <>
-                      <span className="text-muted">{it.label.charAt(0).toUpperCase() + it.label.slice(1)}</span>
+                      <span className="text-muted">{((l) => l.charAt(0).toUpperCase() + l.slice(1))(relLabel(t, it.label))}</span>
                       {it.other.type === "person"
                         ? <PersonChip id={it.other.id} name={it.other.label} href={`/people/${it.other.id}`} />
                         : <NodeChip type={it.other.type} label={it.other.label} href={`/node/${it.other.id}`} />}
                     </>}
-                  {it.status !== "confirmed" && <Badge tone="inferred">{it.status === "inferred" ? "Guess" : "Unconfirmed"}</Badge>}
+                  {it.status !== "confirmed" && <Badge tone="inferred">{t(it.status === "inferred" ? "people.relationships.guess" : "people.relationships.unconfirmed")}</Badge>}
                   {it.citations.slice(0, 1).map((c, i) => c.href ? <Cite key={i} c={c} /> : null)}
                 </li>
               ))}
@@ -449,37 +490,37 @@ function Relationships({ profile, onSaved }: { profile: PersonProfile; onSaved: 
           <motion.form key="add" onSubmit={save} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2, ease: EASE }} className="overflow-hidden">
             <div className="mt-4 space-y-3 rounded-lg bg-surface p-4 text-sm">
-              <Field label="Who or where">
+              <Field label={t("people.relationships.whoOrWhere")}>
                 <Select value={otherId} onChange={(e) => { setOtherId(e.target.value); setRel(""); }}>
-                  <option value="">Choose…</option>
-                  <option value="__new">Someone new</option>
-                  {people.length > 0 && <optgroup label="People">{people.map((n) => <option key={n.id} value={n.id}>{n.isViewer ? `You (${n.label})` : n.label}</option>)}</optgroup>}
-                  {places.length > 0 && <optgroup label="Places">{places.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}</optgroup>}
+                  <option value="">{t("people.relationships.choose")}</option>
+                  <option value="__new">{t("people.relationships.someoneNew")}</option>
+                  {people.length > 0 && <optgroup label={t("people.relationships.people")}>{people.map((n) => <option key={n.id} value={n.id}>{n.isViewer ? t("people.relationships.youNamed", { name: n.label }) : n.label}</option>)}</optgroup>}
+                  {places.length > 0 && <optgroup label={t("people.relationships.places")}>{places.map((n) => <option key={n.id} value={n.id}>{n.label}</option>)}</optgroup>}
                 </Select>
               </Field>
               {otherId === "__new" && (
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Name"><Input value={newName} onChange={(e) => setNewName(e.target.value)} required /></Field>
-                  <Field label="Kind">
+                  <Field label={t("people.relationships.name")}><Input value={newName} onChange={(e) => setNewName(e.target.value)} required /></Field>
+                  <Field label={t("people.relationships.kind")}>
                     <Select value={newKind} onChange={(e) => setNewKind(e.target.value)}>
-                      <option value="">Not set</option>
-                      {profile.kinds.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+                      <option value="">{t("people.relationships.notSet")}</option>
+                      {profile.kinds.map((k) => <option key={k.key} value={k.key}>{kindName(t, k.label)}</option>)}
                     </Select>
                   </Field>
                 </div>
               )}
               {otherId && (
-                <Field label={`${p.label} is…`}>
+                <Field label={t("people.relationships.isWhat", { name: p.label })}>
                   <Select value={rel} onChange={(e) => setRel(e.target.value)}>
-                    <option value="">Choose…</option>
-                    {options.map((o) => <option key={o.value} value={o.value}>{o.phrase} {otherId === "__new" ? newName || "them" : other?.isViewer ? "you" : other?.label}</option>)}
+                    <option value="">{t("people.relationships.choose")}</option>
+                    {options.map((o) => <option key={o.value} value={o.value}>{relLabel(t, o.phrase)} {otherId === "__new" ? newName || t("people.relationships.them") : other?.isViewer ? t("people.youLower") : other?.label}</option>)}
                   </Select>
                 </Field>
               )}
               {error && <p role="alert" className="text-danger">{error}</p>}
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={() => { setAdding(false); setError(null); }}>Cancel</Button>
-                <Button type="submit" disabled={saving || !rel || !otherId || (otherId === "__new" && !newName.trim())}>{saving ? "Saving…" : "Add relationship"}</Button>
+                <Button type="button" variant="ghost" onClick={() => { setAdding(false); setError(null); }}>{t("people.relationships.cancel")}</Button>
+                <Button type="submit" disabled={saving || !rel || !otherId || (otherId === "__new" && !newName.trim())}>{saving ? t("people.relationships.saving") : t("people.relationships.save")}</Button>
               </div>
             </div>
           </motion.form>
@@ -496,6 +537,9 @@ function Milestones({ profile, onSaved }: { profile: PersonProfile; onSaved: () 
   const [note, setNote] = useState("");
   const [date, setDate] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const f = useFmt();
+  const { t } = f;
+  const family = profile.graph?.family ?? true;
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -508,19 +552,19 @@ function Milestones({ profile, onSaved }: { profile: PersonProfile; onSaved: () 
   }
 
   return (
-    <Block title="Milestones" action={profile.viewer.role !== "guest" && !adding
-      ? <IconButton label="Add a milestone" onClick={() => setAdding(true)}><Plus className="size-4" /></IconButton> : undefined}>
+    <Block title={t("people.milestones.title")} action={profile.viewer.role !== "guest" && !adding
+      ? <IconButton label={t("people.milestones.add")} onClick={() => setAdding(true)}><Plus className="size-4" /></IconButton> : undefined}>
       <AnimatePresence initial={false}>
         {adding && (
           <motion.form key="add" onSubmit={save} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
             transition={{ duration: 0.2, ease: EASE }} className="overflow-hidden">
             <div className="mb-4 space-y-3 rounded-lg bg-surface p-4">
-              <Field label="What happened"><Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Rode a bike without help" required maxLength={4000} /></Field>
-              <Field label="When"><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
+              <Field label={t("people.milestones.what")}><Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t(family ? "people.milestones.placeholderFamily" : "people.milestones.placeholderGraph")} required maxLength={4000} /></Field>
+              <Field label={t("people.milestones.when")}><Input type="date" value={date} onChange={(e) => setDate(e.target.value)} /></Field>
               {error && <p role="alert" className="text-sm text-danger">{error}</p>}
               <div className="flex justify-end gap-2">
-                <Button type="button" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
-                <Button type="submit" disabled={!note.trim()}>Save milestone</Button>
+                <Button type="button" variant="ghost" onClick={() => setAdding(false)}>{t("people.milestones.cancel")}</Button>
+                <Button type="submit" disabled={!note.trim()}>{t("people.milestones.save")}</Button>
               </div>
             </div>
           </motion.form>
@@ -530,12 +574,12 @@ function Milestones({ profile, onSaved }: { profile: PersonProfile; onSaved: () 
         <ol className="space-y-2.5 text-sm">
           {profile.milestones.map((m) => (
             <li key={m.id} className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-3">
-              <span className="min-w-0">{m.href ? <Link href={m.href} className="hover:underline">{m.title}</Link> : m.title}</span>
-              <span className="text-[13px] text-muted tabular-nums" suppressHydrationWarning>{compactDate(m.at)}</span>
+              <span className="min-w-0">{m.href ? <Link href={m.href} className="hover:underline">{m.title}</Link> : m.untitled ? t("people.milestones.untitled") : m.title}</span>
+              <span className="text-[13px] text-muted tabular-nums" suppressHydrationWarning>{f.compactDate(m.at)}</span>
             </li>
           ))}
         </ol>
-      ) : !adding && <p className="text-sm text-muted">Nothing yet. First words, first school day, learning to swim.</p>}
+      ) : !adding && <p className="text-sm text-muted">{t(family ? "people.milestones.emptyFamily" : "people.milestones.emptyGraph")}</p>}
     </Block>
   );
 }
@@ -544,42 +588,57 @@ function Milestones({ profile, onSaved }: { profile: PersonProfile; onSaved: () 
 
 const FEED_ICON = { observation: MessageCircle, event: CalendarDays, document: FileText };
 
-function ActivityFeed({ items }: { items: FeedItem[] }) {
+function ActivityFeed({ items, family }: { items: FeedItem[]; family: boolean }) {
   const [all, setAll] = useState(false);
+  const { t } = useFmt();
   const now = Date.now();
   const upcoming = items.filter((f) => new Date(f.at).getTime() > now).sort((a, b) => a.at.localeCompare(b.at));
   const past = items.filter((f) => new Date(f.at).getTime() <= now);
   const shownPast = all ? past : past.slice(0, 10);
 
   return (
-    <Block title="Timeline">
-      {items.length === 0 ? <p className="text-sm text-muted">Check-ins, events and letters about them show up here, newest first.</p> : (
+    <Block title={t("people.feed.title")}>
+      {items.length === 0 ? <p className="text-sm text-muted">{t(family ? "people.feed.emptyFamily" : "people.feed.emptyGraph")}</p> : (
         <div className="space-y-6">
-          {upcoming.length > 0 && <FeedList heading="Coming up" items={upcoming} />}
-          {shownPast.length > 0 && <FeedList heading={upcoming.length ? "Before" : undefined} items={shownPast} />}
+          {upcoming.length > 0 && <FeedList heading={t("people.feed.comingUp")} items={upcoming} />}
+          {shownPast.length > 0 && <FeedList heading={upcoming.length ? t("people.feed.before") : undefined} items={shownPast} />}
         </div>
       )}
-      {past.length > 10 && <Button variant="ghost" size="sm" className="mt-2" onClick={() => setAll((a) => !a)}>{all ? "Show less" : `Show all ${past.length}`}</Button>}
+      {past.length > 10 && <Button variant="ghost" size="sm" className="mt-2" onClick={() => setAll((a) => !a)}>{all ? t("people.feed.showLess") : t("people.feed.showAll", { count: past.length })}</Button>}
     </Block>
   );
 }
 
+/** A feed item's title and detail in the reader's language (observations and document links are worded here). */
+function feedText(t: Fmt["t"], f: FeedItem): { title: string; detail: string | null } {
+  if (f.type === "observation") {
+    const title = f.observationKind === "wellbeing" ? (f.score ? t("people.feed.checkInScore", { word: wellbeingWord(t, f.score) }) : t("people.feed.checkIn"))
+      : f.observationKind === "contact" ? t(f.tags?.includes("met") ? "people.feed.met" : f.tags?.includes("messaged") ? "people.feed.messaged" : f.tags?.includes("talked") ? "people.feed.talked" : "people.feed.inTouch")
+        : f.observationKind === "milestone" ? t("people.feed.milestone") : f.observationKind === "health" ? t("people.feed.health") : f.observationKind ? t("people.feed.note") : f.title;
+    return { title, detail: f.detail };
+  }
+  if (f.type === "document" && f.docRelation) return { title: f.title, detail: t(f.docRelation === "about" ? "people.feed.about" : "people.feed.mentions") };
+  return { title: f.title, detail: f.detail };
+}
+
 function FeedList({ heading, items }: { heading?: string; items: FeedItem[] }) {
+  const fm = useFmt();
   return (
     <div>
       {heading && <h3 className="mb-1 text-[13px] text-muted">{heading}</h3>}
       <ol className="divide-y divide-line">
         {items.map((f) => {
           const Icon = FEED_ICON[f.type];
+          const tx = feedText(fm.t, f);
           return (
             <li key={f.id} className="grid grid-cols-[92px_minmax(0,1fr)] gap-x-4 py-3 text-sm">
-              <time dateTime={f.at} className="text-[13px] text-muted tabular-nums" suppressHydrationWarning>{shortDate(f.at)}</time>
+              <time dateTime={f.at} className="text-[13px] text-muted tabular-nums" suppressHydrationWarning>{fm.shortDate(f.at)}</time>
               <div className="min-w-0">
                 <div className="flex items-start gap-2">
                   <Icon className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden="true" />
-                  <span className="font-medium">{f.href ? <Link href={f.href} className="hover:underline">{f.title}</Link> : f.title}</span>
+                  <span className="font-medium">{f.href ? <Link href={f.href} className="hover:underline">{tx.title}</Link> : tx.title}</span>
                 </div>
-                {f.detail && <p className="mt-0.5 whitespace-pre-line break-words pl-6 text-muted">{f.detail}</p>}
+                {tx.detail && <p className="mt-0.5 whitespace-pre-line break-words pl-6 text-muted">{tx.detail}</p>}
                 {f.citations.some((c) => c.href) && (
                   <div className="mt-1.5 flex flex-wrap gap-1 pl-6">{f.citations.filter((c) => c.href).map((c, i) => <Cite key={i} c={c} n={i + 1} />)}</div>
                 )}

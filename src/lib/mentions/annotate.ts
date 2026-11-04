@@ -187,9 +187,11 @@ export async function commitAnnotations(v: Viewer, input: CommitInput): Promise<
       return { changeSetId: proposed.id, nodes, applied: d.applied, via: "change_set" };
     }
     if (d.conflicts.length) throw new CommitError(409, d.error ?? "Something in the graph changed while you were writing. Look again and send once more.");
-    // Versioning not available yet: fall through to applying the same ops directly, with provenance.
+    // The proposal stays in /changes; nothing is applied around it.
+    throw new CommitError(400, d.error ?? "This couldn't be added to the graph.");
   }
-  return applyDirect(v, ops, plan, nodeIds, { growModel, changeSetId: proposed?.id ?? null });
+  // Versioning not available: apply the same ops directly, with provenance.
+  return applyDirect(v, ops, plan, nodeIds, { growModel, changeSetId: null });
 }
 
 /** The same ops, applied one by one through GBrain (provenance on every write) and the meta model. */

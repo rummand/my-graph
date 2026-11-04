@@ -8,12 +8,13 @@ import { loadNodeDetail } from "@/lib/gbrain/detail";
 import { getMeta } from "@/lib/meta";
 import { Avatar, Badge, buttonClass } from "@/components/ui";
 import { FactRow, ProvenancePanel, formatWhen, sentenceCase, typeLabel } from "@/components/provenance";
-import { HistoryPanel, WhoSaid } from "@/components/history";
+import { HistoryPanel, WhoSaid, WhoSaidField } from "@/components/history";
 import { scopeOf } from "@/lib/graphs/pure";
 import { getLocale, getT } from "@/lib/i18n";
 import { MergeSuggestions, NodeEditor, NodeMark } from "@/components/graph";
 import { MemoryPanel } from "@/components/memory/memory-panel";
 import { memoryAllowed } from "@/lib/memory";
+import { AlsoInSection } from "@/components/links/also-in";
 
 export const dynamic = "force-dynamic";
 
@@ -146,7 +147,9 @@ export default async function NodePage({ params }: Props) {
           <ProvenancePanel items={d.provenance.node} agents={d.agents} title={t("graph.node.whereFrom", { name: node.label })}
             className="rounded-lg bg-surface p-5" emptyText={t("graph.node.noRecords")} t={t} locale={locale} />
           <WhoSaid name={node.label} items={allProvenance} agents={d.agents} t={t} locale={locale} className="px-1" />
+          <WhoSaidField nodeId={node.id} className="px-1" />
           <HistoryPanel v={v} subjectId={node.id} name={node.label} className="px-1" />
+          <AlsoInSection nodeId={node.id} hrefBase={node.type === "person" ? "/people/" : "/node/"} className="px-1" />
           {memoryAllowed(v) && <MemoryPanel title={t("graph.node.memory")} aboutNodeId={node.id} aboutName={node.type === "person" ? node.label.split(" ")[0] : node.label} />}
           {d.mergeSuggestions.length > 0 && (
             <MergeSuggestions nodeId={node.id} nodeLabel={node.label}

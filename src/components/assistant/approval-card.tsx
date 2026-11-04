@@ -5,6 +5,7 @@ import { Check, X } from "lucide-react";
 import { clsx } from "clsx";
 import { Button, CitationChip } from "@/components/ui";
 import type { Citation } from "@/db/schema";
+import { useT } from "@/lib/i18n/client";
 
 export type Decision = "approve" | "always" | "deny";
 
@@ -30,6 +31,7 @@ export function ApprovalCard({
   className?: string;
   compact?: boolean;
 }) {
+  const t = useT();
   const [busy, setBusy] = useState<Decision | null>(null);
   const [done, setDone] = useState<{ d: Decision; label?: string; href?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +43,7 @@ export function ApprovalCard({
       if (r && r.ok === false) throw new Error();
       setDone({ d, label: r?.label, href: r?.href });
     } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : "That didn't go through. Try again.");
+      setError(e instanceof Error && e.message ? e.message : t("common.approval.failed"));
     } finally {
       setBusy(null);
     }
@@ -53,10 +55,10 @@ export function ApprovalCard({
         {done ? (
           <motion.p key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 text-sm text-muted">
             {done.d === "deny" ? <X className="size-4" aria-hidden /> : <Check className="size-4 text-accent" aria-hidden />}
-            {done.d === "deny" ? "Dismissed. It won't suggest this again." : (
+            {done.d === "deny" ? t("common.approval.dismissed") : (
               <span>
-                {done.label ?? "Saved."}{done.d === "always" && " It will do this without asking next time."}
-                {done.href && <> <a href={done.href} className="text-accent hover:underline">Open</a></>}
+                {done.label ?? t("common.approval.saved")}{done.d === "always" && t("common.approval.alwaysAfter")}
+                {done.href && <> <a href={done.href} className="text-accent hover:underline">{t("common.approval.open")}</a></>}
               </span>
             )}
           </motion.p>
@@ -81,9 +83,9 @@ export function ApprovalCard({
               </div>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button size="sm" onClick={() => decide("approve")} disabled={!!busy}>{busy === "approve" ? "Saving…" : "Approve"}</Button>
-              {alwaysLabel && <Button size="sm" variant="secondary" onClick={() => decide("always")} disabled={!!busy}>{busy === "always" ? "Saving…" : alwaysLabel}</Button>}
-              <Button size="sm" variant="ghost" onClick={() => decide("deny")} disabled={!!busy}>Deny</Button>
+              <Button size="sm" onClick={() => decide("approve")} disabled={!!busy}>{busy === "approve" ? t("common.approval.saving") : t("common.approval.approve")}</Button>
+              {alwaysLabel && <Button size="sm" variant="secondary" onClick={() => decide("always")} disabled={!!busy}>{busy === "always" ? t("common.approval.saving") : alwaysLabel}</Button>}
+              <Button size="sm" variant="ghost" onClick={() => decide("deny")} disabled={!!busy}>{t("common.approval.deny")}</Button>
               {error && <span role="alert" className="text-sm text-danger">{error}</span>}
             </div>
           </motion.div>

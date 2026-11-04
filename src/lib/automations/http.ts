@@ -99,7 +99,7 @@ export const activityQuery = z.object({
 export const settingsPatchBody = z.object({
   autoSaveMemories: z.boolean().optional(),
   alwaysAllow: z.array(z.string().trim().min(1).max(80)).max(50).optional(),
-  capabilities: z.partialRecord(z.enum(["library", "timeline", "people", "wiki_write", "reminders"]), z.boolean()).optional(),
+  capabilities: z.partialRecord(z.enum(["library", "timeline", "people", "wiki_write", "reminders", "web"]), z.boolean()).optional(),
   tone: z.enum(["warm", "brief", "detailed"]).optional(),
   dailySuggestionCap: z.number().int().min(0, "Use 0 or more.").max(50, "Keep it at 50 or fewer a day.").optional(),
   onboarded: z.literal(true).optional(),

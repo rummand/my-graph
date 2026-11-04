@@ -6,12 +6,15 @@
  */
 import { forceCollide, forceRadial, forceSimulation, forceX, forceY, type SimulationNodeDatum } from "d3";
 import { CIRCLE_LABELS, type Circle } from "@/lib/meta/types";
+import { getTemplate, type GraphTemplate } from "@/lib/templates/templates";
 
 /**
  * Ring order from the centre out. School and care share a ring. Ring labels use the names of the circle filters
  * above the map (CIRCLE_LABELS); the shared ring names both, briefly, so it still fits at the top of its ring.
  */
-export const RINGS: { key: string; circles: Circle[]; label: string }[] = [
+export type RingDef = { key: string; circles: string[]; label: string };
+
+export const RINGS: RingDef[] = [
   { key: "family", circles: ["family"], label: CIRCLE_LABELS.family },
   { key: "close", circles: ["close"], label: CIRCLE_LABELS.close },
   { key: "school_care", circles: ["school", "care"], label: "School, daycare & health" },
@@ -20,9 +23,57 @@ export const RINGS: { key: string; circles: Circle[]; label: string }[] = [
   { key: "other", circles: ["other"], label: CIRCLE_LABELS.other },
 ];
 
-export function ringOf(circle: string | null | undefined): number {
-  const i = RINGS.findIndex((r) => r.circles.includes((circle ?? "other") as Circle));
-  return i === -1 ? RINGS.length - 1 : i;
+/** The family rings, under another name so `layoutCircles` can take a graph's own. */
+const RINGS_DEFAULT = RINGS;
+
+export function ringOf(circle: string | null | undefined, rings: RingDef[] = RINGS): number {
+  const i = rings.findIndex((r) => r.circles.includes(circle ?? "other"));
+  return i === -1 ? rings.length - 1 : i;
+}
+
+/**
+ * The rings a graph draws, from the centre out. A family graph keeps its own order (school and care share a ring);
+ * every other graph uses its template's circles in the template's order (a Work graph: team, managers, clients …).
+ * Labels are the template's English names; the UI swaps in the reader's language.
+ */
+export function ringsFor(kind: string | null | undefined): RingDef[] {
+  const t = getTemplate(kind);
+  if (t.kind === "family") return RINGS;
+  return t.circles.map((c) => ({ key: c.key, circles: [c.key], label: c.label }));
+}
+
+/**
+ * When a circle isn't one the graph uses, the closest one it does (a "work" person in a Work graph is on the team, a
+ * "social" one in a partner graph among friends). Anything left lands in the graph's outermost circle.
+ */
+const NEAREST: Record<string, string[]> = {
+  family: ["family", "us", "close"],
+  close: ["close", "friends", "us", "team"],
+  school: ["school", "care", "social", "friends", "network", "other"],
+  care: ["care", "social", "friends", "network", "other"],
+  social: ["social", "friends", "network", "other"],
+  work: ["work", "team", "network", "other"],
+  other: ["other", "network", "stakeholders", "friends"],
+  team: ["team", "work", "close"],
+  manager: ["manager", "stakeholders", "work", "team"],
+  clients: ["clients", "stakeholders", "network", "work"],
+  partners: ["partners", "suppliers", "network", "work"],
+  suppliers: ["suppliers", "partners", "network", "work"],
+  stakeholders: ["stakeholders", "manager", "network", "work"],
+  network: ["network", "work", "other", "social"],
+  us: ["us", "family", "close"],
+  friends: ["friends", "social", "close"],
+  places: ["places", "other"],
+};
+
+/** The circle a person sits in within this graph: `c` when the graph uses it, else its nearest neighbour there. */
+export function circleIn(t: GraphTemplate, c: string | null | undefined): string {
+  if (t.kind === "family") return normaliseCircle(c);
+  const have = new Set(t.circles.map((x) => x.key));
+  const key = c ?? "other";
+  if (have.has(key)) return key;
+  for (const k of NEAREST[key] ?? []) if (have.has(k)) return k;
+  return t.circles[t.circles.length - 1]?.key ?? "other";
 }
 
 export function normaliseCircle(c: string | null | undefined): Circle {
@@ -108,12 +159,13 @@ function inLabelGap(p: Placed, radius: number, gap: number): boolean {
  * Collision-free polar layout around (0,0). `centerRadius` is the space the centre avatar needs.
  * Rings are only drawn for circles that have people, so the picture stays compact.
  */
-export function layoutCircles(items: PlaceItem[], opts: { centerRadius?: number; ringGap?: number; simulate?: boolean } = {}): Layout {
+export function layoutCircles(items: PlaceItem[], opts: { centerRadius?: number; ringGap?: number; simulate?: boolean; rings?: RingDef[] } = {}): Layout {
   const centerRadius = opts.centerRadius ?? 34;
   const ringGap = opts.ringGap ?? 14;
+  const RINGS = opts.rings?.length ? opts.rings : RINGS_DEFAULT;
   const byRing = new Map<number, PlaceItem[]>();
   for (const it of items) {
-    const r = ringOf(it.circle);
+    const r = ringOf(it.circle, RINGS);
     (byRing.get(r) ?? byRing.set(r, []).get(r)!).push(it);
   }
   const placed: Placed[] = [];

@@ -64,3 +64,53 @@ export const STARTER_RECIPES: StarterRecipe[] = [
     prompt: "Who in our family and close circle haven't we seen or talked to for longer than usual? List them with when we were last in touch, and suggest a simple way to reconnect with each (a call, a visit, inviting them for dinner), keeping our family rules and plans in mind.",
   },
 ];
+
+/** Starters for work-like graphs (work, project, partner): no family, school or packing recipes. */
+export const WORK_STARTER_RECIPES: StarterRecipe[] = [
+  {
+    name: "Weekly status",
+    description: "What moved this week, what is due next week, and what is stuck.",
+    prompt: "Write a short weekly status for this graph. Per project or team: what happened this past week (decisions, meetings, documents), what is due in the next 7 days, and what is blocked or waiting on someone. End with the decisions that need someone's call. Cite where each item came from.",
+  },
+  {
+    name: "Prepare for a meeting with <who>",
+    description: "Background, open points and questions before you meet someone.",
+    prompt: "Help me prepare for my next meeting with <who>. Summarise who they are and how we work together, what we last discussed or agreed, open points and anything they are waiting on from us. Finish with 3–5 things to raise. Cite where each item came from.",
+  },
+  {
+    name: "Open decisions and risks",
+    description: "Decisions not yet made and risks worth watching, with who owns them.",
+    prompt: "List the decisions that are still open and the risks worth watching in this graph. For each: what it is about, who owns it, since when, and what it depends on. Put the most urgent first. Cite where each item came from.",
+  },
+  {
+    name: "Who haven't I been in touch with",
+    description: "Colleagues, clients and partners you haven't spoken to for a while.",
+    prompt: "Which colleagues, clients and partners in this graph haven't I been in touch with for longer than usual? List them with when we were last in touch and what we last talked about, and suggest a simple reason to reach out to each.",
+  },
+];
+
+/** Starters for personal, shared and other graphs: nothing assumes a family or a job. */
+export const GENERAL_STARTER_RECIPES: StarterRecipe[] = [
+  {
+    name: "Weekly summary",
+    description: "What happened this week and what is coming next week.",
+    prompt: "Write a short summary of this past week in this graph: what happened (notes, documents, events) and what is coming up in the next 7 days. End with anything that needs a decision. Cite where each item came from.",
+  },
+  {
+    name: "Everything about <topic>",
+    description: "One page on a person, place or topic from what this graph knows.",
+    prompt: "Tell me everything this graph knows about <topic>: the key facts, the people and places connected to it, what happened when, and what is still open. Cite where each item came from.",
+  },
+  {
+    name: "Who haven't I seen in a while",
+    description: "People you've been out of touch with longer than usual.",
+    prompt: "Who in this graph haven't I seen or talked to for longer than usual? List them with when we were last in touch, and suggest a simple way to reconnect with each.",
+  },
+];
+
+/** The starter recipes for a graph, following its template: a Work graph never gets family recipes. */
+export function starterRecipesFor(graphKind: string | null | undefined): StarterRecipe[] {
+  if (graphKind === "family") return STARTER_RECIPES;
+  if (graphKind === "work" || graphKind === "project" || graphKind === "partner") return WORK_STARTER_RECIPES;
+  return GENERAL_STARTER_RECIPES;
+}

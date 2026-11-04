@@ -41,12 +41,10 @@ type Table = "kinds" | "relations" | "attributes";
 /* ── Keys ─────────────────────────────────────────────────────────────────────────────────────────────── */
 
 /**
- * The household has one key namespace per table. When another graph of the household already uses a key for its own
- * element, this graph gets a suffixed key (`department__1a2b3c`) so the two never meet; labels stay the same.
+ * Keys are unique per graph (unique index on household, graph, …, key — migration 0009): another graph of the
+ * household may use the same key for its own element, and the two never meet because reads only see built-ins,
+ * household-wide rows and the viewer's graph's own rows.
  */
-function graphKey(key: string, graphId: string) {
-  return `${key.slice(0, 38)}__${graphId.replace(/-/g, "").slice(0, 6)}`;
-}
 
 /* ── Applying ops (delivery) ──────────────────────────────────────────────────────────────────────────── */
 
@@ -59,8 +57,8 @@ const ATTR_TYPES = new Set(["text", "longtext", "date", "number", "boolean", "en
 
 /**
  * Apply one meta op for the viewer's graph as an active element (or `status: "candidate"`). Idempotent: an element
- * with the key that this graph already sees is activated, not duplicated. Returns the key actually used, which differs
- * from the op's when another graph owns that key (callers must use it for nodes of that kind).
+ * with the key that this graph already sees is activated, not duplicated. Returns the key used (always the op's key now that keys are
+ * unique per graph).
  */
 export async function applyMetaOp(v: Viewer, op: MetaOp, ctx: { changeSetId?: string | null; origin?: "emergent" | "manual" | "template"; status?: "active" | "candidate"; evidence?: number } = {}): Promise<{ key: string; id: string; created: boolean }> {
   if (!v.graphId) throw new MetaError(403, "Pick a graph to work in first.");
@@ -72,7 +70,7 @@ export async function applyMetaOp(v: Viewer, op: MetaOp, ctx: { changeSetId?: st
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`my-graph:meta:${household}`}))`);
     if (op.op === "addKind") {
       const nodeType = op.nodeType as never;
-      const rows = await tx.select().from(metaKinds).where(and(eq(metaKinds.nodeType, nodeType), inArray(metaKinds.key, [op.key, graphKey(op.key, graphId)]),
+      const rows = await tx.select().from(metaKinds).where(and(eq(metaKinds.nodeType, nodeType), eq(metaKinds.key, op.key),
         sql`(${metaKinds.householdId} is null or ${metaKinds.householdId} = ${household})`));
       const builtin = rows.find((r) => r.householdId === null && r.key === op.key);
       const mine = rows.find((r) => r.householdId === household && (!r.graphId || r.graphId === graphId));
@@ -83,8 +81,7 @@ export async function applyMetaOp(v: Viewer, op: MetaOp, ctx: { changeSetId?: st
         return { key: mine.key, id: mine.id, created: false };
       }
       if (builtin) return { key: builtin.key, id: builtin.id, created: false };
-      const taken = rows.some((r) => r.householdId === household && r.key === op.key);
-      const key = taken ? graphKey(op.key, graphId) : op.key;
+      const key = op.key;
       const [row] = await tx.insert(metaKinds).values({
         householdId: household, graphId, nodeType, key, label: op.label, pluralLabel: op.pluralLabel ?? null, description: op.description ?? null,
         parentKey: op.parentKey ?? null, sortOrder: 6000, builtin: false, status, origin, evidenceCount: ctx.evidence ?? 1, firstSeenAt: now,
@@ -93,7 +90,7 @@ export async function applyMetaOp(v: Viewer, op: MetaOp, ctx: { changeSetId?: st
       return { key, id: row.id, created: true };
     }
     if (op.op === "addRelationType") {
-      const rows = await tx.select().from(metaRelations).where(and(inArray(metaRelations.key, [op.key, graphKey(op.key, graphId)]),
+      const rows = await tx.select().from(metaRelations).where(and(eq(metaRelations.key, op.key),
         sql`(${metaRelations.householdId} is null or ${metaRelations.householdId} = ${household})`));
       const builtin = rows.find((r) => r.householdId === null && r.key === op.key);
       const mine = rows.find((r) => r.householdId === household && (!r.graphId || r.graphId === graphId));
@@ -104,8 +101,7 @@ export async function applyMetaOp(v: Viewer, op: MetaOp, ctx: { changeSetId?: st
         return { key: mine.key, id: mine.id, created: false };
       }
       if (builtin) return { key: builtin.key, id: builtin.id, created: false };
-      const taken = rows.some((r) => r.householdId === household && r.key === op.key);
-      const key = taken ? graphKey(op.key, graphId) : op.key;
+      const key = op.key;
       const [row] = await tx.insert(metaRelations).values({
         householdId: household, graphId, key, label: op.label, inverseLabel: op.symmetric ? op.label : op.inverseLabel, category: op.category ?? "other",
         fromTypes: op.fromTypes ?? [], toTypes: op.toTypes ?? [], symmetric: !!op.symmetric, builtin: false, status, origin,
@@ -114,7 +110,7 @@ export async function applyMetaOp(v: Viewer, op: MetaOp, ctx: { changeSetId?: st
       return { key, id: row.id, created: true };
     }
     const kindKey = op.kindKey ?? null;
-    const rows = await tx.select().from(metaAttributes).where(and(eq(metaAttributes.nodeType, op.nodeType as never), inArray(metaAttributes.key, [op.key, graphKey(op.key, graphId)]),
+    const rows = await tx.select().from(metaAttributes).where(and(eq(metaAttributes.nodeType, op.nodeType as never), eq(metaAttributes.key, op.key),
       kindKey ? eq(metaAttributes.kindKey, kindKey) : isNull(metaAttributes.kindKey), sql`(${metaAttributes.householdId} is null or ${metaAttributes.householdId} = ${household})`));
     const builtin = rows.find((r) => r.householdId === null && r.key === op.key);
     const mine = rows.find((r) => r.householdId === household && (!r.graphId || r.graphId === graphId));
@@ -125,8 +121,7 @@ export async function applyMetaOp(v: Viewer, op: MetaOp, ctx: { changeSetId?: st
       return { key: mine.key, id: mine.id, created: false };
     }
     if (builtin) return { key: builtin.key, id: builtin.id, created: false };
-    const taken = rows.some((r) => r.householdId === household && r.key === op.key);
-    const key = taken ? graphKey(op.key, graphId) : op.key;
+    const key = op.key;
     const [row] = await tx.insert(metaAttributes).values({
       householdId: household, graphId, nodeType: op.nodeType as never, kindKey, key, label: op.label,
       dataType: (ATTR_TYPES.has(op.type) ? op.type : "text") as never, options: [], required: false, sensitive: false, sortOrder: 6000, builtin: false,

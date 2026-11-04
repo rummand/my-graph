@@ -61,17 +61,13 @@ export async function ensureTemplateSeeded(v: GraphRef): Promise<void> {
       tx.select().from(metaRelations).where(scope(metaRelations)),
       tx.select().from(metaAttributes).where(scope(metaAttributes)),
     ]);
-    // Rows that count as "already there" for this graph: built-ins, household-wide rows and this graph's own.
+    // Rows that count as "already there" for this graph: built-ins, household-wide rows and this graph's own. Another
+    // graph's template rows stay that graph's: keys are unique per graph, so this graph gets its own copy.
     const visible = <R extends { householdId: string | null; graphId: string | null }>(rows: R[]) => rows.filter((r) => r.householdId === null || !r.graphId || r.graphId === graphId);
     const missing = missingFromTemplate(t, { kinds: visible(kinds), relations: visible(relations), attributes: visible(attributes) });
     const now = new Date();
 
     for (const [i, k] of missing.kinds.entries()) {
-      const other = kinds.find((r) => r.householdId === hh && r.nodeType === k.nodeType && r.key === k.key);
-      if (other) { // seeded for another graph: share it
-        if (other.origin === "template") await tx.update(metaKinds).set({ graphId: null }).where(eq(metaKinds.id, other.id));
-        continue;
-      }
       await tx.insert(metaKinds).values({
         householdId: hh, graphId, nodeType: k.nodeType, key: k.key, label: k.label, pluralLabel: k.pluralLabel ?? null,
         description: k.description ?? null, circle: k.circle ?? null, parentKey: k.parentKey ?? null, icon: k.icon ?? null,
@@ -79,27 +75,17 @@ export async function ensureTemplateSeeded(v: GraphRef): Promise<void> {
       }).onConflictDoNothing();
     }
     for (const r of missing.relations) {
-      const other = relations.find((x) => x.householdId === hh && x.key === r.key);
-      if (other) {
-        if (other.origin === "template") await tx.update(metaRelations).set({ graphId: null }).where(eq(metaRelations.id, other.id));
-        continue;
-      }
       await tx.insert(metaRelations).values({
         householdId: hh, graphId, key: r.key, label: r.label, inverseLabel: r.symmetric ? r.label : r.inverseLabel, category: r.category,
         fromTypes: r.fromTypes, toTypes: r.toTypes, symmetric: !!r.symmetric, builtin: false, status: "active", origin: "template", firstSeenAt: now,
       }).onConflictDoNothing();
     }
     for (const [i, a] of missing.attributes.entries()) {
-      const other = attributes.find((x) => x.householdId === hh && x.nodeType === a.nodeType && (x.kindKey ?? null) === (a.kindKey ?? null) && x.key === a.key);
-      if (other) {
-        if (other.origin === "template") await tx.update(metaAttributes).set({ graphId: null }).where(eq(metaAttributes.id, other.id));
-        continue;
-      }
       await tx.insert(metaAttributes).values({
         householdId: hh, graphId, nodeType: a.nodeType, kindKey: a.kindKey ?? null, key: a.key, label: a.label, dataType: a.dataType,
         options: a.options ?? [], required: false, sensitive: !!a.sensitive, sortOrder: 3000 + i * 10, builtin: false,
         status: "active", origin: "template", firstSeenAt: now,
-      });
+      }).onConflictDoNothing();
     }
   });
   seeded.add(graphId);

@@ -76,6 +76,10 @@ const messages: MessageTree = {
     type: { person: "Person", project: "Projekt", organization: "Organisation" },
   },
 
+  connections: {
+    title: "Forbindelser, der har brug for dig",
+    line: "{name} er holdt op med at tjekke. Åbn den for at se hvorfor og rette det.",
+  },
   changes: {
     title: "Foreslåede ændringer",
     count: { one: "{count} ændring", other: "{count} ændringer" },

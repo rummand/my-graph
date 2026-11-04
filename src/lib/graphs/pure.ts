@@ -15,7 +15,7 @@ export type Role = "owner" | "parent" | "child" | "guest";
 export type GraphKind = "family" | "personal" | "work" | "shared" | "other" | "partner" | "project";
 export type GraphRole = "owner" | "editor" | "viewer";
 
-export const GRAPH_KINDS: GraphKind[] = ["family", "personal", "work", "shared", "other"];
+export const GRAPH_KINDS: GraphKind[] = ["family", "personal", "work", "partner", "project", "shared", "other"];
 export const GRAPH_ROLES: GraphRole[] = ["owner", "editor", "viewer"];
 export const GRAPH_COOKIE = "mg_graph";
 

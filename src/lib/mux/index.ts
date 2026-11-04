@@ -26,7 +26,7 @@ export type MuxResult = { text: string; model: string | null; route: string | nu
 
 /* ── Transport ───────────────────────────────────────────────────────────────────────────────────────── */
 
-const TIMEOUT = { complete: 120_000, connect: 45_000, idle: 90_000, embed: 30_000, transcribe: 600_000, health: 2_500 };
+const TIMEOUT = { complete: 120_000, connect: 45_000, idle: 90_000, embed: 30_000, transcribe: 600_000, health: 2_500, search: 20_000, read: 25_000 };
 
 function requireKey(): ReturnType<typeof muxConfig> {
   const cfg = muxConfig();
@@ -206,6 +206,56 @@ export async function transcribe(file: Blob, filename: string, meta: MuxCallMeta
     .filter((s) => typeof s.text === "string")
     .map((s) => ({ start: Number(s.start) || 0, end: Number(s.end) || Number(s.start) || 0, text: String(s.text).trim() }));
   return { text: (data.text ?? segments.map((s) => s.text).join(" ")).trim(), segments };
+}
+
+/* ── Web: search and read (mux's shared services: SearXNG and its page reader) ─────────────────────────── */
+
+export type WebResult = { title: string; url: string; snippet: string; engine: string | null; published: string | null };
+export type WebPage = { url: string; title: string; text: string };
+
+/**
+ * Search the web through mux's `/v1/search`. The query leaves the house: callers minimise it first
+ * (src/lib/web: names and the topic, never health, CPR or private notes). Throws MuxError on failure.
+ */
+export async function search(opts: { query: string; limit?: number; language?: string; meta: MuxCallMeta; signal?: AbortSignal }): Promise<WebResult[]> {
+  const { apiKey } = requireKey();
+  const body: Record<string, unknown> = { query: opts.query.slice(0, 400), limit: Math.min(Math.max(opts.limit ?? 6, 1), 20) };
+  if (opts.language) body.language = opts.language;
+  const res = await post("/v1/search", {
+    body: JSON.stringify(body),
+    headers: { "content-type": "application/json", ...buildHeaders(opts.meta, apiKey, ["web"]) },
+    signal: anySignal([AbortSignal.timeout(TIMEOUT.search), opts.signal]),
+  });
+  const data = (await res.json().catch(() => null)) as { results?: unknown } | null;
+  return webResults(data?.results);
+}
+
+/** Read one public page as plain text through mux's `/v1/read`. Throws MuxError (e.g. LinkedIn answers 999). */
+export async function read(opts: { url: string; maxChars?: number; meta: MuxCallMeta; signal?: AbortSignal }): Promise<WebPage> {
+  const { apiKey } = requireKey();
+  const res = await post("/v1/read", {
+    body: JSON.stringify({ url: opts.url, max_chars: Math.min(Math.max(opts.maxChars ?? 12_000, 1000), 100_000) }),
+    headers: { "content-type": "application/json", ...buildHeaders(opts.meta, apiKey, ["web"]) },
+    signal: anySignal([AbortSignal.timeout(TIMEOUT.read), opts.signal]),
+  });
+  const data = (await res.json().catch(() => null)) as { url?: unknown; title?: unknown; text?: unknown } | null;
+  if (!data || typeof data.text !== "string") throw new MuxError(502, "bad_response", "mux sent a page without text.", readMuxHeaders(res.headers).requestId);
+  return { url: typeof data.url === "string" && data.url ? data.url : opts.url, title: typeof data.title === "string" ? data.title : "", text: data.text };
+}
+
+/** mux's search results → typed results (unknown fields dropped, junk skipped). */
+export function webResults(raw: unknown): WebResult[] {
+  if (!Array.isArray(raw)) return [];
+  const out: WebResult[] = [];
+  for (const r of raw as Record<string, unknown>[]) {
+    if (!r || typeof r !== "object" || typeof r.url !== "string" || !/^https?:\/\//i.test(r.url)) continue;
+    out.push({
+      url: r.url, title: typeof r.title === "string" && r.title.trim() ? r.title.trim() : r.url,
+      snippet: typeof r.snippet === "string" ? r.snippet : "", engine: typeof r.engine === "string" ? r.engine : null,
+      published: typeof r.published === "string" ? r.published : null,
+    });
+  }
+  return out;
 }
 
 export type MuxHealth = {

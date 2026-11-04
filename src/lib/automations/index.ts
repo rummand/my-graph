@@ -14,6 +14,7 @@
  */
 import type { Viewer } from "@/lib/auth";
 import type { Citation } from "@/db/schema";
+import { scopeOf } from "@/lib/graphs/pure";
 
 export type SuggestionKind = "fact" | "reminder" | "merge" | "rule" | "memory" | "wiki_edit" | "nudge";
 export type Suggestion = {
@@ -42,6 +43,17 @@ export const DEFAULT_SETTINGS: AssistantSettings = {
   autoSaveMemories: true, alwaysAllow: [], capabilities: { library: true, timeline: true, people: true, wiki_write: true, reminders: true },
   tone: "warm", dailySuggestionCap: 5, onboardedAt: null,
 };
+
+/**
+ * Capability "web" (search and read public pages for an answer). Default on for owners and parents, off for children
+ * and guests; a person can switch it off in Assistant settings (`capabilities.web: false`). Children and guests stay
+ * off even if the flag says on: what they ask must not leave the graph.
+ */
+export function webAllowed(v: Viewer, capabilities: Record<string, boolean> | undefined): boolean {
+  const role = scopeOf(v).role;
+  if (role !== "owner" && role !== "parent") return false;
+  return (capabilities ?? {}).web !== false;
+}
 
 export type Recipe = { id: string; name: string; description: string; prompt: string; ownerId: string; visibility: "private" | "parents" | "household" };
 

@@ -20,7 +20,9 @@ import graphs from "./graphs";
 import onboarding from "./onboarding";
 import model from "./model";
 import mention from "./mention";
+import artifacts from "./artifacts";
+import links from "./links";
 
-const en: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, wiki, graph, changes, history, memory, automations, connections, graphs, onboarding, model, mention };
+const en: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, wiki, graph, changes, history, memory, automations, connections, graphs, onboarding, model, mention, links, artifacts };
 
 export default en;

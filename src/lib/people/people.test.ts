@@ -125,7 +125,7 @@ describe("attention rules", () => {
 
 describe("circle layout", () => {
   it("orders rings family → close → school/care → social → work → other", () => {
-    expect(["family", "close", "school", "care", "social", "work", "other", "weird"].map(ringOf)).toEqual([0, 1, 2, 2, 3, 4, 5, 5]);
+    expect(["family", "close", "school", "care", "social", "work", "other", "weird"].map((c) => ringOf(c))).toEqual([0, 1, 2, 2, 3, 4, 5, 5]);
   });
   it("places many differently sized people without overlap", () => {
     const circles = ["family", "close", "school", "care", "social", "work", "other"];

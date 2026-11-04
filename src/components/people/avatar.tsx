@@ -1,6 +1,9 @@
+"use client";
 import { clsx } from "clsx";
 import { Avatar } from "@/components/ui";
-import { WELLBEING_VAR, wellbeingBand, WELLBEING_WORDS } from "@/lib/people/circles";
+import { useT } from "@/lib/i18n/client";
+import { WELLBEING_VAR, wellbeingBand } from "@/lib/people/circles";
+import { wellbeingWord } from "@/lib/people/words";
 
 /**
  * A person's own-colour avatar (from the UI kit) with their latest check-in as a small status dot, and an optional
@@ -27,12 +30,13 @@ export function PersonAvatar({ id, label, size = 32, score, overdue, className }
 
 /** "Good" with its status dot; "No check-in yet" in grey. */
 export function WellbeingWord({ score, className }: { score: number | null | undefined; className?: string }) {
-  if (score == null) return <span className={clsx("text-muted", className)}>No check-in yet</span>;
+  const t = useT();
+  if (score == null) return <span className={clsx("text-muted", className)}>{t("people.map.noCheckInYet")}</span>;
   const band = wellbeingBand(score);
   return (
     <span className={clsx("inline-flex items-center gap-1.5", band === "warn" && "text-danger", className)}>
       <span aria-hidden="true" className="inline-block size-2 rounded-full" style={{ background: WELLBEING_VAR[band] }} />
-      {WELLBEING_WORDS[score]}
+      {wellbeingWord(t, score)}
     </span>
   );
 }

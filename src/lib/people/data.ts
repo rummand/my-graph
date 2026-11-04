@@ -11,8 +11,9 @@ import { CATEGORY_LABELS } from "@/lib/meta/types";
 import { scopeOf } from "@/lib/graphs/pure";
 import { canModify, canSee, isParentRole, visibleWhere } from "./access";
 import { attentionItems, nextBirthday } from "./attention";
-import { normaliseCircle } from "./circles";
-import { memberCircle, relationsToCenter, relationToYou, type PathEdge, type PathNode } from "./relpath";
+import { circleIn } from "./circles";
+import { memberCircle, relationsToCenter, relationToYou, relationToYouParts, type PathEdge, type PathNode } from "./relpath";
+import { templateFor } from "@/lib/templates";
 import { memberSelfNodes } from "@/lib/graphs/self";
 import type {
   CenterOption, Citation, FeedItem, Observation, PeopleOverview, PersonProfile, PersonSummary, RelationshipGroup,
@@ -64,13 +65,15 @@ async function memberPersonIds(v: Viewer): Promise<Set<string>> {
   return new Set((await memberSelfNodes(v.graphId)).values());
 }
 
+/** The person's circle in this graph: their kind's circle, else what the relation to you says, in the graph's own circles. */
 function circleFor(meta: Meta, n: Pick<NodeRow, "kind">, relCategory: string | undefined, isMember: boolean, graphKind: Viewer["graphKind"]): string {
+  const t = templateFor({ graphKind });
   const k = meta.kind("person", n.kind);
-  if (k?.circle) return normaliseCircle(k.circle);
+  if (k?.circle) return circleIn(t, k.circle);
   const byCat: Record<string, string> = { family: "family", school: "school", care: "care", social: "social", work: "work" };
-  if (relCategory && byCat[relCategory]) return normaliseCircle(byCat[relCategory]);
+  if (relCategory && byCat[relCategory]) return circleIn(t, byCat[relCategory]);
   // A fellow member with no recorded relation sits where the graph puts its people.
-  return normaliseCircle(isMember ? memberCircle(graphKind) : null);
+  return circleIn(t, isMember ? memberCircle(graphKind) : null);
 }
 
 type Built = {
@@ -189,6 +192,7 @@ export async function peopleOverview(v: Viewer, opts: { centerId?: string | null
   return {
     center, centers, people: b.people, attention,
     kinds: b.meta.kindsFor("person").map((k) => ({ key: k.key, label: k.label, circle: k.circle })),
+    template: templateFor(v).kind, family: scopeOf(v).family,
     generatedAt: now.toISOString(),
   };
 }
@@ -211,11 +215,12 @@ async function citationsFor(v: Viewer, subjectType: "node" | "edge", ids: string
     const seen = (c: Citation) => list.some((x) => x.title === c.title && x.href === c.href);
     const page = r.locator?.page ? `p${r.locator.page}` : undefined;
     if (r.sourceId && r.sourceTitle && canSee(v, { ownerId: r.srcOwner!, householdId: r.srcHh!, graphId: r.srcGraph, visibility: r.srcVis!, sensitive: r.srcSensitive! })) {
-      const c = { title: r.sourceTitle, href: `/library/${r.sourceId}`, detail: page, confidence: r.confidence < 1 ? r.confidence : undefined };
+      const c: Citation = { title: r.sourceTitle, href: `/library/${r.sourceId}`, detail: page, confidence: r.confidence < 1 ? r.confidence : undefined };
       if (!seen(c)) list.push(c);
     } else {
       const who = r.agentType === "user" ? "Added by hand" : r.agentType === "model" ? "Assistant" : "Rule";
-      const c = { title: r.sourceId ? "A source you can't see" : who, href: subjectType === "node" ? `/node/${r.subjectId}` : "", detail: r.createdAt.toISOString().slice(0, 10), confidence: r.confidence < 1 ? r.confidence : undefined };
+      const code: Citation["code"] = r.sourceId ? "hidden_source" : r.agentType === "user" ? "by_hand" : r.agentType === "model" ? "assistant" : "rule";
+      const c: Citation = { title: r.sourceId ? "A source you can't see" : who, code, href: subjectType === "node" ? `/node/${r.subjectId}` : "", detail: r.createdAt.toISOString().slice(0, 10), confidence: r.confidence < 1 ? r.confidence : undefined };
       if (!seen(c)) list.push(c);
     }
   }
@@ -229,7 +234,7 @@ export async function listObservations(v: Viewer, personId: string, opts: { kind
   return rows.map(({ o, authorName }) => ({
     id: o.id, personNodeId: o.personNodeId, ownerId: o.ownerId, kind: o.kind, score: o.score, note: o.note, tags: o.tags,
     at: o.at.toISOString(), sourceId: o.sourceId, authorKind: o.authorKind, visibility: o.visibility, sensitive: o.sensitive,
-    authorName: o.ownerId === v.id ? "You" : authorName,
+    authorName: o.ownerId === v.id ? "You" : authorName, byViewer: o.ownerId === v.id,
   }));
 }
 
@@ -278,10 +283,12 @@ export async function personProfile(v: Viewer, id: string): Promise<PersonProfil
     const category = r?.category ?? "other";
     if (category === "document" || category === "time") continue;
     const g = groups.get(category) ?? groups.set(category, { category, label: CATEGORY_LABELS[category] ?? category, items: [] }).get(category)!;
-    const toYou = other.id === b.viewerNodeId && id !== b.viewerNodeId
-      ? relationToYou(meta.model, e, { id: node.id, label: node.label, type: node.type, kind: node.kind }) : null;
+    const self = { id: node.id, label: node.label, type: node.type, kind: node.kind };
+    const isToYou = other.id === b.viewerNodeId && id !== b.viewerNodeId;
+    const toYou = isToYou ? relationToYou(meta.model, e, self) : null;
+    const toYouRole = isToYou ? relationToYouParts(meta.model, e, self) : null;
     g.items.push({
-      edgeId: e.id, relation: e.relation, label: meta.relationLabel(e.relation, out ? "out" : "in"), direction: out ? "out" : "in", toYou,
+      edgeId: e.id, relation: e.relation, label: meta.relationLabel(e.relation, out ? "out" : "in"), direction: out ? "out" : "in", toYou, toYouRole,
       other: { id: other.id, label: other.label, type: other.type, kind: other.kind, kindLabel: meta.kind(other.type, other.kind)?.label ?? null },
       status: e.status, confidence: e.confidence, citations: edgeCites.get(e.id) ?? [],
     });
@@ -291,11 +298,15 @@ export async function personProfile(v: Viewer, id: string): Promise<PersonProfil
 
   // Feed: observations, events involving them, documents mentioning them.
   const feed: FeedItem[] = obs.map((o) => ({
-    id: `o:${o.id}`, at: o.at, type: "observation" as const, observationKind: o.kind, score: o.score,
+    id: `o:${o.id}`, at: o.at, type: "observation" as const, observationKind: o.kind, score: o.score, tags: o.tags,
     title: obsTitle(o), detail: o.note, href: null,
-    citations: o.sourceId ? [{ title: "Source", href: `/library/${o.sourceId}` }] : [{ title: o.authorName ? `Logged by ${o.authorName}` : "Logged by hand", href: "" }],
+    citations: o.sourceId
+      ? [{ title: "Source", href: `/library/${o.sourceId}`, code: "source" as const }]
+      : [o.authorName
+        ? { title: `Logged by ${o.authorName}`, href: "", code: "logged_by" as const, who: o.byViewer ? undefined : o.authorName }
+        : { title: "Logged by hand", href: "", code: "logged_by_hand" as const }],
   }));
-  const milestones: PersonProfile["milestones"] = obs.filter((o) => o.kind === "milestone").map((o) => ({ id: o.id, at: o.at, title: o.note ?? "Milestone", href: null, source: "observation" }));
+  const milestones: PersonProfile["milestones"] = obs.filter((o) => o.kind === "milestone").map((o) => ({ id: o.id, at: o.at, title: o.note ?? "Milestone", href: null, source: "observation", untitled: !o.note }));
   for (const e of touching) {
     const other = otherById.get(e.fromId === id ? e.toId : e.fromId);
     if (!other) continue;
@@ -305,7 +316,8 @@ export async function personProfile(v: Viewer, id: string): Promise<PersonProfil
       if (other.kind === "milestone") milestones.push({ id: other.id, at: at.toISOString(), title: other.label, href: `/node/${other.id}`, source: "event" });
     } else if ((e.relation === "mentions" || e.relation === "about") && e.toId === id && (other.type === "document" || other.type === "source")) {
       feed.push({ id: `d:${e.id}`, at: (other.startAt ?? e.createdAt).toISOString(), type: "document", title: other.label,
-        detail: e.relation === "about" ? "About them" : "Mentions them", href: nodeHref(other), citations: edgeCites.get(e.id) ?? [] });
+        detail: e.relation === "about" ? "About them" : "Mentions them", docRelation: e.relation === "about" ? "about" : "mentions",
+        href: nodeHref(other), citations: edgeCites.get(e.id) ?? [] });
     }
   }
   feed.sort((a, b2) => b2.at.localeCompare(a.at));
@@ -322,6 +334,7 @@ export async function personProfile(v: Viewer, id: string): Promise<PersonProfil
     relationOptions: meta.model.relations.filter((r) => !r.hidden && (r.fromTypes.length === 0 || r.fromTypes.includes("person") || r.toTypes.length === 0 || r.toTypes.includes("person"))),
     kinds: meta.kindsFor("person"), nodeOptions, provenance: nodeCites.get(id) ?? [],
     viewer: { id: v.id, role: v.role, isParent: isParentRole(v) },
+    graph: { template: templateFor(v).kind, family: scopeOf(v).family },
   };
 }
 

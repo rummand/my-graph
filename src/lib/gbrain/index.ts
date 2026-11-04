@@ -19,6 +19,9 @@ import {
   normalizeRelation, noisyOr, rrfFuse, statusAfterReassert, toAnyPrefixTsQuery, toPrefixTsQuery, vectorLiteral,
 } from "./pure";
 import { ensureSearchIndexesOnce } from "./setup";
+import { afterCommit, ambientTx } from "@/lib/history/context";
+import { recordEvent, recordRows, recordSnapshots, snapshotScope, stampFor, type Stamp } from "@/lib/history/record";
+import { edgeSnap, nodeSnap } from "@/lib/history/pure";
 
 export type NodeType = "person" | "place" | "event" | "topic" | "document" | "source" | "organization" | "project" | "thing";
 export type Visibility = "private" | "parents" | "household";
@@ -56,11 +59,18 @@ export type NodeInput = {
   type: NodeType; kind?: string | null; label: string; aliases?: string[]; summary?: string; props?: Record<string, unknown>;
   startAt?: Date | null; endAt?: Date | null; timePrecision?: GNode["timePrecision"];
   visibility?: Visibility; sensitive?: boolean;
+  /**
+   * An id minted up front (a change set's addNode). With it, entity resolution is skipped — whoever proposed it has
+   * already resolved — and the node is created with exactly this id, or returned when it already exists.
+   */
+  id?: string;
 };
 
 export type EdgeInput = {
   fromId: string; toId: string; relation: string; props?: Record<string, unknown>;
   validFrom?: Date | null; validTo?: Date | null; confidence?: number; status?: EdgeStatus; visibility?: Visibility;
+  /** An id minted up front (a change set's addEdge); ignored when the same fact already exists. */
+  id?: string;
 };
 
 export type SearchHit = {
@@ -81,6 +91,24 @@ export class GBrainError extends Error {
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 type Exec = typeof db | Tx;
+
+/**
+ * Every write opens its transaction here: on its own, or — while a change set is being delivered — as a savepoint of
+ * the delivery's one transaction, so a delivery lands completely or not at all.
+ */
+function runTx<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+  const amb = ambientTx();
+  return amb ? amb.transaction(fn) : db.transaction(fn);
+}
+
+/** Who made this write, for the history: the surrounding remembering()/delivery, else what its provenance says. */
+function stampOf(v: Viewer, prov: Pick<ProvenanceInput, "agentType" | "agentId" | "activity"> | null): Stamp {
+  const kind = !prov || prov.agentType === "user" ? "person" : prov.agentType === "model" ? "assistant" : "system";
+  return stampFor({
+    actor: { kind, id: kind === "person" ? v.id : null, name: kind === "person" ? v.name : prov?.agentId ?? null },
+    context: prov ? `gbrain:${prov.activity}` : "gbrain",
+  });
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const isUuid = (s: string) => UUID.test(s);
@@ -161,7 +189,7 @@ function embedText(n: { label: string; aliases?: string[] | null; summary?: stri
 /** Fire-and-forget: store the node's embedding. mux being down (or a stub) is fine — search falls back to text. */
 function embedNodeLater(v: Viewer, id: string, text: string, sensitive: boolean) {
   if (!text.trim()) return;
-  void (async () => {
+  afterCommit(() => void (async () => {
     try {
       const out = await embed([text.slice(0, 8000)], { userId: v.id, agent: "gbrain", sensitive, graphId: v.graphId });
       const vec = out?.[0];
@@ -169,7 +197,7 @@ function embedNodeLater(v: Viewer, id: string, text: string, sensitive: boolean)
     } catch {
       /* mux unreachable: keyword search still works */
     }
-  })();
+  })());
 }
 
 async function embedQuery(v: Viewer, q: string): Promise<number[] | null> {
@@ -228,14 +256,24 @@ export async function upsertNode(v: Viewer, input: NodeInput, prov: ProvenanceIn
   if (!normalizeLabel(label)) throw new GBrainError(400, "A name is required.");
   await ensureSearchIndexesOnce();
 
-  const res = await db.transaction(async (tx) => {
+  const stamp = stampOf(v, prov);
+  const res = await runTx(async (tx) => {
+    if (input.id) {
+      if (!isUuid(input.id)) throw new GBrainError(400, "That id isn't valid.");
+      const [had] = await tx.select(nodeCols).from(nodes).where(eq(nodes.id, input.id));
+      if (had) {
+        if (had.graphId !== graphOf(ctx)) throw new GBrainError(409, "That id is already taken.");
+        await tx.insert(provenance).values(provRow(ctx, "node", had.id, prov));
+        return { row: had, created: false, reembed: false };
+      }
+    }
     // Serialise resolution per owner and type so two concurrent extractions can't both create "Anna".
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`gbrain:node:${graphOf(ctx)}:${v.id}:${input.type}`}))`);
     // Resolution never reaches into another graph: the same name in Work and Family are two different nodes.
     const candidates = await tx.select({ id: nodes.id, label: nodes.label, aliases: nodes.aliases }).from(nodes)
       .where(and(eq(nodes.graphId, graphOf(ctx)), eq(nodes.ownerId, v.id), eq(nodes.type, input.type), isNull(nodes.mergedInto)));
     const key = normalizeLabel(label);
-    const match = candidates.find((c) => normalizeLabel(c.label) === key)
+    const match = input.id ? undefined : candidates.find((c) => normalizeLabel(c.label) === key)
       ?? candidates.find((c) => namesMatch(c, { label, aliases: input.aliases }));
 
     if (match) {
@@ -254,13 +292,15 @@ export async function upsertNode(v: Viewer, input: NodeInput, prov: ProvenanceIn
       let row = cur;
       if (Object.keys(patch).length) {
         [row] = await tx.update(nodes).set({ ...patch, updatedAt: new Date() }).where(eq(nodes.id, cur.id)).returning(nodeCols);
+        await recordRows(tx, graphOf(ctx), { nodes: [[nodeSnap(cur), nodeSnap(row)]] }, stamp);
       }
       await tx.insert(provenance).values(provRow(ctx, "node", cur.id, prov));
-      return { row, created: false, reembed: "aliases" in patch || "summary" in patch };
+      return { row, before: cur, created: false, reembed: "aliases" in patch || "summary" in patch };
     }
 
     const sensitive = !!input.sensitive;
     const [row] = await tx.insert(nodes).values({
+      ...(input.id ? { id: input.id } : {}),
       householdId: ctx.householdId, graphId: graphOf(ctx), ownerId: v.id, type: input.type, kind: input.kind ?? null, label,
       aliases: mergeAliases(label, input.aliases), summary: input.summary?.trim() || null, props: input.props ?? {},
       startAt: input.startAt ?? null, endAt: input.endAt ?? null, timePrecision: input.timePrecision ?? null,
@@ -268,11 +308,30 @@ export async function upsertNode(v: Viewer, input: NodeInput, prov: ProvenanceIn
       visibility: input.visibility ?? (sensitive ? "parents" : "private"), sensitive,
     }).returning(nodeCols);
     await tx.insert(provenance).values(provRow(ctx, "node", row.id, prov));
+    await recordRows(tx, graphOf(ctx), { nodes: [[null, nodeSnap(row)]] }, stamp);
     return { row, created: true, reembed: true };
   });
 
   if (res.reembed) embedNodeLater(v, res.row.id, embedText(res.row), res.row.sensitive);
+  if ("before" in res && res.before) tellLinkedCopies(v, res.row.id, res.before, res.row);
   return { node: toNode(res.row), created: res.created };
+}
+
+/**
+ * Cross-graph objects: when a node that is linked into other graphs changes, those graphs get an "Update <name>"
+ * change set for the shared details (never a write there). Runs once the write (or the delivery it is part of) has
+ * committed; best effort, a failure is logged.
+ */
+function tellLinkedCopies(v: Viewer, id: string, before: { label: string; kind: string | null; aliases: string[]; summary: string | null; props: Record<string, unknown> }, after: typeof before) {
+  afterCommit(() => void (async () => {
+    try {
+      const { changedFieldKeys, onNodeChanged } = await import("@/lib/links");
+      const fields = changedFieldKeys(before, after);
+      if (fields.length) await onNodeChanged(v, id, fields);
+    } catch (e) {
+      console.error("[gbrain] telling linked graphs about a change failed", e);
+    }
+  })());
 }
 
 export async function updateNode(v: Viewer, id: string, patch: Partial<NodeInput>, prov: ProvenanceInput): Promise<GNode> {
@@ -280,7 +339,8 @@ export async function updateNode(v: Viewer, id: string, patch: Partial<NodeInput
   if (!isUuid(id)) throw new GBrainError(404, "That item doesn't exist.");
   await ensureSearchIndexesOnce();
 
-  const row = await db.transaction(async (tx) => {
+  const stamp = stampOf(v, prov);
+  const row = await runTx(async (tx) => {
     const [cur] = await tx.select(nodeCols).from(nodes)
       .where(and(eq(nodes.id, id), isNull(nodes.mergedInto), nodeEditSql(ctx, "nodes"))).for("update");
     if (!cur) {
@@ -321,10 +381,12 @@ export async function updateNode(v: Viewer, id: string, patch: Partial<NodeInput
 
     const [updated] = await tx.update(nodes).set({ ...set, updatedAt: new Date() }).where(eq(nodes.id, id)).returning(nodeCols);
     await tx.insert(provenance).values(provRow(ctx, "node", id, prov));
-    return { updated, reembed: "label" in set || "summary" in set || "aliases" in set };
+    await recordRows(tx, graphOf(ctx), { nodes: [[nodeSnap(cur), nodeSnap(updated)]] }, stamp);
+    return { updated, before: cur, reembed: "label" in set || "summary" in set || "aliases" in set };
   });
 
   if (row.reembed) embedNodeLater(v, id, embedText(row.updated), row.updated.sensitive);
+  tellLinkedCopies(v, id, row.before, row.updated);
   return toNode(row.updated);
 }
 
@@ -398,16 +460,19 @@ async function addEdgeTx(tx: Tx, v: Viewer, ctx: AccessCtx, input: EdgeInput, pr
       validTo: existing.validTo ?? input.validTo ?? null,
     }).where(eq(edges.id, existing.id)).returning(edgeCols);
     await tx.insert(provenance).values(provRow(ctx, "edge", row.id, { ...prov, confidence: incoming }));
+    await recordRows(tx, graphOf(ctx), { edges: [[edgeSnap(existing), edgeSnap(row)]] }, stampOf(v, prov));
     return row;
   }
 
   const [row] = await tx.insert(edges).values({
+    ...(input.id && isUuid(input.id) ? { id: input.id } : {}),
     householdId: ctx.householdId, graphId: graphOf(ctx), ownerId: v.id, fromId: from.id, toId: to.id, relation, props: input.props ?? {},
     validFrom: input.validFrom ?? null, validTo: input.validTo ?? null, confidence: incoming,
     status: input.status ?? defaultEdgeStatus(prov),
     visibility: input.visibility ?? narrowerVisibility(from.visibility, to.visibility),
   }).returning(edgeCols);
   await tx.insert(provenance).values(provRow(ctx, "edge", row.id, { ...prov, confidence: incoming }));
+  await recordRows(tx, graphOf(ctx), { edges: [[null, edgeSnap(row)]] }, stampOf(v, prov));
   return row;
 }
 
@@ -416,7 +481,7 @@ export async function addEdge(v: Viewer, input: EdgeInput, prov: ProvenanceInput
   const ctx = await accessContext(v);
   assertCanWrite(ctx);
   if (!isUuid(input.fromId) || !isUuid(input.toId)) throw new GBrainError(404, "One of the two things in this fact doesn't exist or isn't visible to you.");
-  const row = await db.transaction((tx) => addEdgeTx(tx, v, ctx, input, prov));
+  const row = await runTx((tx) => addEdgeTx(tx, v, ctx, input, prov));
   return toEdge(row);
 }
 
@@ -432,7 +497,7 @@ const STATUS_NOTE: Record<EdgeStatus, string> = {
 export async function setEdgeStatus(v: Viewer, id: string, status: EdgeStatus, note?: string): Promise<GEdge> {
   const ctx = await accessContext(v);
   if (!isUuid(id)) throw new GBrainError(404, "That fact doesn't exist.");
-  const row = await db.transaction(async (tx) => {
+  const row = await runTx(async (tx) => {
     const [e] = await visibleEdges(ctx, eq(edges.id, id), { includeInactive: true }, tx);
     if (!e) throw new GBrainError(404, "That fact doesn't exist.");
     await assertEdgeEditable(ctx, e, tx);
@@ -444,6 +509,7 @@ export async function setEdgeStatus(v: Viewer, id: string, status: EdgeStatus, n
     await tx.insert(provenance).values(provRow(ctx, "edge", id, {
       activity: "manual_edit", agentType: "user", agentId: v.id, confidence: 1, note: note?.trim() || STATUS_NOTE[status],
     }));
+    await recordRows(tx, graphOf(ctx), { edges: [[edgeSnap(e), edgeSnap(updated)]] }, stampOf(v, null));
     return updated;
   });
   return toEdge(row);
@@ -457,7 +523,7 @@ export async function correctEdge(v: Viewer, id: string, change: { relation?: st
   const ctx = await accessContext(v);
   assertCanWrite(ctx);
   if (!isUuid(id)) throw new GBrainError(404, "That fact doesn't exist.");
-  const row = await db.transaction(async (tx) => {
+  const row = await runTx(async (tx) => {
     const [old] = await visibleEdges(ctx, eq(edges.id, id), {}, tx);
     if (!old) throw new GBrainError(404, "That fact doesn't exist or has already been replaced.");
     await assertEdgeEditable(ctx, old, tx);
@@ -472,13 +538,74 @@ export async function correctEdge(v: Viewer, id: string, change: { relation?: st
     const created = await addEdgeTx(tx, v, ctx, {
       ...next, props: old.props, validFrom: old.validFrom, validTo: old.validTo, visibility: old.visibility, status: "confirmed",
     }, { activity: "manual_edit", agentType: "user", agentId: v.id, confidence: 1, note: note || "Corrected by hand" });
-    await tx.update(edges).set({ status: "superseded", supersededBy: created.id }).where(eq(edges.id, old.id));
+    const [oldAfter] = await tx.update(edges).set({ status: "superseded", supersededBy: created.id }).where(eq(edges.id, old.id)).returning(edgeCols);
+    await recordRows(tx, graphOf(ctx), { edges: [[edgeSnap(old), edgeSnap(oldAfter)]] }, stampOf(v, null));
     await tx.insert(provenance).values(provRow(ctx, "edge", old.id, {
       activity: "manual_edit", agentType: "user", agentId: v.id, confidence: 1, note: note || "Replaced by a corrected fact",
     }));
     return created;
   });
   return toEdge(row);
+}
+
+export type EdgePatch = { relation?: string; status?: EdgeStatus; confidence?: number; validFrom?: Date | null; validTo?: Date | null; visibility?: Visibility };
+
+/** Change a fact's fields in place (a delivered updateEdge, a restore). Provenance and history as every write. */
+export async function updateEdge(v: Viewer, id: string, patch: EdgePatch, prov: ProvenanceInput): Promise<GEdge> {
+  const ctx = await accessContext(v);
+  assertCanWrite(ctx);
+  if (!isUuid(id)) throw new GBrainError(404, "That fact doesn't exist.");
+  const row = await runTx(async (tx) => {
+    const [e] = await visibleEdges(ctx, eq(edges.id, id), { includeInactive: true }, tx);
+    if (!e) throw new GBrainError(404, "That fact doesn't exist.");
+    await assertEdgeEditable(ctx, e, tx);
+    const set: Partial<typeof edges.$inferInsert> = {};
+    if (patch.relation !== undefined) {
+      const r = normalizeRelation(patch.relation);
+      if (!r) throw new GBrainError(400, "Say how the two things are related.");
+      set.relation = r;
+    }
+    if (patch.status !== undefined) set.status = patch.status;
+    if (patch.confidence !== undefined) set.confidence = clamp01(patch.confidence);
+    if (patch.validFrom !== undefined) set.validFrom = patch.validFrom;
+    if (patch.validTo !== undefined) set.validTo = patch.validTo;
+    if (patch.visibility !== undefined) {
+      if (e.ownerId !== ctx.id) throw new GBrainError(403, "Only the person who added this can change who sees it.");
+      set.visibility = patch.visibility;
+    }
+    if (!Object.keys(set).length) return e;
+    const [updated] = await tx.update(edges).set(set).where(eq(edges.id, id)).returning(edgeCols);
+    await tx.insert(provenance).values(provRow(ctx, "edge", id, prov));
+    await recordRows(tx, graphOf(ctx), { edges: [[edgeSnap(e), edgeSnap(updated)]] }, stampOf(v, prov));
+    return updated;
+  });
+  return toEdge(row);
+}
+
+/**
+ * Retire a node: it stays (history and evidence keep pointing at it) but is marked retired, and its live facts are
+ * replaced (superseded). Bringing it back is an updateNode that clears `props.retired`.
+ */
+export async function retireNode(v: Viewer, id: string, prov: ProvenanceInput): Promise<GNode> {
+  const ctx = await accessContext(v);
+  assertCanWrite(ctx);
+  if (!isUuid(id)) throw new GBrainError(404, "That item doesn't exist.");
+  const row = await runTx(async (tx) => {
+    const [cur] = await tx.select(nodeCols).from(nodes)
+      .where(and(eq(nodes.id, id), isNull(nodes.mergedInto), nodeEditSql(ctx, "nodes"))).for("update");
+    if (!cur) throw new GBrainError(404, "That item doesn't exist or you can't change it.");
+    const touched = await tx.select({ id: edges.id }).from(edges)
+      .where(and(or(eq(edges.fromId, id), eq(edges.toId, id)), notInArray(edges.status, INACTIVE)));
+    const scope = { nodeIds: [id], edgeIds: touched.map((e) => e.id) };
+    const before = await snapshotScope(tx, scope);
+    const [updated] = await tx.update(nodes).set({ props: { ...cur.props, retired: true, retiredAt: new Date().toISOString() }, updatedAt: new Date() })
+      .where(eq(nodes.id, id)).returning(nodeCols);
+    if (scope.edgeIds.length) await tx.update(edges).set({ status: "superseded" }).where(inArray(edges.id, scope.edgeIds));
+    await tx.insert(provenance).values(provRow(ctx, "node", id, prov));
+    await recordSnapshots(tx, graphOf(ctx), before, await snapshotScope(tx, scope), stampOf(v, prov));
+    return updated;
+  });
+  return toNode(row);
 }
 
 /* ── Reading the graph ───────────────────────────────────────────────────────────────────────────────── */
@@ -698,7 +825,7 @@ export async function mergeNodes(v: Viewer, keepId: string, dropId: string): Pro
   if (keepId === dropId) throw new GBrainError(400, "Pick two different items to merge.");
   if (!isUuid(keepId) || !isUuid(dropId)) throw new GBrainError(404, "One of these items doesn't exist.");
 
-  const keepRow = await db.transaction(async (tx) => {
+  const keepRow = await runTx(async (tx) => {
     const both = await tx.select(nodeCols).from(nodes)
       .where(and(inArray(nodes.id, [keepId, dropId]), isNull(nodes.mergedInto), nodeEditSql(ctx, "nodes")))
       .orderBy(asc(nodes.id)).for("update");
@@ -714,6 +841,11 @@ export async function mergeNodes(v: Viewer, keepId: string, dropId: string): Pro
     // details to whoever can see the other's item.
     if (keep.ownerId !== drop.ownerId) throw new GBrainError(403, "These belong to different people's graphs, so they can't be merged.");
     if (keep.graphId !== drop.graphId || keep.graphId !== graphOf(ctx)) throw new GBrainError(400, "Only items in the same graph can be merged.");
+
+    // History: everything this merge can touch, before and after.
+    const touched = await tx.select({ id: edges.id }).from(edges).where(or(inArray(edges.fromId, [keepId, dropId]), inArray(edges.toId, [keepId, dropId])));
+    const scope = { nodeIds: [keepId, dropId], edgeIds: touched.map((e) => e.id) };
+    const before = await snapshotScope(tx, scope);
 
     // Facts move to the kept node.
     await tx.update(edges).set({ fromId: keepId }).where(eq(edges.fromId, dropId));
@@ -780,6 +912,9 @@ export async function mergeNodes(v: Viewer, keepId: string, dropId: string): Pro
       provRow(ctx, "node", keepId, mergeProv(`Merged "${drop.label}" into this`)),
       provRow(ctx, "node", dropId, mergeProv(`Merged into "${keep.label}"`)),
     ]);
+    const stamp = stampOf(v, null);
+    await recordSnapshots(tx, graphOf(ctx), before, await snapshotScope(tx, scope), stamp);
+    await recordEvent(tx, graphOf(ctx), { subjectType: "node", subjectId: keepId, subjectName: kept.label, kind: "merged", field: null, fromValue: { id: dropId, label: drop.label }, toValue: null }, stamp);
     return kept;
   });
 
@@ -823,7 +958,7 @@ export async function dismissMergeSuggestion(v: Viewer, aId: string, bId: string
   const ctx = await accessContext(v);
   assertCanWrite(ctx);
   if (aId === bId || !isUuid(aId) || !isUuid(bId)) throw new GBrainError(400, "Pick two different items.");
-  await db.transaction(async (tx) => {
+  await runTx(async (tx) => {
     const both = await tx.select(nodeCols).from(nodes)
       .where(and(inArray(nodes.id, [aId, bId]), nodeEditSql(ctx, "nodes"))).orderBy(asc(nodes.id)).for("update");
     if (both.length < 2) throw new GBrainError(404, "One of these items doesn't exist or you can't edit it.");

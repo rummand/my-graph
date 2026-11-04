@@ -52,7 +52,11 @@ export function stepWords(label: string, t: TFn = EN_T, opts: { family?: boolean
   if (label === "Searched your graph") return t("chat.steps.searched");
   if (label === "Checked the timeline") return t("chat.steps.timeline");
   if (label === "Searched the web") return t("chat.steps.searchedWeb");
+  if (label === "Web search isn't available right now") return t("chat.steps.webUnavailable");
+  if (label === "Couldn't read that page (only the public web can be read)") return t("chat.steps.webBlocked");
+  if (label === "Didn't search the web (turned off for you)") return t("chat.steps.webOff");
   let m: RegExpMatchArray | null;
+  if ((m = label.match(/^Searched the web for “(.+)”$/))) return t("chat.steps.searchedWebFor", { query: m[1] });
   if ((m = label.match(/^Read (\d+) documents?$/))) return t("chat.steps.readDocs", { count: n(m[1]) });
   if ((m = label.match(/^Read (\d+) web pages?$/))) return t("chat.steps.browsed", { count: n(m[1]) });
   if ((m = label.match(/^Looked up (\d+) (?:person|people)$/))) return t("chat.steps.lookedUp", { count: n(m[1]) });

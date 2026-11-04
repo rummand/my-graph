@@ -16,7 +16,12 @@ import { scopeOf } from "@/lib/graphs/pure";
 import * as mux from "@/lib/mux";
 import { formatSse } from "@/lib/mux/sse";
 import { markMemoriesUsed, memoryContext, type Memory } from "@/lib/memory";
-import { DEFAULT_SETTINGS, getAssistantSettings, type AssistantSettings } from "@/lib/automations";
+import { DEFAULT_SETTINGS, getAssistantSettings, webAllowed, type AssistantSettings } from "@/lib/automations";
+import * as gbrain from "@/lib/gbrain";
+import { getMeta } from "@/lib/meta";
+import { recordMentions, resolveMentions } from "@/lib/mentions";
+import { needsWeb, proposeWebFacts, research, type FactNode, type Research } from "@/lib/web";
+import { webHints } from "@/lib/web/hints";
 import { annotateProposal, decideProposal, memoryAllowedFor, ProposalError } from "./apply";
 import { ambiguousNames, clarifyFromAmbiguity, parseClarify, type Clarify } from "./clarify";
 import { turnsAfter } from "./compact";
@@ -28,11 +33,11 @@ import { autoApplyDecision, inferBasis } from "./policy";
 import { buildMessages, cleanTitle, fallbackTitle, titleMessages, type HistoryTurn, type Tone } from "./prompt";
 import * as wiki from "@/lib/wiki";
 import { parseProposals, ProposalStreamFilter, type ProposalView } from "./proposals";
-import { flagsFrom, offWords, retrieve, type Retrieval } from "./retrieve";
+import { flagsFrom, offWords, plainQuestion, retrieve, type Retrieval } from "./retrieve";
 import { chooseRoute } from "./route";
 import { isSensitivity, sensitivityBadge, type Sensitivity } from "./sensitivity";
 import { foldState } from "./state";
-import { itemSteps, memoryStep, offStep, searchStep } from "./steps";
+import { itemSteps, memoryStep, offStep, searchStep, webSteps } from "./steps";
 import { addMessage, addState, conversationRows, createConversation, ownConversation, raiseConversationSensitivity, renameConversation, touchConversation } from "./store";
 
 export class ChatInputError extends Error {
@@ -45,6 +50,8 @@ export type DoneEvent = {
   clarify: Clarify | null; steps: AssistantStep[]; thoughtMs: number; stopped: boolean;
   /** The final visible text (citation marks the context can't back are removed). */
   text: string;
+  /** Facts read on the web about things in the graph, proposed as a change set (delivered by a person, never here). */
+  changeSetId?: string | null;
 };
 
 function reasonOf(e: unknown): DegradedReason {
@@ -152,19 +159,37 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         const canWrite = scopeOf(v).canWrite;
         const memOk = memoryAllowedFor(v);
 
+        // @mentions in the question: the nodes the person pointed at (readable ones only) lead the retrieval.
+        const mentioned = await safe(resolveMentions(v, question), [], "mentions");
+        if (mentioned.length) void recordMentions(v, { inType: "message", inId: turn.userMessageId, text: question }).catch(() => {});
+        const plain = plainQuestion(question);
+
         // Retrieval and memory run together; each step is shown as soon as it finishes.
         const empty: Retrieval = { items: [], hits: 0, people: [] };
-        const retrieval = safe(retrieve(v, question, { tz, now, flags }), empty, "retrieve").then((r) => {
+        const retrieval = safe(retrieve(v, question, { tz, now, flags, mentionIds: mentioned.map((m) => m.nodeId) }), empty, "retrieve").then((r) => {
           step(searchStep(flags, r.hits));
           return r;
         });
         const recall = memOk
-          ? safe(memoryContext(v, { question, limit: 12 }), { text: "", items: [] as Memory[] }, "memory").then((m) => { step(memoryStep(memoryCounts(m.items))); return m; })
+          ? safe(memoryContext(v, { question: plain, limit: 12 }), { text: "", items: [] as Memory[] }, "memory").then((m) => { step(memoryStep(memoryCounts(m.items))); return m; })
           : Promise.resolve({ text: "", items: [] as Memory[] });
         const [found, mem] = await Promise.all([retrieval, recall]);
         if (mem.items.length) void markMemoriesUsed(v, mem.items.map((m) => m.id)).catch(() => {});
 
-        const items = selectItems(found.items);
+        // The web, when the question needs the outside world and this person may use it.
+        const need = needsWeb(question, { graphHits: found.hits });
+        const webOk = webAllowed(v, settings.capabilities);
+        let web: Research | null = null;
+        if (need.use && webOk) {
+          const avoid = found.items.filter((i) => i.sensitive || (i.level && i.level !== "normal")).map((i) => i.title);
+          web = await safe(research(v, { question, avoid, conversationId: turn.conversationId, signal: both }), null, "web research");
+          if (web) for (const s of webSteps(web)) step(s);
+        } else if (need.use) {
+          step({ kind: "other", label: "Didn't search the web (turned off for you)" });
+        }
+        const webFirst = need.why === "url" || need.why === "asked" || need.why === "current";
+        const webItems = web?.items ?? [];
+        const items = selectItems(webFirst ? [...webItems, ...found.items] : [...found.items, ...webItems]);
         const ctx = numberContext(items);
         for (const s of itemSteps(items, flags)) step(s);
         const off = offWords(flags);
@@ -176,12 +201,23 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         const level = await raiseConversationSensitivity(turn.conversationId, turn.level, ctx.level);
         if (level !== turn.level) send("sensitivity", { level, badge: sensitivityBadge(level) });
 
-        const route = chooseRoute(question, { sensitive });
+        const webUsed = !!web?.pages.length;
+        const route = chooseRoute(question, { sensitive, tools: webUsed, contextItems: items.length, followUp: turn.history.length > 0 });
+
+        // Facts the pages state about things in the graph → a change set, read while the answer is written.
+        const factsPromise = webUsed && canWrite && !stoppedEarly(both)
+          ? safe(webFactNodes(v, found, mentioned.map((m) => m.nodeId)).then((f) => proposeWebFacts(v, {
+              question: plain, query: web!.query, pages: web!.pages, nodes: f.nodes, relations: f.relations, existingEdges: f.edges,
+              conversationId: turn.conversationId, sensitive,
+            })), null, "web facts")
+          : Promise.resolve(null);
         if (turn.isNew) titlePromise = writeTitle(v, question, sensitive);
         send("sources", { sources: ctx.citations, route });
 
         const amb = ambiguousNames(question, found.people);
         const hints = amb.map((a) => `"${a.name}" matches ${a.options.length} people the family knows: ${a.options.map((o) => o.label).join(", ")}. If it matters for the answer and the conversation doesn't say which, ask.`);
+        if (mentioned.length) hints.push(`The person pointed at ${mentioned.map((m) => `"${m.label}"`).join(", ")} in the graph with @mentions: the question is about ${mentioned.length === 1 ? "that" : "those"}, not someone else with the same name.`);
+        hints.push(...webHints({ need: need.use, allowed: webOk, web, today: longDay(now, tz) }));
         const messages = buildMessages({
           viewerName: v.name, today: longDay(now, tz), timeZone: tz, context: ctx.text, history: turn.history, question,
           tone: (settings.tone as Tone) ?? "warm", memory: mem.text, off, hints, summary: turn.summary, canRemember: memOk && canWrite,
@@ -232,6 +268,16 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         const content = dropUnknownCitations(clarify ? parseProposals(cl.text).text : cl.text, ctx.citations.length);
         const parsed = parseProposals(content);
         const citations = extractCitations(parsed.text, ctx.citations);
+        // The web change set: waited for a little while after the answer (it is read in parallel).
+        let changeSetId: string | null = null;
+        if (webUsed && !stopped && !degraded) {
+          const facts = await Promise.race([factsPromise, new Promise<null>((res) => setTimeout(() => res(null), 20_000))]);
+          if (facts) {
+            changeSetId = facts.changeSetId;
+            step({ kind: "write", label: `Proposed ${facts.count} ${facts.count === 1 ? "change" : "changes"} for approval`, count: facts.count, ...(facts.changeSetId ? { changeSetId: facts.changeSetId } : {}) });
+          }
+        }
+
         const thoughtMs = Date.now() - t0;
         const saved = await addMessage(turn.conversationId, {
           role: "assistant", content, citations, model: meta.model, route: meta.route ?? (degraded ? null : route), requestId: meta.requestId,
@@ -284,7 +330,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         }
         const done: DoneEvent = {
           messageId: saved.id, citations, model: meta.model, route: meta.route ?? (degraded ? null : route), requestId: meta.requestId,
-          degraded, title, proposals, clarify, steps, thoughtMs, stopped, text: parsed.text,
+          degraded, title, proposals, clarify, steps, thoughtMs, stopped, text: parsed.text, changeSetId,
         };
         send("done", done);
       } catch (e) {
@@ -302,4 +348,37 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
 export function wikiTitleKey(title: string): string {
   const stop = new Set(["project", "projects", "page", "notes", "note", "wiki", "the", "a", "an", "about", "on", "om", "noter", "side", "projektet", "projekt"]);
   return title.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter((w) => w && !stop.has(w)).join(" ");
+}
+
+const stoppedEarly = (s: AbortSignal) => s.aborted;
+
+/**
+ * The graph nodes a web page might say something about: the ones the person @mentioned and the people, places,
+ * organisations, projects and topics in the context — readable in this graph, not sensitive, at most 8 — with the
+ * attribute keys their kind carries (sensitive attributes left out) and the relation types the graph allows.
+ */
+async function webFactNodes(v: Viewer, found: Retrieval, mentionIds: string[]): Promise<{ nodes: FactNode[]; relations: { key: string; label: string }[]; edges: string[] }> {
+  const ids: string[] = [...mentionIds];
+  for (const it of found.items) {
+    if (it.kind === "node" && ["person", "place", "organization", "project", "topic", "thing"].includes(it.nodeType) && !it.sensitive && !ids.includes(it.nodeId)) ids.push(it.nodeId);
+    if (ids.length >= 8) break;
+  }
+  const meta = await getMeta(v);
+  const nodes: FactNode[] = [];
+  const edges: string[] = [];
+  for (const id of ids.slice(0, 8)) {
+    const n = await gbrain.getNode(v, id).catch(() => null);
+    if (!n || n.sensitive || n.type === "document" || n.type === "source") continue;
+    const attributes = meta.attributesFor(n.type, n.kind).filter((a) => !a.sensitive && a.key !== "notes").map((a) => a.key);
+    nodes.push({ id: n.id, label: n.label, type: n.type, summary: n.summary, props: n.props ?? {}, attributes });
+  }
+  for (const n of nodes.slice(0, 3)) {
+    const hood = await gbrain.neighbourhood(v, n.id, 1).catch(() => ({ nodes: [], edges: [] as gbrain.GEdge[] }));
+    for (const e of hood.edges) edges.push(`${e.fromId}|${e.relation}|${e.toId}`);
+  }
+  const types = new Set(nodes.map((n) => n.type));
+  const relations = meta.relations
+    .filter((r) => !r.hidden && (r.fromTypes.length === 0 || r.fromTypes.some((t) => types.has(t))))
+    .map((r) => ({ key: r.key, label: r.label }));
+  return { nodes, relations, edges };
 }

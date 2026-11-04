@@ -4,6 +4,7 @@ import type { ChangeSetView } from "@/lib/changes";
 import { formatWhen } from "@/lib/briefs/dates";
 import { getLocale, getT } from "@/lib/i18n";
 import { hrefs, TodaySection } from "./section";
+import { ChangeSetCard } from "@/components/changes";
 
 const ORIGINS = ["person", "assistant", "chat", "connector", "web", "ingest", "automation", "heartbeat", "keeper", "restore"];
 
@@ -12,7 +13,7 @@ const ORIGINS = ["person", "assistant", "chat", "connector", "web", "ingest", "a
  * for this graph and nobody has delivered yet. Nothing in them is in the graph until a person reviews and delivers
  * them on the change set's own page. (When the shared ChangeSetCard lands, it can replace these rows.)
  */
-export async function ProposedChanges({ sets, now, tz }: { sets: ChangeSetView[]; now: Date; tz: string }) {
+export async function ProposedChanges({ sets, now, tz, canDeliver = true }: { sets: ChangeSetView[]; now: Date; tz: string; canDeliver?: boolean }) {
   if (!sets.length) return null;
   const [t, locale] = await Promise.all([getT(), getLocale()]);
   return (
@@ -20,8 +21,10 @@ export async function ProposedChanges({ sets, now, tz }: { sets: ChangeSetView[]
       id="changes"
       title={<>{t("today.changes.title")}<span className="ml-2 rounded-full bg-warn-tint px-2 py-0.5 align-middle text-xs font-medium tabular-nums text-warn">{sets.length}</span></>}
     >
+      {/* The newest proposal in full, with Deliver / Review / Drop; the rest as one line each. */}
+      {sets[0] && <div className="mb-2"><ChangeSetCard cs={sets[0]} t={t} locale={locale} compact actions canDeliver={canDeliver} /></div>}
       <ul className="space-y-2">
-        {sets.map((s) => {
+        {sets.slice(1).map((s) => {
           const open = s.changes.filter((c) => c.included).length || s.changes.length;
           return (
             <li key={s.id}>

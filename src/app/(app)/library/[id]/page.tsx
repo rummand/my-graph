@@ -11,6 +11,8 @@ import { countsLine, dateOriginNote, extractionNote, formatBytes, formatDay, for
 import { libraryLx } from "@/components/library/server-lx";
 import { StatusWatcher } from "@/components/library/status-watcher";
 import { requireUser, type Viewer } from "@/lib/auth";
+import { getChangeSet } from "@/lib/changes";
+import { ChangeSetCard } from "@/components/changes";
 import { listReminders, type ReminderDTO } from "@/lib/briefs";
 import { formatTime } from "@/lib/ingest/chunk";
 import { getSourceDetail, type ExtractedFact, type SourceDetail } from "@/lib/ingest/library";
@@ -48,7 +50,9 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
   const v = await requireUser();
   const d = await getSourceDetail(v, id);
   if (!d) notFound();
-  const [label, reminders, L] = await Promise.all([relationLabeller(v), remindersFrom(v, id), libraryLx(v)]);
+  const pendingId = d.proposal?.changeSetId && d.proposal.status !== "delivered" && d.proposal.status !== "abandoned" ? d.proposal.changeSetId : null;
+  const [label, reminders, L, pendingSet] = await Promise.all([relationLabeller(v), remindersFrom(v, id), libraryLx(v),
+    pendingId ? getChangeSet(v, pendingId).catch(() => null) : Promise.resolve(null)]);
   const { t } = L;
   const s = d.source;
   const stuck = isStuck(s.status, s.startedAt, s.createdAt);
@@ -93,6 +97,7 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
 
       <FoundSummary L={L} d={d} reminders={reminders.length} />
       <Proposed L={L} d={d} />
+      {pendingSet?.status === "draft" && <div className="-mt-2 mb-8"><ChangeSetCard cs={pendingSet} t={t} locale={L.locale} compact actions /></div>}
 
       <div className="grid gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-8">

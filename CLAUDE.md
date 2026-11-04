@@ -74,9 +74,35 @@ nothing links two graphs. The family graph keeps the household rules; other grap
 - **Scheduler**: started from `src/instrumentation.ts`, ticks every 60s, claims due automations with
   `FOR UPDATE SKIP LOCKED`; skips and disables automations whose owner left the graph. `DISABLE_SCHEDULER=1` turns it off.
 
+## Versioning, web, connectors, cross-graph objects, documents
+
+- **Changes and history** (`src/lib/changes`, `src/lib/history`; docs/versioning-plan.md). The graph works like a git
+  repo. Every agent proposal is a **change set** (`proposeChanges`, ops + a receipt per op: source, quote, url,
+  confidence). Only a person who may write in the graph delivers it (`deliverChangeSet`: verdicts, fingerprint check,
+  one transaction, a provenance row per op marked `change:<id>`). Every gbrain and meta write lands in `graph_events`
+  one field at a time (who, when, which change set). History tools: the graph at a date, compare two moments,
+  who-said, checkpoints, "restore as a proposal". Pages `/changes`, `/history`. `deliverChangeSet` may only be called
+  from person-triggered code (the deliver route, live-highlight Send, approving a suggestion) — a test enforces it.
+- **Web research** (`src/lib/web`): `mux.search` / `mux.read` (mux's browser). Pages read become `sources` of kind
+  `web` with passages and locators; facts found become a change set (origin `web`) whose quotes must appear on the page
+  and contain the value. Only a minimised query leaves the graph. SSRF guard in `src/lib/web/guard.ts`.
+- **Connectors** (`src/lib/connectors`): typed manifests, encrypted secrets (never returned or logged), cursors saved
+  with the data, a 60s scheduler with leases, SSRF guard on every connect and redirect (development opens loopback
+  only). Calendar (ICS / Aula) and IMAP; what they bring in is proposed, never written directly. Page `/connections`.
+- **Cross-graph objects** (`src/lib/links`): the one allowed crossing between graphs. A node can be shared into or
+  connected with another graph the person is a member of and may write in; tables `node_identities`,
+  `node_identity_members`. Later changes travel only as "Update <name>" change sets in the other graph (gbrain's node
+  writes call `onNodeChanged` after commit), addressed to someone in both graphs. Link events in history are shown only
+  to members of every graph involved.
+- **Documents and design sets** (`src/lib/artifacts`, `src/lib/design-sets`): reports, one-pagers, decks, briefs and
+  profiles drafted from the current graph only (every claim cited), styled by design sets (built-in + per graph,
+  versioned). A draft is private until a person publishes it; publishing pins the design set version. Page `/artifacts`.
+- **Languages** (`src/lib/i18n`): English and Danish for all UI copy (`messages/<locale>/<namespace>.ts`, `getT` /
+  `useT`). Text stored by the server in English is translated where it is shown, or written in the reader's language.
+
 ## Contracts
 
-`src/lib/{auth,mux,gbrain,ingest}/index.ts` define the cross-workstream functions. Signatures are fixed; the owning
+`src/lib/{auth,mux,gbrain,ingest,changes}/index.ts` define the cross-workstream functions. Signatures are fixed; the owning
 workstream replaces the stub bodies (and may add helpers in its own folder). Other workstreams import only from these
 index files.
 
@@ -92,10 +118,17 @@ index files.
 | timeline | `src/lib/timeline/**`, `src/app/api/timeline/**`, `src/app/(app)/timeline/**`, `src/components/timeline/**` |
 | today | `src/lib/briefs/**`, `src/app/api/reminders/**`, `src/app/(app)/page.tsx`, `src/components/today/**` |
 | people & meta model | `src/lib/meta/**`, `src/lib/people/**`, `src/app/api/meta/**`, `src/app/api/people/**`, `src/app/(app)/people/**`, `src/components/people/**` |
+| versioning | `src/lib/changes/**`, `src/lib/history/**`, `src/app/api/{changes,history,checkpoints}/**`, `src/app/(app)/{changes,history}/**`, `src/components/{changes,history}/**` |
+| web | `src/lib/web/**`, `src/app/api/web/**` |
+| connectors | `src/lib/connectors/**`, `src/app/api/connections/**`, `src/app/(app)/connections/**`, `src/components/connections/**` |
+| cross-graph links | `src/lib/links/**`, `src/app/api/links/**`, `src/components/links/**` |
+| documents | `src/lib/artifacts/**`, `src/lib/design-sets/**`, `src/app/api/{artifacts,design-sets}/**`, `src/app/(app)/artifacts/**`, `src/components/artifacts/**` |
 
 The **meta model** (`meta_kinds`, `meta_relations`, `meta_attributes` + `nodes.kind`) is the household's ontology:
 kinds of people/places/events/topics, the relation types allowed on edges (with inverse labels), and the attributes
-each kind carries (stored in `nodes.props`). Built-ins have `householdId = null`; households add their own.
+each kind carries (stored in `nodes.props`). Built-ins have `householdId = null`; households add their own, either
+household-wide (`graphId = null`) or for one graph. Keys are unique per (household, graph, …, key) — never suffix a key
+to dodge another graph's element.
 `src/lib/meta` is its API — read relation labels and kinds from there instead of hard-coding them.
 
 Shared files (`src/db/**`, `src/components/ui/**`, `src/components/shell.tsx`, `src/app/layout.tsx`, `globals.css`,
@@ -110,4 +143,6 @@ Do not run `npm install`; every dependency is installed (check `package.json`). 
 - Write user-facing copy in plain, specific English. Name things by what people recognize.
 - Dates: store UTC, display with `date-fns` in the user's locale; Danish context (school platform Aula, CPR never stored).
 - Tests: vitest, `src/**/*.test.ts`, pure logic only (no DB needed) unless a test DB is up.
+- Migrations: additive, `npx drizzle-kit generate --name <area>_<what>`, applied with `npx tsx scripts/migrate.ts`;
+  `npx drizzle-kit generate --name check` must report no changes afterwards.
 - Checks before you finish: `npx tsc --noEmit` clean for your files; `npx next lint` no errors in your paths.

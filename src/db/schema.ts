@@ -1,5 +1,5 @@
 import {
-  pgTable, pgEnum, uuid, text, timestamp, integer, real, boolean, jsonb, index, uniqueIndex, vector, customType,
+  pgTable, pgEnum, uuid, text, timestamp, integer, real, boolean, jsonb, index, uniqueIndex, unique, vector, customType,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -370,7 +370,7 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export type AssistantStep = { kind: "search" | "read" | "timeline" | "people" | "memory" | "think" | "write" | "other"; label: string; count?: number; ms?: number };
+export type AssistantStep = { kind: "search" | "read" | "timeline" | "people" | "memory" | "think" | "write" | "other"; label: string; count?: number; ms?: number; /** A change set this step proposed (shown as a link). */ changeSetId?: string };
 
 export const reminders = pgTable("reminders", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -420,7 +420,7 @@ export const metaKinds = pgTable("meta_kinds", {
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }),
   changeSetId: uuid("change_set_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex("meta_kinds_key_idx").on(t.householdId, t.nodeType, t.key)]);
+}, (t) => [unique("meta_kinds_graph_key_uq").on(t.householdId, t.graphId, t.nodeType, t.key).nullsNotDistinct()]);
 
 /** Relation types: the allowed edge.relation values, with labels both ways. */
 export const metaRelations = pgTable("meta_relations", {
@@ -445,7 +445,7 @@ export const metaRelations = pgTable("meta_relations", {
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }),
   changeSetId: uuid("change_set_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex("meta_relations_key_idx").on(t.householdId, t.key)]);
+}, (t) => [unique("meta_relations_graph_key_uq").on(t.householdId, t.graphId, t.key).nullsNotDistinct()]);
 
 /** Attributes a node type or kind carries (stored in nodes.props[key]). kindKey null = every node of nodeType. */
 export const metaAttributes = pgTable("meta_attributes", {
@@ -472,7 +472,7 @@ export const metaAttributes = pgTable("meta_attributes", {
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }),
   changeSetId: uuid("change_set_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex("meta_attributes_key_idx").on(t.householdId, t.nodeType, t.kindKey, t.key)]);
+}, (t) => [unique("meta_attributes_graph_key_uq").on(t.householdId, t.graphId, t.nodeType, t.kindKey, t.key).nullsNotDistinct()]);
 
 /* ── People: how they are, over time ──────────────────────────────────────────────────────────────────── */
 
@@ -840,3 +840,125 @@ export const keeperRuns = pgTable("keeper_runs", {
   index("keeper_runs_graph_user_idx").on(t.graphId, t.userId, t.startedAt),
   uniqueIndex("keeper_runs_one_running_uq").on(t.graphId, t.userId).where(sql`status = 'running'`),
 ]);
+
+/* ── Cross-graph objects: one person (or thing) known in several graphs (workstream: cross-graph links) ─── */
+
+/**
+ * One real-world identity that has a node in more than one graph ("Anna" in Family and in For Sara). Nothing else
+ * crosses graphs: each graph keeps its own node, and only a member of both graphs ever sees that they are linked.
+ */
+export const nodeIdentities = pgTable("node_identities", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** One graph's node in an identity. A node belongs to at most one identity. */
+export const nodeIdentityMembers = pgTable("node_identity_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  identityId: uuid("identity_id").notNull().references(() => nodeIdentities.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** No FK: a share waiting in a change set points at the node id minted for it before the node exists. */
+  nodeId: uuid("node_id").notNull(),
+  /** Which fields travel to and from this node: "label", "kind", "aliases", "summary", "props.<key>". */
+  shareFields: jsonb("share_fields").$type<string[]>().notNull().default([]),
+  /** active | pending (shared through a change set that has not been delivered yet) */
+  status: text("status").notNull().default("active"),
+  changeSetId: uuid("change_set_id"),
+  linkedBy: uuid("linked_by").references(() => users.id, { onDelete: "set null" }),
+  linkedAt: timestamp("linked_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex("node_identity_members_node_uq").on(t.nodeId),
+  index("node_identity_members_identity_idx").on(t.identityId),
+  index("node_identity_members_graph_idx").on(t.graphId),
+]);
+
+/* ── Design sets and artifacts: reports, one-pagers, decks, briefs and profiles made from the graph ──────── */
+
+/**
+ * A custom design set (the built-ins — My Graph, Minimal, Editorial, Corporate — live in code, src/lib/design-sets).
+ * `tokens` and `templates` are validated by src/lib/design-sets; every save bumps `version` and writes a
+ * design_set_versions row, so published artifacts can keep the look they were published with.
+ * `graphId` null is reserved for household-wide sets; sets made in the app always belong to one graph.
+ */
+export const designSets = pgTable("design_sets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").references(() => graphs.id, { onDelete: "cascade" }),
+  householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
+  ownerId: uuid("owner_id").references(() => users.id, { onDelete: "set null" }),
+  name: text("name").notNull(),
+  description: text("description"),
+  tokens: jsonb("tokens").$type<Record<string, unknown>>().notNull(),
+  templates: jsonb("templates").$type<Record<string, unknown>>().notNull().default({}),
+  version: integer("version").notNull().default(1),
+  /** The website it was proposed from, if any. */
+  sourceUrl: text("source_url"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
+}, (t) => [index("design_sets_graph_idx").on(t.graphId)]);
+
+/** Every saved version of a custom design set (what a pinned artifact renders with). */
+export const designSetVersions = pgTable("design_set_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  designSetId: uuid("design_set_id").notNull().references(() => designSets.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  tokens: jsonb("tokens").$type<Record<string, unknown>>().notNull(),
+  templates: jsonb("templates").$type<Record<string, unknown>>().notNull().default({}),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("design_set_versions_uq").on(t.designSetId, t.version)]);
+
+/** The design set a graph's new artifacts start with. `designSetId` is a built-in key ("mygraph") or a design_sets id. */
+export const graphDesignDefaults = pgTable("graph_design_defaults", {
+  graphId: uuid("graph_id").primaryKey().references(() => graphs.id, { onDelete: "cascade" }),
+  designSetId: text("design_set_id").notNull(),
+  updatedBy: uuid("updated_by"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * An artifact made from the graph: kind report | one_pager | deck | brief | profile; status draft | published.
+ * The assistant only ever writes drafts; a person publishes. `designSetVersion` is pinned at publish time and kept
+ * until someone chooses "Refresh design". `content` holds structured blocks whose claims cite graph items.
+ */
+export const artifacts = pgTable("artifacts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("draft"),
+  /** private (only the owner) | parents | household (everyone in the graph), as for nodes. */
+  visibility: visibilityEnum("visibility").notNull().default("private"),
+  designSetId: text("design_set_id").notNull(),
+  designSetVersion: integer("design_set_version").notNull().default(1),
+  content: jsonb("content").$type<Record<string, unknown>>().notNull(),
+  /** What it is about: { about: [{nodeId,label}], question, from, to, text }. */
+  sourceQuery: jsonb("source_query").$type<Record<string, unknown>>().notNull().default({}),
+  /** Drafted from sensitive material: model calls stay local. */
+  sensitive: boolean("sensitive").notNull().default(false),
+  version: integer("version").notNull().default(1),
+  model: text("model"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
+}, (t) => [index("artifacts_graph_idx").on(t.graphId, t.updatedAt)]);
+
+/** Every kept version of an artifact (saves, publishes, accepted regenerations, design refreshes). */
+export const artifactVersions = pgTable("artifact_versions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  artifactId: uuid("artifact_id").notNull().references(() => artifacts.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  title: text("title").notNull(),
+  status: text("status").notNull(),
+  designSetId: text("design_set_id").notNull(),
+  designSetVersion: integer("design_set_version").notNull(),
+  content: jsonb("content").$type<Record<string, unknown>>().notNull(),
+  /** drafted | saved | published | regenerated | design_refreshed | design_changed | restored */
+  event: text("event").notNull(),
+  authorKind: text("author_kind").notNull().default("person"),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("artifact_versions_uq").on(t.artifactId, t.version)]);

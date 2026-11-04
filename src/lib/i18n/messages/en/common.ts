@@ -24,6 +24,16 @@ const messages: MessageTree = {
   justNow: "just now",
   ago: "{time} ago",
   roles: { owner: "Owner", parent: "Parent", child: "Child", guest: "Guest" },
+  approval: {
+    approve: "Approve",
+    deny: "Deny",
+    saving: "Saving…",
+    saved: "Saved.",
+    open: "Open",
+    dismissed: "Dismissed. It won't suggest this again.",
+    alwaysAfter: " It will do this without asking next time.",
+    failed: "That didn't go through. Try again.",
+  },
 };
 
 export default messages;

@@ -40,7 +40,8 @@ export function searchStep(flags: RetrievalFlags, hits: number): AssistantStep {
 /** Steps describing what was found and used, from the items that made it into the context. */
 export function itemSteps(items: ContextItem[], flags: RetrievalFlags): AssistantStep[] {
   const out: AssistantStep[] = [];
-  const docs = new Set(items.filter((i) => i.kind === "passage").map((i) => (i as Extract<ContextItem, { kind: "passage" }>).sourceId));
+  // Web pages have their own step ("Read 2 web pages"), so they don't count as documents here.
+  const docs = new Set(items.filter((i) => i.kind === "passage" && !i.title.startsWith("Web page: ")).map((i) => (i as Extract<ContextItem, { kind: "passage" }>).sourceId));
   if (docs.size) out.push({ kind: "read", label: `Read ${plural(docs.size, "document")}`, count: docs.size });
   const people = items.filter((i) => i.kind === "node" && i.nodeType === "person").length;
   if (flags.people && people) out.push({ kind: "people", label: `Looked up ${plural(people, "person", "people")}`, count: people });
@@ -93,4 +94,18 @@ export function workedLabel(ms: number | null | undefined, steps: AssistantStep[
   const n = steps.length;
   const time = typeof ms === "number" ? `Worked for ${durationWords(ms)}` : "Worked";
   return n ? `${time}, ${plural(n, "step")}` : time;
+}
+
+/**
+ * The web steps: "Searched the web for “Lindevang Skole opening hours”" (with the number of results) and
+ * "Read 2 web pages". Only URLs were read: just the reading step. Search unavailable: said plainly.
+ */
+export function webSteps(r: { query: string; results: number; pages: { via: "read" | "snippet" }[]; outcome: "ok" | "unavailable" | "blocked" | "nothing" }): AssistantStep[] {
+  const out: AssistantStep[] = [];
+  const q = r.query.length > 80 ? `${r.query.slice(0, 79).trimEnd()}…` : r.query;
+  if (r.outcome === "unavailable") return [{ kind: "search", label: "Web search isn't available right now", count: 0 }];
+  if (r.outcome === "blocked") return [{ kind: "other", label: "Couldn't read that page (only the public web can be read)", count: 0 }];
+  if (q) out.push({ kind: "search", label: `Searched the web for “${q}”`, count: r.results });
+  if (r.pages.length) out.push({ kind: "read", label: `Read ${plural(r.pages.length, "web page")}`, count: r.pages.length });
+  return out;
 }

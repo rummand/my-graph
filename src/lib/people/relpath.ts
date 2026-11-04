@@ -8,8 +8,15 @@ import type { MetaModel } from "@/lib/meta/types";
 export type PathEdge = { id: string; fromId: string; toId: string; relation: string; status?: string };
 export type PathNode = { id: string; label: string; type: string; kind: string | null };
 
+/**
+ * The parts a relation phrase is made of, so the UI can say it in the reader's language: the English noun ("child",
+ * "teacher") or verb ("works with") and who it is relative to (null: you). `label` stays the English sentence.
+ */
+export type RoleParts = { noun: string | null; verb: string; anchor: string | null };
+
 export type RelationToCenter = {
   label: string;
+  role?: RoleParts;
   hops: 1 | 2;
   /** The middle person on a 2-hop path. */
   via: { id: string; label: string } | null;
@@ -83,7 +90,8 @@ export function relationsToCenter(m: MetaModel, centerId: string, nodes: Map<str
   }
   for (const [xId, { e }] of first) {
     const x = nodes.get(xId)!;
-    out.set(xId, { label: phrase(roleOf(m, e, x), anchorC), hops: 1, via: null, relation: e.relation, category: findRelation(m, e.relation)?.category ?? "other" });
+    const role = roleOf(m, e, x);
+    out.set(xId, { label: phrase(role, anchorC), role: { ...role, anchor: anchorC.isYou ? null : anchorC.label }, hops: 1, via: null, relation: e.relation, category: findRelation(m, e.relation)?.category ?? "other" });
   }
 
   // 2 hops: centre — M — X
@@ -100,8 +108,9 @@ export function relationsToCenter(m: MetaModel, centerId: string, nodes: Map<str
   }
   for (const [xId, { e, mid }] of second) {
     const x = nodes.get(xId)!;
+    const role = roleOf(m, e, x);
     out.set(xId, {
-      label: phrase(roleOf(m, e, x), { label: mid.label, isYou: false }), hops: 2, via: { id: mid.id, label: mid.label },
+      label: phrase(role, { label: mid.label, isYou: false }), role: { ...role, anchor: mid.label }, hops: 2, via: { id: mid.id, label: mid.label },
       relation: e.relation, category: findRelation(m, e.relation)?.category ?? "other",
     });
   }
@@ -114,6 +123,11 @@ export function relationsToCenter(m: MetaModel, centerId: string, nodes: Map<str
  */
 export function relationToYou(m: MetaModel, e: PathEdge, person: PathNode): string {
   return phrase(roleOf(m, e, person), { label: "you", isYou: true });
+}
+
+/** The same, in parts for the reader's language. */
+export function relationToYouParts(m: MetaModel, e: PathEdge, person: PathNode): RoleParts {
+  return { ...roleOf(m, e, person), anchor: null };
 }
 
 /** Where a fellow member of a graph sits in the circles when nothing else says: by what the graph is for. */

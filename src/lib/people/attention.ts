@@ -5,7 +5,7 @@
 import { differenceInCalendarDays } from "date-fns";
 
 /** Days without contact before someone shows up in "Needs attention". Circles without a cadence never do. */
-export const DEFAULT_CADENCE: Record<string, number> = { family: 14, close: 30, social: 90 };
+export const DEFAULT_CADENCE: Record<string, number> = { family: 14, close: 30, social: 90, friends: 90 };
 
 /** Kinds you normally live with — no contact reminders for them. */
 export const LIVE_WITH_KINDS = new Set(["partner", "child"]);

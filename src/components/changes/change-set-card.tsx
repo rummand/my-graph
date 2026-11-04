@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { clsx } from "clsx";
-import { FileText, Globe, MessageSquare } from "lucide-react";
-import type { ChangeSetView, Receipt } from "@/lib/changes";
+import type { ChangeSetView } from "@/lib/changes";
 import type { Locale, TFn } from "@/lib/i18n/core";
 import { Badge } from "@/components/ui";
 import { formatDate } from "@/components/provenance/labels";
+import { ReceiptLine } from "./receipt";
+import { ChangeSetActions } from "./change-set-actions";
 
 const OPS = ["addNode", "updateNode", "retireNode", "mergeNodes", "addEdge", "updateEdge", "removeEdge", "addKind", "addRelationType", "addAttribute", "addReminder", "editWiki"];
 const ORIGINS = ["person", "assistant", "chat", "connector", "web", "ingest", "automation", "heartbeat", "keeper", "restore"];
@@ -16,31 +17,11 @@ function opLabel(op: string, t: TFn): string {
   return OPS.includes(op) ? t(`changes.op.${op}`) : op;
 }
 
-/** Where one change came from, as a link a person can follow. */
-function ReceiptLine({ r, t }: { r: Receipt; t: TFn }) {
-  const sure = typeof r.confidence === "number" ? t("changes.receipt.sure", { pct: Math.round(r.confidence * 100) }) : null;
-  let link: React.ReactNode = null;
-  if (r.sourceId) {
-    link = <Link className="inline-flex items-center gap-1 text-accent hover:underline" href={`/library/${r.sourceId}`}><FileText aria-hidden className="size-3.5" />{t("changes.receipt.sourceUntitled")}</Link>;
-  } else if (r.conversationId) {
-    link = <Link className="inline-flex items-center gap-1 text-accent hover:underline" href={`/chat/${r.conversationId}`}><MessageSquare aria-hidden className="size-3.5" />{t("changes.receipt.conversation")}</Link>;
-  } else if (r.url && /^https?:\/\//.test(r.url)) {
-    link = <a className="inline-flex items-center gap-1 text-accent hover:underline" href={r.url} rel="noreferrer noopener" target="_blank"><Globe aria-hidden className="size-3.5" />{t("changes.receipt.web")}</a>;
-  }
-  if (!link && !r.quote && !sure) return null;
-  return (
-    <div className="mt-1.5 text-sm">
-      {r.quote && <blockquote className="break-words border-l border-line pl-3 text-fg/90">&ldquo;{r.quote}&rdquo;</blockquote>}
-      <p className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-muted">{link}{sure && <span className="tabular-nums">{sure}</span>}</p>
-    </div>
-  );
-}
-
 /**
- * One proposal with every change and its receipt. Read-only and server-safe: deciding (deliver / turn down) belongs
- * to the versioning workstream's routes and is wired here once they exist.
+ * One proposal with its changes and their receipts. Server-safe. `actions` adds Deliver all / Review / Drop for a
+ * proposal still waiting (Today, a library item); the full review with tick boxes is on /changes/[id].
  */
-export function ChangeSetCard({ cs, t, locale, compact = false }: { cs: ChangeSetView; t: TFn; locale: Locale; compact?: boolean }) {
+export function ChangeSetCard({ cs, t, locale, compact = false, actions = false, canDeliver = true }: { cs: ChangeSetView; t: TFn; locale: Locale; compact?: boolean; actions?: boolean; canDeliver?: boolean }) {
   const shown = compact ? cs.changes.slice(0, 4) : cs.changes;
   return (
     <article className="rounded-lg bg-surface p-5">
@@ -79,6 +60,9 @@ export function ChangeSetCard({ cs, t, locale, compact = false }: { cs: ChangeSe
       </ul>
       {compact && cs.changes.length > shown.length && (
         <p className="mt-2 text-sm"><Link href={`/changes/${cs.id}`} className="text-accent hover:underline">{t("changes.count", { count: cs.changes.length })}</Link></p>
+      )}
+      {actions && cs.status === "draft" && (
+        <ChangeSetActions id={cs.id} fingerprint={cs.fingerprint ?? null} canDeliver={canDeliver} hasConflicts={Object.values(cs.verdicts).some((x) => x === "conflicted")} />
       )}
     </article>
   );

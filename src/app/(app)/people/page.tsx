@@ -2,9 +2,12 @@ import type { Metadata } from "next";
 import { GraphWelcome } from "@/components/graphs/graph-welcome";
 import { PeopleOverview } from "@/components/people/people-overview";
 import { isParent, requireUser } from "@/lib/auth";
+import { getT } from "@/lib/i18n";
 import { peopleOverview } from "@/lib/people";
 
-export const metadata: Metadata = { title: "People" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("people.title") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function PeoplePage({ searchParams }: { searchParams: Promise<{ center?: string }> }) {

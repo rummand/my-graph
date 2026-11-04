@@ -210,6 +210,7 @@ const messages: MessageTree = {
       people: { label: "Read about people", hint: { family: "Birthdays, how people are, who you see", other: "Who people are, how you know them, when you last spoke" } },
       reminders: { label: "Suggest reminders", hint: "Always asks first" },
       wiki_write: { label: "Suggest wiki notes", hint: "Always asks first" },
+      web: { label: "Look things up on the web", hint: "Only names and the topic leave the graph. Pages it reads are saved as sources, and what it finds waits for you as a proposal" },
     },
     howItWrites: "How it writes",
     tone: { warm: "Warm", brief: "Brief", detailed: "Detailed" },

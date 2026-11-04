@@ -37,6 +37,23 @@ const LABELS: Record<string, string> = {
   "graph.invite_create": "Invited someone to a graph",
   "graph.invite_revoke": "Cancelled a graph invite",
   "graph.invite_accept": "Accepted an invite to a graph",
+  "graph.chat_commit": "Saved highlights from a chat to the graph",
+  "changes.deliver": "Delivered a proposed change set",
+  "connections.create": "Added a connection",
+  "connections.update": "Changed a connection",
+  "connections.disconnect": "Disconnected a connection",
+  "account.export": "Downloaded their data",
+  "assistant.proposal.approve": "Approved an assistant suggestion",
+  "chat.delete": "Deleted a conversation",
+  "library.upload": "Added a file to the library",
+  "library.update": "Changed a library item",
+  "library.delete": "Deleted a library item",
+  "meta.save": "Changed the graph's model",
+  "meta.hide": "Hid a built-in kind or relation",
+  "meta.delete": "Deleted a kind, relation or attribute",
+  "reminder.create": "Added a reminder",
+  "reminder.update": "Changed a reminder",
+  "reminder.delete": "Deleted a reminder",
 };
 
 export function auditActionLabel(action: string): string {

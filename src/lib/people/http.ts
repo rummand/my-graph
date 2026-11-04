@@ -2,6 +2,9 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isParent, requireUser, type Viewer } from "@/lib/auth";
+import { getT } from "@/lib/i18n";
+import type { TFn } from "@/lib/i18n/core";
+import { localizeDetails, localizeError } from "./errors";
 import { PeopleError } from "./writes";
 
 export class HttpError extends Error {
@@ -40,20 +43,24 @@ export function route<C>(fn: (req: Request, v: Viewer, ctx: C) => Promise<Respon
       const out = await fn(req, v, ctx);
       return out instanceof Response ? out : NextResponse.json(out);
     } catch (e) {
-      return errorResponse(e);
+      // Errors are worded in the reader's language (English when that can't be worked out).
+      const t = await getT().catch(() => null);
+      return errorResponse(e, t ?? undefined);
     }
   };
 }
 
-export function errorResponse(e: unknown): Response {
+export function errorResponse(e: unknown, t?: TFn): Response {
+  const say = (m: string) => (t ? localizeError(t, m) : m);
   if (e instanceof Response) return e;
   if (e instanceof HttpError || e instanceof PeopleError) {
-    return NextResponse.json({ error: e.message, ...(e.details ? e.details as object : {}) }, { status: e.status });
+    const details = t ? localizeDetails(t, e.details) : e.details;
+    return NextResponse.json({ error: say(e.message), ...(details ? details as object : {}) }, { status: e.status });
   }
   const status = (e as { status?: unknown })?.status;
   if (e instanceof Error && typeof status === "number" && status >= 400 && status < 500) {
-    return NextResponse.json({ error: e.message }, { status });
+    return NextResponse.json({ error: say(e.message) }, { status });
   }
   console.error("[people api]", e);
-  return NextResponse.json({ error: "Something went wrong on our side. Try again in a moment." }, { status: 500 });
+  return NextResponse.json({ error: say("Something went wrong on our side. Try again in a moment.") }, { status: 500 });
 }

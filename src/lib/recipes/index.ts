@@ -12,9 +12,9 @@ import { runTask } from "@/lib/assistant/run";
 import { logActivity } from "@/lib/automations";
 import { canCreateAssistantWork, canUseAssistantTools } from "@/lib/automations/policy";
 import { AutomationError } from "@/lib/automations/store";
-import { canEditRecipe, fillRecipe, recipePlaceholders, STARTER_RECIPES, type RecipeVisibility } from "./pure";
+import { canEditRecipe, fillRecipe, recipePlaceholders, starterRecipesFor, type RecipeVisibility } from "./pure";
 
-export { recipePlaceholders, fillRecipe, STARTER_RECIPES } from "./pure";
+export { recipePlaceholders, fillRecipe, STARTER_RECIPES, starterRecipesFor } from "./pure";
 
 export type RecipeDTO = {
   id: string; name: string; description: string; prompt: string; ownerId: string; visibility: RecipeVisibility;
@@ -49,7 +49,7 @@ function toDTO(v: Viewer, r: Row, last?: typeof recipeRuns.$inferSelect): Recipe
   };
 }
 
-/** The four starter recipes, once per graph (the first time someone who may add recipes opens the list). */
+/** The starter recipes for the graph's template, once per graph (the first time someone who may add recipes opens the list). */
 async function seedStarters(v: Viewer): Promise<void> {
   if (!canCreateAssistantWork(v)) return;
   await db.transaction(async (tx) => {
@@ -57,7 +57,7 @@ async function seedStarters(v: Viewer): Promise<void> {
     const [done] = await tx.select({ id: assistantActivity.id }).from(assistantActivity)
       .where(and(eq(assistantActivity.graphId, v.graphId), eq(assistantActivity.action, "seeded_recipes"))).limit(1);
     if (done) return;
-    await tx.insert(recipes).values(STARTER_RECIPES.map((r) => ({ graphId: v.graphId, ownerId: v.id, name: r.name, description: r.description, prompt: r.prompt, visibility: "household" as const })));
+    await tx.insert(recipes).values(starterRecipesFor(v.graphKind).map((r) => ({ graphId: v.graphId, ownerId: v.id, name: r.name, description: r.description, prompt: r.prompt, visibility: "household" as const })));
     await tx.insert(assistantActivity).values({ graphId: v.graphId, userId: v.id, actor: "automation", action: "seeded_recipes", summary: "Added the starter recipes", visibility: "household" });
   });
 }

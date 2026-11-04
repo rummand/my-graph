@@ -19,6 +19,8 @@ import { NeedsAttention } from "@/components/today/attention";
 import { TodayBoard } from "@/components/today/board";
 import { BriefCard } from "@/components/today/brief-card";
 import { ProposedChanges } from "@/components/today/change-sets";
+import { ConnectionsNeedYou } from "@/components/today/connections";
+import { connectionsNeedingYou } from "@/lib/connectors";
 import { WaitingForYou, type InboxItem } from "@/components/today/inbox";
 import { KeyThings } from "@/components/today/key-things";
 import { QuickActions } from "@/components/today/quick-actions";
@@ -55,11 +57,12 @@ export default async function TodayPage() {
   const show = new Set<string>(template.today);
   const inFamily = viewer.graphKind === "family";
 
-  const [data, assistant, changeSets, keyThings] = await Promise.all([
+  const [data, assistant, changeSets, keyThings, brokenConnections] = await Promise.all([
     loadToday(viewer, now, timeZone),
     loadAssistantHome(viewer),
     safe("change sets", () => listChangeSets(viewer, { status: "draft", limit: 5 })),
     inFamily ? Promise.resolve<KeyThing[] | null>([]) : safe("key people and projects", () => loadKeyThings(viewer)),
+    safe("connections", () => connectionsNeedingYou(viewer)),
   ]);
   const { tz } = data;
   const firstName = viewer.name.split(/\s+/)[0] || viewer.name;
@@ -139,10 +142,12 @@ export default async function TodayPage() {
       )}
 
       {/* On phones the side column comes last, so decisions waiting for you move up above the week. */}
+      {brokenConnections && brokenConnections.length > 0 && <div className="mb-8"><ConnectionsNeedYou items={brokenConnections} /></div>}
+
       {(waiting || pendingSets.length > 0) && (
         <div className="mb-8 space-y-8 lg:hidden">
           {waiting && <WaitingForYou id="waiting-m" items={inbox} limit={TODAY_SUGGESTION_LIMIT} seeAllHref={hrefsAssistant.inbox} readOnly={!canWrite} />}
-          <ProposedChanges sets={pendingSets} now={now} tz={tz} />
+          <ProposedChanges sets={pendingSets} now={now} tz={tz} canDeliver={canWrite} />
         </div>
       )}
 
@@ -183,7 +188,7 @@ export default async function TodayPage() {
                 <WaitingForYou items={inbox} limit={TODAY_SUGGESTION_LIMIT} seeAllHref={hrefsAssistant.inbox} readOnly={!canWrite} />
               </div>
             )}
-            {pendingSets.length > 0 && <div className="hidden lg:block"><ProposedChanges sets={pendingSets} now={now} tz={tz} /></div>}
+            {pendingSets.length > 0 && <div className="hidden lg:block"><ProposedChanges sets={pendingSets} now={now} tz={tz} canDeliver={canWrite} /></div>}
             {show.has("attention") && <NeedsAttention data={data} />}
             {show.has("activity") && assistant.enabled && <AssistantActivity activity={assistant.activity} now={now} tz={tz} />}
             {show.has("recent") && <RecentlyAdded data={data} now={now} tz={tz} />}

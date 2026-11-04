@@ -19,7 +19,12 @@ import type { PersonRef } from "./clarify";
 
 export { ALL_ON, flagsFrom, offWords };
 
-export type Retrieval = { items: ContextItem[]; hits: number; people: PersonRef[] };
+export type Retrieval = { items: ContextItem[]; hits: number; people: PersonRef[]; mentioned?: gbrain.GNode[] };
+
+/** The question with @[Label](node:id) mentions reduced to their labels (what the search engine should see). */
+export function plainQuestion(question: string): string {
+  return question.replace(/@\[([^\]]+)\]\(node:[0-9a-f-]{36}\)/gi, "$1");
+}
 
 const NEIGHBOUR_HITS = 3;
 const MAX_FACTS = 24;
@@ -68,34 +73,51 @@ async function safe<T>(p: Promise<T>, fallback: T, what: string): Promise<T> {
   }
 }
 
-export async function retrieve(v: Viewer, question: string, opts: { tz: string; now?: Date; flags?: RetrievalFlags }): Promise<Retrieval> {
+/**
+ * `mentionIds`: nodes the person @mentioned (already checked readable by resolveMentions). They come first, as if
+ * they were the best hits, and their neighbourhoods are always looked at.
+ */
+export async function retrieve(v: Viewer, rawQuestion: string, opts: { tz: string; now?: Date; flags?: RetrievalFlags; mentionIds?: string[] }): Promise<Retrieval> {
+  const question = plainQuestion(rawQuestion);
   const now = opts.now ?? new Date();
   const tz = opts.tz;
   const flags = opts.flags ?? ALL_ON;
   const noEvents = { events: [] as gbrain.GNode[], involves: [] as { eventId: string; personId: string }[] };
-  const [rawHits, meta, upcoming, reminders] = await Promise.all([
+  const mentionIds = [...new Set(opts.mentionIds ?? [])].slice(0, 8);
+  const [searchHits, meta, upcoming, reminders, mentionedRaw] = await Promise.all([
     safe(gbrain.search(v, question, { limit: 12 }), [], "search"),
     safe(getMeta(v), null, "meta"),
     flags.timeline ? safe(gbrain.timeline(v, { from: now, to: new Date(now.getTime() + 14 * 86_400_000), limit: 12 }), noEvents, "timeline") : Promise.resolve(noEvents),
     flags.reminders ? safe(listReminders(v, { upcoming: true, days: 21, limit: 12, now }), [], "reminders") : Promise.resolve([]),
+    Promise.all(mentionIds.map((id) => safe(gbrain.getNode(v, id), null, "mentioned node"))),
   ]);
+  const mentioned = mentionedRaw.filter((n): n is gbrain.GNode => !!n);
+  const rawHits: gbrain.SearchHit[] = [
+    ...mentioned.map((node) => ({ kind: "node" as const, score: 1, node })),
+    ...searchHits.filter((h) => !(h.node && mentioned.some((m) => m.id === h.node!.id))),
+  ];
   // Library off: no document passages or document nodes.
   const hits = flags.library ? rawHits : rawHits.filter((h) => !h.chunk && h.node && h.node.type !== "document" && h.node.type !== "source");
 
   // Sources behind passage hits: how restricted are they?
   const chunkSourceIds = [...new Set(hits.filter((h) => h.chunk).map((h) => h.chunk!.sourceId))];
   const sensitiveSources = new Set<string>();
+  const webSources = new Set<string>();
   const sourceLevel = new Map<string, ReturnType<typeof itemLevel>>();
   if (chunkSourceIds.length) {
-    const rows = await safe(db.select({ id: sources.id, sensitive: sources.sensitive, visibility: sources.visibility, ownerId: sources.ownerId }).from(sources).where(inArray(sources.id, chunkSourceIds)), [], "source flags");
+    const rows = await safe(db.select({ id: sources.id, sensitive: sources.sensitive, visibility: sources.visibility, ownerId: sources.ownerId, kind: sources.kind }).from(sources).where(inArray(sources.id, chunkSourceIds)), [], "source flags");
     for (const r of rows) {
       if (r.sensitive) sensitiveSources.add(r.id);
+      if (r.kind === "web") webSources.add(r.id);
       sourceLevel.set(r.id, itemLevel(r, v.id));
     }
   }
 
   // Neighbourhoods of the top people / events / places among the hits.
-  const centres = hits.filter((h) => h.node && ["person", "event", "place", "topic"].includes(h.node.type)).slice(0, NEIGHBOUR_HITS).map((h) => h.node!);
+  const centres = [
+    ...mentioned,
+    ...hits.filter((h) => h.node && !mentioned.some((m) => m.id === h.node!.id) && ["person", "event", "place", "topic", "organization", "project"].includes(h.node.type)).slice(0, NEIGHBOUR_HITS).map((h) => h.node!),
+  ].slice(0, NEIGHBOUR_HITS + mentioned.length);
   const hoods = await Promise.all(centres.map((n) => safe(gbrain.neighbourhood(v, n.id, 1), { nodes: [], edges: [] }, "neighbourhood")));
   const nodeById = new Map<string, gbrain.GNode>();
   for (const h of hoods) for (const n of h.nodes) nodeById.set(n.id, n);
@@ -132,7 +154,7 @@ export async function retrieve(v: Viewer, question: string, opts: { tz: string; 
   for (const h of hits) {
     if (h.chunk) {
       items.push({
-        kind: "passage", sourceId: h.chunk.sourceId, title: h.chunk.sourceTitle, text: h.chunk.text,
+        kind: "passage", sourceId: h.chunk.sourceId, title: webSources.has(h.chunk.sourceId) ? `Web page: ${h.chunk.sourceTitle}` : h.chunk.sourceTitle, text: h.chunk.text,
         locator: h.chunk.locator ?? {}, sensitive: sensitiveSources.has(h.chunk.sourceId),
         level: sourceLevel.get(h.chunk.sourceId) ?? "normal",
       });
@@ -167,7 +189,7 @@ export async function retrieve(v: Viewer, question: string, opts: { tz: string; 
   }
   // Everyone the viewer can see who came up, for "which Emma?" (people the search found by name).
   const personRefs = [...nodeById.values()].filter((n) => n.type === "person").map((n) => ({ id: n.id, label: n.label, kind: n.kind ?? null }));
-  return { items, hits: hits.length, people: personRefs };
+  return { items, hits: hits.filter((h) => !(h.node && mentioned.some((m) => m.id === h.node!.id))).length, people: personRefs, mentioned };
 }
 
 /** For the degraded answer (mux down): the best few items as a plain list. */

@@ -25,7 +25,8 @@ export function activityLabel(a: string, t: TFn = EN): string {
 export function agentLabel(agentType: string, agentId: string, names: Record<string, string> = {}, t: TFn = EN): string {
   if (agentType === "user") return names[agentId] ?? t("graph.prov.formerMember");
   if (agentType === "model") {
-    const model = agentId.replace(/^mux:/, "");
+    // "change:<id>" marks a fact that came in through a delivered proposal; the proposal, not the id, is what to show.
+    const model = agentId.startsWith("change:") ? "" : agentId.replace(/^mux:/, "");
     return model ? t("graph.prov.assistantModel", { model }) : t("graph.prov.assistant");
   }
   return t("graph.prov.rule", { name: agentId.replace(/^rule:/, "").replace(/_/g, " ") });
@@ -99,7 +100,7 @@ export function provenanceByline(activity: string, agentType: string, agentId: s
     return t("graph.prov.howBy", { how, who });
   }
   if (agentType === "model") {
-    const model = agentId.replace(/^mux:/, "");
+    const model = agentId.startsWith("change:") ? "" : agentId.replace(/^mux:/, "");
     const base = BY_ASSISTANT.has(activity) ? how : t("graph.prov.howByAssistant", { how });
     return model ? t("graph.prov.withModel", { text: base, model }) : base;
   }

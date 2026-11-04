@@ -1,7 +1,8 @@
 "use client";
 import { useState } from "react";
 import { motion } from "motion/react";
-import { Check, Copy, Lock, ThumbsDown, ThumbsUp } from "lucide-react";
+import Link from "next/link";
+import { Check, Copy, GitPullRequestArrow, ThumbsDown, ThumbsUp } from "lucide-react";
 import { clsx } from "clsx";
 import { useFormatDate, useT } from "@/lib/i18n/client";
 import { MentionText } from "@/components/mention/mention-text";
@@ -67,8 +68,27 @@ export function Answer({ m, conversationId, onDecided, canClarify, onClarify, on
         </div>
       )}
 
+      {!m.streaming && <ProposedChanges steps={m.steps} />}
+
       {!m.streaming && m.content && <AnswerMeta m={m} onFeedback={conversationId && !m.id.startsWith("local-") && m.id !== "pending" ? onFeedback : undefined} />}
     </motion.article>
+  );
+}
+
+/** What the assistant proposed while answering (facts read on the web): waits on /changes for a person to deliver. */
+function ProposedChanges({ steps }: { steps: UiMessage["steps"] }) {
+  const t = useT();
+  const step = steps.find((s) => s.changeSetId);
+  if (!step?.changeSetId) return null;
+  return (
+    <Link href={`/changes/${step.changeSetId}`}
+      className="mt-6 flex items-center justify-between gap-3 rounded-lg bg-surface px-4 py-3 text-sm transition-colors hover:bg-surface-2">
+      <span className="inline-flex items-center gap-2">
+        <GitPullRequestArrow aria-hidden className="size-4 text-accent" />
+        {t("chat.message.proposedChanges", { count: step.count ?? 1 })}
+      </span>
+      <span className="font-medium text-accent">{t("chat.message.reviewChanges")}</span>
+    </Link>
   );
 }
 
@@ -101,7 +121,6 @@ function AnswerMeta({ m, onFeedback }: { m: UiMessage; onFeedback?: (messageId: 
       )}
       {(m.route || model) && (
         <span className="inline-flex items-center gap-1" title={m.model ?? undefined}>
-          {m.route === "agent" && <Lock aria-hidden className="size-3" />}
           {model ? t("chat.message.from", { route, model }) : route}
         </span>
       )}

@@ -5,36 +5,30 @@ import { clsx } from "clsx";
 import { ChevronRight } from "lucide-react";
 import { Button, Input, Select } from "@/components/ui";
 import { attributesFor } from "@/lib/meta/model";
-import { CIRCLE_LABELS, type Circle, type MetaAttribute, type MetaKind, type MetaModel, type MetaRelation } from "@/lib/meta/types";
-import { VISIBILITY_LABELS, type Visibility } from "@/lib/people/types";
+import type { MetaAttribute, MetaKind, MetaModel, MetaRelation } from "@/lib/meta/types";
+import { useT } from "@/lib/i18n/client";
+import type { Visibility } from "@/lib/people/types";
+import { circleName, kindHelp, kindName, relLabel, visibilityHelp, visibilityName } from "@/lib/people/words";
 import { AttributeField } from "./attribute-field";
 import { api, fieldErrors, type FieldErrors } from "./format";
 import { KIND_RELATION, relationOptions, youPresets, type YouPreset } from "./relation-options";
 
 type PersonOpt = { id: string; label: string; isViewer: boolean; kindLabel: string | null };
 
-const VIS_HELP: Record<Visibility, string> = {
-  private: "Only you can see them.",
-  parents: "You and the other parents.",
-  household: "Everyone in the household, children included.",
-};
-
-/** Outside the family graph the same settings mean the graph's members (the owner and editors for "parents"). */
-const VIS_HELP_GRAPH: Record<Visibility, string> = {
-  private: "Only you can see them.",
-  parents: "You, the graph’s owner and its editors.",
-  household: "Everyone in this graph.",
-};
-
 function defaultVisibility(circle: string | null | undefined): Visibility {
   return circle === "family" || circle === "school" || circle === "care" ? "household" : "private";
 }
 
-export function AddPersonForm({ kinds, relations, model, people, defaultOtherId, defaultName, isGuest, graphKind }: {
+export function AddPersonForm({ kinds, relations, model, people, defaultOtherId, defaultName, isGuest, graphKind, family }: {
   kinds: MetaKind[]; relations: MetaRelation[]; attributes: MetaAttribute[]; model: MetaModel; people: PersonOpt[];
   defaultOtherId: string | null; defaultName: string; isGuest: boolean; graphKind?: string;
+  /** Family rules apply (parents and household); otherwise the graph's owner, editors and members. */
+  family?: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
+  const familyRules = family ?? (!graphKind || graphKind === "family");
+  const template = graphKind ?? "family";
   const [label, setLabel] = useState(defaultName);
   const [kind, setKind] = useState("");
   const [kindTouched, setKindTouched] = useState(false);
@@ -88,7 +82,7 @@ export function AddPersonForm({ kinds, relations, model, people, defaultOtherId,
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErrors({}); setError(null);
-    if (!label.trim()) { setErrors({ label: "Give them a name" }); return; }
+    if (!label.trim()) { setErrors({ label: t("people.form.giveName") }); return; }
     setSaving(true);
     try {
       const [key, direction] = rel.split(":") as [string, "out" | "in"];
@@ -106,83 +100,83 @@ export function AddPersonForm({ kinds, relations, model, people, defaultOtherId,
     }
   }
 
-  if (isGuest) return <p className="rounded-lg bg-surface p-4 text-sm text-muted">Guests can look at what’s been shared with them, but can’t add people.</p>;
+  if (isGuest) return <p className="rounded-lg bg-surface p-4 text-sm text-muted">{t("people.form.guest")}</p>;
 
   return (
     <form onSubmit={submit} className="space-y-8" noValidate>
-      <FormBlock title="Who are they?">
+      <FormBlock title={t("people.form.who")}>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label htmlFor="p-name" className="mb-1.5 block text-sm font-medium">Name</label>
+            <label htmlFor="p-name" className="mb-1.5 block text-sm font-medium">{t("people.form.name")}</label>
             <Input id="p-name" value={label} onChange={(e) => setLabel(e.target.value)} autoFocus required maxLength={120}
-              placeholder="Mette Hansen" aria-invalid={!!errors.label || undefined} aria-describedby={errors.label ? "p-name-err" : undefined} />
+              placeholder={t("people.form.namePlaceholder")} aria-invalid={!!errors.label || undefined} aria-describedby={errors.label ? "p-name-err" : undefined} />
             {errors.label && <p id="p-name-err" className="mt-1.5 text-[13px] text-danger">{errors.label}</p>}
           </div>
           <div>
-            <label htmlFor="p-kind" className="mb-1.5 block text-sm font-medium">Kind</label>
+            <label htmlFor="p-kind" className="mb-1.5 block text-sm font-medium">{t("people.form.kind")}</label>
             <Select id="p-kind" value={kind} onChange={(e) => pickKind(e.target.value)}>
-              <option value="">Choose…</option>
+              <option value="">{t("people.form.choose")}</option>
               {byCircle.map(([circle, ks]) => (
-                <optgroup key={circle} label={CIRCLE_LABELS[circle as Circle] ?? circle}>
-                  {ks.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+                <optgroup key={circle} label={circleName(t, template, circle)}>
+                  {ks.map((k) => <option key={k.key} value={k.key}>{kindName(t, k.label)}</option>)}
                 </optgroup>
               ))}
             </Select>
-            {kindRow?.description && <p className="mt-1.5 text-[13px] text-muted">{kindRow.description}</p>}
+            {kindRow?.description && <p className="mt-1.5 text-[13px] text-muted">{kindHelp(t, kindRow.key, kindRow.description)}</p>}
             {errors.kind && <p className="mt-1.5 text-[13px] text-danger">{errors.kind}</p>}
           </div>
         </div>
       </FormBlock>
 
-      <FormBlock title={presets.length ? "How do they know you?" : "How are they connected?"}>
+      <FormBlock title={t(presets.length ? "people.form.howKnowYou" : "people.form.howConnected")}>
         {presets.length > 0 && (
           <>
-            <div role="group" aria-label="How do they know you?" className="flex flex-wrap items-center gap-1.5">
+            <div role="group" aria-label={t("people.form.howKnowYou")} className="flex flex-wrap items-center gap-1.5">
               {presets.map((p) => {
                 const on = activePreset === p.id;
                 return (
                   <button key={p.id} type="button" aria-pressed={on} onClick={() => pickPreset(p)}
                     className={clsx("inline-flex h-9 items-center rounded-full px-3.5 text-sm transition-colors active:scale-[0.97]",
                       on ? "bg-fg text-bg" : "bg-surface-2 text-muted hover:text-fg")}>
-                    {p.label}
+                    {t(`people.preset.${p.id}`, undefined, p.label)}
                   </button>
                 );
               })}
             </div>
-            <p className="mb-2 mt-4 text-[13px] text-muted">Or describe it in your own words, to you or someone else:</p>
+            <p className="mb-2 mt-4 text-[13px] text-muted">{t("people.form.ownWords")}</p>
           </>
         )}
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{label.trim() || "This person"}</span>
-          <span className="text-muted">is</span>
-          <label className="sr-only" htmlFor="p-rel">Relation</label>
+          <span className="font-medium">{label.trim() || t("people.form.thisPerson")}</span>
+          <span className="text-muted">{t("people.form.is")}</span>
+          <label className="sr-only" htmlFor="p-rel">{t("people.form.relation")}</label>
           <Select id="p-rel" value={rel} onChange={(e) => { setRel(e.target.value); setRelTouched(true); }} className="!w-auto max-w-full">
-            <option value="">not connected to anyone yet</option>
-            {options.map((o) => <option key={o.value} value={o.value}>{o.phrase}</option>)}
+            <option value="">{t("people.form.notConnected")}</option>
+            {options.map((o) => <option key={o.value} value={o.value}>{relLabel(t, o.phrase)}</option>)}
           </Select>
           {rel && (
             <>
-              <label className="sr-only" htmlFor="p-other">Person</label>
+              <label className="sr-only" htmlFor="p-other">{t("people.form.person")}</label>
               <Select id="p-other" value={otherId} onChange={(e) => setOtherId(e.target.value)} className="!w-auto max-w-full">
-                <option value="">choose a person…</option>
-                {people.map((p) => <option key={p.id} value={p.id}>{p.isViewer ? "you" : p.label}{p.kindLabel && !p.isViewer ? ` (${p.kindLabel.toLowerCase()})` : ""}</option>)}
+                <option value="">{t("people.form.choosePerson")}</option>
+                {people.map((p) => <option key={p.id} value={p.id}>{p.isViewer ? t("people.youLower") : p.label}{p.kindLabel && !p.isViewer ? ` (${kindName(t, p.kindLabel).toLowerCase()})` : ""}</option>)}
               </Select>
             </>
           )}
         </div>
-        {rel && !otherId && <p className="mt-2 text-[13px] text-warn">Pick who they’re connected to, or choose “not connected”.</p>}
-        {rel && otherName && <p className="mt-2 text-[13px] text-muted">Saved as a confirmed fact, added by you.</p>}
+        {rel && !otherId && <p className="mt-2 text-[13px] text-warn">{t("people.form.pickWho")}</p>}
+        {rel && otherName && <p className="mt-2 text-[13px] text-muted">{t("people.form.confirmed")}</p>}
       </FormBlock>
 
-      <FormBlock title="Who can see them?">
+      <FormBlock title={t("people.form.whoCanSee")}>
         <fieldset>
-          <legend className="sr-only">Who can see them?</legend>
+          <legend className="sr-only">{t("people.form.whoCanSee")}</legend>
           <div className="grid gap-2 sm:grid-cols-3">
             {(["private", "parents", "household"] as Visibility[]).map((v) => (
               <label key={v} className={clsx("flex cursor-pointer gap-2.5 rounded-md p-3 text-sm transition-colors",
                 visibility === v ? "bg-surface ring-2 ring-inset ring-fg" : "bg-surface-2/60 hover:bg-surface-2")}>
                 <input type="radio" name="vis" value={v} checked={visibility === v} onChange={() => { setVisibility(v); setVisTouched(true); }} className="mt-0.5 accent-[var(--fg)]" />
-                <span><span className="block font-medium">{VISIBILITY_LABELS[v]}</span><span className="block text-[13px] text-muted">{graphKind && graphKind !== "family" ? VIS_HELP_GRAPH[v] : VIS_HELP[v]}</span></span>
+                <span><span className="block font-medium">{visibilityName(t, familyRules, v)}</span><span className="block text-[13px] text-muted">{visibilityHelp(t, familyRules, v)}</span></span>
               </label>
             ))}
           </div>
@@ -192,11 +186,11 @@ export function AddPersonForm({ kinds, relations, model, people, defaultOtherId,
       <details className="group rounded-lg bg-surface p-4">
         <summary className="flex cursor-pointer list-none items-center gap-2 text-[15px] font-medium [&::-webkit-details-marker]:hidden">
           <ChevronRight className="size-4 text-muted transition-transform duration-200 group-open:rotate-90" aria-hidden="true" />
-          More details <span className="font-normal text-muted">optional, you can add these later</span>
+          {t("people.form.more")} <span className="font-normal text-muted">{t("people.form.moreHint")}</span>
         </summary>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {attrs.map((a) => (
-            <AttributeField key={a.key} attr={a} idPrefix="new" value={props[a.key]} error={errors[`props.${a.key}`] ?? errors[a.key]}
+            <AttributeField key={a.key} attr={a} idPrefix="new" family={familyRules} value={props[a.key]} error={errors[`props.${a.key}`] ?? errors[a.key]}
               onChange={(v) => setProps((p) => ({ ...p, [a.key]: v }))} />
           ))}
         </div>
@@ -204,8 +198,8 @@ export function AddPersonForm({ kinds, relations, model, people, defaultOtherId,
 
       {error && <p role="alert" className="text-sm text-danger">{error}</p>}
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" onClick={() => router.back()}>Cancel</Button>
-        <Button type="submit" disabled={saving || (!!rel && !otherId)}>{saving ? "Adding…" : "Add person"}</Button>
+        <Button type="button" variant="ghost" onClick={() => router.back()}>{t("people.form.cancel")}</Button>
+        <Button type="submit" disabled={saving || (!!rel && !otherId)}>{saving ? t("people.form.adding") : t("people.form.add")}</Button>
       </div>
     </form>
   );

@@ -6,11 +6,11 @@ import { clsx } from "clsx";
 import { AnimatePresence, motion } from "motion/react";
 import { useT } from "@/lib/i18n/client";
 import {
-  Brain, CalendarRange, FileText, FolderOpen, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, Users, Workflow, X, type LucideIcon,
+  Brain, CalendarRange, FileText, FileStack, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 
-/** `key` is the label under shell.nav.* */
-type NavItem = { href: string; key: string; icon: LucideIcon; hideFor?: string[] };
+/** `key` is the label under shell.nav.* (or `label`, a full message key, for items whose copy lives in their own namespace). */
+type NavItem = { href: string; key: string; icon: LucideIcon; hideFor?: string[]; label?: string };
 
 const PRIMARY: NavItem[] = [
   { href: "/", key: "today", icon: House },
@@ -21,7 +21,10 @@ const PRIMARY: NavItem[] = [
 const SECONDARY: NavItem[] = [
   { href: "/library", key: "library", icon: FolderOpen },
   { href: "/wiki", key: "wiki", icon: FileText, hideFor: ["guest"] },
+  { href: "/artifacts", key: "artifacts", icon: FileStack, hideFor: ["guest"], label: "artifacts.nav" },
   { href: "/graph", key: "connections", icon: Network },
+  { href: "/changes", key: "changes", icon: GitPullRequestArrow, hideFor: ["guest"], label: "changes.nav" },
+  { href: "/history", key: "history", icon: History, hideFor: ["guest"], label: "history.nav" },
   { href: "/memory", key: "memory", icon: Brain, hideFor: ["guest", "child"] },
   { href: "/automations", key: "automations", icon: Workflow, hideFor: ["guest", "child"] },
   { href: "/graphs", key: "graphs", icon: Layers },
@@ -43,7 +46,7 @@ export function NavLinks({ role }: { role: string }) {
           active ? "font-medium text-fg" : "text-muted hover:bg-surface-2/70 hover:text-fg")}>
         {active && <motion.span layoutId="nav-active" className="absolute inset-0 rounded-md bg-surface shadow-[0_1px_2px_rgb(0_0_0/0.06)]" />}
         <Icon className="relative size-[18px] shrink-0" strokeWidth={active ? 2.2 : 1.8} aria-hidden />
-        <span className="relative">{t(`shell.nav.${l.key}`)}</span>
+        <span className="relative">{t(l.label ?? `shell.nav.${l.key}`)}</span>
       </Link>
     );
   };
@@ -72,7 +75,7 @@ export function MobileNav({ role }: { role: string }) {
           return (
             <Link key={l.href} href={l.href} aria-current={active ? "page" : undefined}
               className={clsx("flex flex-col items-center gap-0.5 py-2 text-[11px]", active ? "font-medium text-fg" : "text-muted")}>
-              <Icon className="size-5" strokeWidth={active ? 2.2 : 1.8} aria-hidden />{t(`shell.nav.${l.key}`)}
+              <Icon className="size-5" strokeWidth={active ? 2.2 : 1.8} aria-hidden />{t(l.label ?? `shell.nav.${l.key}`)}
             </Link>
           );
         })}
@@ -96,7 +99,7 @@ export function MobileNav({ role }: { role: string }) {
                 return (
                   <Link key={l.href} href={l.href} onClick={() => setOpen(false)}
                     className={clsx("flex items-center gap-3 rounded-md px-3 py-3", isActive(path, l.href) ? "bg-surface-2 font-medium" : "")}>
-                    <Icon className="size-5 text-muted" aria-hidden />{t(`shell.nav.${l.key}`)}
+                    <Icon className="size-5 text-muted" aria-hidden />{t(l.label ?? `shell.nav.${l.key}`)}
                   </Link>
                 );
               })}

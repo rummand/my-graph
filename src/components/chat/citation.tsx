@@ -21,6 +21,8 @@ const isLow = (c: Citation) => c.confidence !== undefined && c.confidence < 0.6;
 
 function whereFrom(c: Citation, t: TFn): string {
   const loc = locatorWords(c.locator, t);
+  // Pages read on the web are stored as sources titled "Web page: …" (src/lib/web).
+  if (c.sourceId && c.title.startsWith("Web page: ")) return t("chat.sources.webPage");
   if (c.sourceId) return loc ? t("chat.sources.libraryAt", { where: loc }) : t("chat.sources.libraryFile");
   if (c.edgeId) return t("chat.sources.link");
   return t("chat.sources.inGraph");

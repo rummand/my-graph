@@ -3,14 +3,20 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Avatar } from "@/components/ui";
-import { layoutCircles, WELLBEING_WORDS } from "@/lib/people/circles";
+import { layoutCircles, RINGS, type RingDef } from "@/lib/people/circles";
 import type { CenterOption, PersonSummary } from "@/lib/people/types";
+import { kindName, wellbeingWord } from "@/lib/people/words";
 import { PersonAvatar } from "./avatar";
-import { ago, daysWords } from "./format";
+import { useFmt, type Fmt } from "./format";
+import { relationText } from "./people-table";
 
 type Props = {
   people: PersonSummary[];
   center: CenterOption | null;
+  /** The graph's rings with names in the reader's language (default: the family rings). */
+  rings?: RingDef[];
+  /** Family rules: the centre falls back to "Your family". */
+  family?: boolean;
   /** personId → days since last contact (null = never logged), for people who are overdue. */
   overdue: Map<string, number | null>;
 };
@@ -34,16 +40,17 @@ const firstName = (label: string) => {
   return parts[0] ?? label;
 };
 
-function describe(p: PersonSummary, overdueDays: number | null | undefined): string {
+function describe(f: Fmt, p: PersonSummary, overdueDays: number | null | undefined): string {
+  const { t } = f;
   const latest = p.wellbeing[p.wellbeing.length - 1];
   const parts = [
     p.label,
-    p.relation?.label ?? p.kindLabel,
-    p.householdMember ? "member of this graph" : null,
-    `last in touch ${ago(p.lastContactAt)}`,
-    latest ? `feeling ${WELLBEING_WORDS[latest.score].toLowerCase()}` : "no check-in yet",
+    relationText(f, p) ?? (p.kindLabel ? kindName(t, p.kindLabel) : null),
+    p.householdMember ? t("people.map.memberOfGraph") : null,
+    t("people.map.lastInTouch", { when: f.ago(p.lastContactAt) }),
+    latest ? t(`people.feelingLower.${latest.score}`) : t("people.map.noCheckIn"),
   ];
-  if (overdueDays !== undefined) parts.push("longer than usual since you were in touch");
+  if (overdueDays !== undefined) parts.push(t("people.map.longer"));
   return parts.filter(Boolean).join(", ");
 }
 
@@ -52,7 +59,9 @@ function describe(p: PersonSummary, overdueDays: number | null | undefined): str
  * closest), each person as their own-colour avatar. Avatar size is how often you're in touch; the dot is their last
  * check-in; a dashed amber ring means it has been longer than usual. Positions animate when filters change.
  */
-export function CirclesView({ people, center, overdue }: Props) {
+export function CirclesView({ people, center, overdue, rings = RINGS, family = true }: Props) {
+  const f = useFmt();
+  const { t } = f;
   const wrap = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [active, setActive] = useState<string | null>(null);
@@ -71,8 +80,8 @@ export function CirclesView({ people, center, overdue }: Props) {
   // A short force simulation runs inside: compute once per data change, never on hover.
   const layout = useMemo(() => layoutCircles(
     others.map((p) => ({ id: p.id, circle: p.circle, r: SLOT, sortKey: `${p.kind ?? "~"}:${p.label}` })),
-    { centerRadius: CENTER, ringGap: 2 },
-  ), [others]);
+    { centerRadius: CENTER, ringGap: 2, rings },
+  ), [others, rings]);
   const pos = useMemo(() => new Map(layout.placed.map((p) => [p.id, p])), [layout]);
 
   const E = Math.max(layout.extent, CENTER + 40) + PAD;
@@ -80,7 +89,7 @@ export function CirclesView({ people, center, overdue }: Props) {
   const scale = width ? Math.min(1, width / size, MAX_H / size) : 1;
   const activeP = active ? others.find((p) => p.id === active) : null;
   const activePos = active ? pos.get(active) : null;
-  const centerLabel = center ? (center.isViewer ? "You" : center.label) : "Your family";
+  const centerLabel = center ? (center.isViewer ? t("people.you") : center.label) : t(family ? "people.map.centerFamily" : "people.map.centerGraph");
 
   return (
     <div ref={wrap} className="relative w-full" style={{ height: size * scale }}>
@@ -102,7 +111,7 @@ export function CirclesView({ people, center, overdue }: Props) {
         <div className="absolute flex flex-col items-center" style={{ left: E, top: E, transform: "translate(-50%, -50%)" }}>
           {center
             ? <Avatar id={center.id} name={center.label} size={64} className="ring-4 ring-surface" />
-            : <span className="inline-flex size-16 items-center justify-center rounded-full bg-fg text-sm font-semibold text-bg">Us</span>}
+            : <span className="inline-flex size-16 items-center justify-center rounded-full bg-fg text-sm font-semibold text-bg">{t("people.map.us")}</span>}
           <span className="absolute top-full mt-1.5 whitespace-nowrap text-sm font-semibold">{centerLabel}</span>
         </div>
 
@@ -120,7 +129,7 @@ export function CirclesView({ people, center, overdue }: Props) {
                 animate={{ opacity: 1, scale: 1, x: E + pt.x, y: E + pt.y }}
                 exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.15 } }}
                 transition={MOVE}>
-                <Link href={`/people/${p.id}`} aria-label={describe(p, od)}
+                <Link href={`/people/${p.id}`} aria-label={describe(f, p, od)}
                   onMouseEnter={() => setActive(p.id)} onMouseLeave={() => setActive((a) => (a === p.id ? null : a))}
                   onFocus={() => setActive(p.id)} onBlur={() => setActive((a) => (a === p.id ? null : a))}
                   className="group absolute flex w-[84px] -translate-x-1/2 flex-col items-center rounded-lg outline-offset-4"
@@ -129,8 +138,8 @@ export function CirclesView({ people, center, overdue }: Props) {
                     className="transition-transform duration-150 ease-out group-hover:scale-[1.06] group-active:scale-[0.97]" />
                   <span className="mt-1.5 max-w-full truncate text-[13px] font-medium leading-tight">{firstName(p.label)}</span>
                   {isOverdue
-                    ? <span className="text-xs leading-tight text-warn">{od == null ? "never logged" : daysWords(od)}</span>
-                    : p.householdMember && <span className="text-xs leading-tight text-muted">member</span>}
+                    ? <span className="text-xs leading-tight text-warn">{od == null ? t("people.map.neverLogged") : f.daysWords(od)}</span>
+                    : p.householdMember && <span className="text-xs leading-tight text-muted">{t("people.member")}</span>}
                 </Link>
               </motion.div>
             );
@@ -157,17 +166,19 @@ export function CirclesView({ people, center, overdue }: Props) {
 }
 
 function Tip({ p, overdueDays }: { p: PersonSummary; overdueDays: number | null | undefined }) {
+  const f = useFmt();
+  const { t } = f;
   const latest = p.wellbeing[p.wellbeing.length - 1];
   return (
     <>
       <div className="font-medium">{p.label}</div>
-      <div className="text-muted">{p.relation?.label ?? p.kindLabel ?? "No relation recorded"}</div>
-      {p.householdMember && <div className="text-[13px] text-muted">Member of this graph</div>}
+      <div className="text-muted">{relationText(f, p) ?? (p.kindLabel ? kindName(t, p.kindLabel) : t("people.map.noRelation"))}</div>
+      {p.householdMember && <div className="text-[13px] text-muted">{t("people.memberOfGraph")}</div>}
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[13px]">
-        <dt className="text-muted">In touch</dt>
-        <dd className={overdueDays !== undefined ? "text-warn" : undefined} suppressHydrationWarning>{ago(p.lastContactAt)}</dd>
-        <dt className="text-muted">Feeling</dt>
-        <dd>{latest ? WELLBEING_WORDS[latest.score] : <span className="text-muted">No check-in yet</span>}</dd>
+        <dt className="text-muted">{t("people.map.inTouch")}</dt>
+        <dd className={overdueDays !== undefined ? "text-warn" : undefined} suppressHydrationWarning>{f.ago(p.lastContactAt)}</dd>
+        <dt className="text-muted">{t("people.map.feeling")}</dt>
+        <dd>{latest ? wellbeingWord(t, latest.score) : <span className="text-muted">{t("people.map.noCheckInYet")}</span>}</dd>
       </dl>
     </>
   );
@@ -175,21 +186,22 @@ function Tip({ p, overdueDays }: { p: PersonSummary; overdueDays: number | null 
 
 /** The key under the map. Each mark is the real mark, scaled down. */
 export function CirclesLegend() {
+  const t = useFmt().t;
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] text-muted">
       <span className="inline-flex items-center gap-2">
         <span aria-hidden="true" className="inline-flex items-end gap-0.5"><span className="size-2.5 rounded-full bg-line" /><span className="size-3.5 rounded-full bg-line" /></span>
-        Bigger means more contact lately
+        {t("people.map.bigger")}
       </span>
       <span className="inline-flex items-center gap-2">
         <span aria-hidden="true" className="inline-flex gap-0.5">
           <span className="size-2 rounded-full bg-[var(--wb-good)]" /><span className="size-2 rounded-full bg-[var(--wb-neutral)]" /><span className="size-2 rounded-full bg-[var(--wb-warn)]" />
         </span>
-        Last check-in
+        {t("people.map.lastCheckIn")}
       </span>
       <span className="inline-flex items-center gap-2">
         <span aria-hidden="true" className="size-3.5 rounded-full border-[1.5px] border-dashed border-warn" />
-        Longer than usual since you were in touch
+        {t("people.map.longerLegend")}
       </span>
     </div>
   );

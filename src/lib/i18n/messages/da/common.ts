@@ -24,6 +24,16 @@ const messages: MessageTree = {
   justNow: "lige nu",
   ago: "for {time} siden",
   roles: { owner: "Ejer", parent: "Forælder", child: "Barn", guest: "Gæst" },
+  approval: {
+    approve: "Godkend",
+    deny: "Afvis",
+    saving: "Gemmer…",
+    saved: "Gemt.",
+    open: "Åbn",
+    dismissed: "Afvist. Det bliver ikke foreslået igen.",
+    alwaysAfter: " Næste gang gør den det uden at spørge.",
+    failed: "Det gik ikke igennem. Prøv igen.",
+  },
 };
 
 export default messages;

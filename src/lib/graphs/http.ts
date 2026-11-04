@@ -98,7 +98,7 @@ export function limit(l: AttemptLimiter, key: string): void {
 const name = z.string().trim().min(1, "Give the graph a name.").max(60, "Keep the name under 60 characters.");
 const description = z.string().trim().max(400, "Keep the description under 400 characters.").nullish().transform((s) => (s ? s : null));
 const hue = z.number().int().min(0).max(359);
-const kind = z.enum(["personal", "work", "shared", "other"]);
+const kind = z.enum(["personal", "work", "partner", "project", "shared", "other"]);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const email = z.string().trim().toLowerCase().max(254).refine((s) => EMAIL.test(s), "Enter a valid email address.");
 const memberRole = z.enum(["editor", "viewer"]);

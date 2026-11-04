@@ -9,6 +9,9 @@ export async function register() {
     if (process.env.NEXT_PHASE !== "phase-production-build") {
       const { startScheduler } = await import("@/lib/automations");
       startScheduler();
+      // Connections (calendar links, mailboxes): every 60s, claims due ones atomically (src/lib/connectors).
+      const { startConnectorScheduler } = await import("@/lib/connectors");
+      startConnectorScheduler();
     }
   }
 }

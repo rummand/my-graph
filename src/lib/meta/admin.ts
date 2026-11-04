@@ -8,6 +8,10 @@ import { db } from "@/db";
 import { metaAttributes, metaKinds, metaRelations, nodes, edges } from "@/db/schema";
 import { ALL_CIRCLES, ATTR_TYPES, META_NODE_TYPES, RELATION_CATEGORIES } from "./types";
 import { ensureBuiltins, getHouseholdRow, type MetaTableName } from "./index";
+import { remembering } from "@/lib/changes";
+
+/** Every edit to the household's model is in the graph's history (who, when, from what to what). */
+const recorded = <T>(what: string, write: () => Promise<T>) => remembering(null, { actorKind: "person", context: `meta:${what}` }, write);
 
 const keyRe = /^[a-z][a-z0-9_]{0,47}$/;
 export const metaKey = z.string().trim().toLowerCase().regex(keyRe, "Use lowercase letters, digits and _ (e.g. football_coach)");
@@ -64,39 +68,45 @@ async function builtinExists(table: MetaTableName, k: { nodeType?: string; kindK
 
 /** Create or replace the household's row for this key (override of a built-in, or a new addition). */
 export async function upsertKind(householdId: string, input: KindIn, hidden = false) {
-  const values = {
-    householdId, nodeType: input.nodeType as never, key: input.key, label: input.label, pluralLabel: input.pluralLabel ?? null,
-    description: input.description ?? null, circle: input.circle ?? null, parentKey: input.parentKey ?? null, icon: input.icon ?? null,
-    color: input.color ?? null, sortOrder: input.sortOrder ?? 5000, builtin: hidden,
-  };
-  const [row] = await db.insert(metaKinds).values(values)
-    .onConflictDoUpdate({ target: [metaKinds.householdId, metaKinds.nodeType, metaKinds.key], set: { ...values, householdId: undefined } as never })
-    .returning();
-  return row;
+  return recorded(hidden ? "hide" : "kind", async () => {
+    const values = {
+      householdId, nodeType: input.nodeType as never, key: input.key, label: input.label, pluralLabel: input.pluralLabel ?? null,
+      description: input.description ?? null, circle: input.circle ?? null, parentKey: input.parentKey ?? null, icon: input.icon ?? null,
+      color: input.color ?? null, sortOrder: input.sortOrder ?? 5000, builtin: hidden,
+    };
+    const [row] = await db.insert(metaKinds).values(values)
+      .onConflictDoUpdate({ target: [metaKinds.householdId, metaKinds.graphId, metaKinds.nodeType, metaKinds.key], set: { ...values, householdId: undefined } as never })
+      .returning();
+    return row;
+  });
 }
 
 export async function upsertRelation(householdId: string, input: RelIn, hidden = false) {
-  const values = { householdId, key: input.key, label: input.label, inverseLabel: input.symmetric ? input.label : input.inverseLabel,
-    category: input.category, fromTypes: input.fromTypes, toTypes: input.toTypes, symmetric: input.symmetric, builtin: hidden };
-  const [row] = await db.insert(metaRelations).values(values)
-    .onConflictDoUpdate({ target: [metaRelations.householdId, metaRelations.key], set: { ...values, householdId: undefined } as never })
-    .returning();
-  return row;
+  return recorded(hidden ? "hide" : "relation", async () => {
+    const values = { householdId, key: input.key, label: input.label, inverseLabel: input.symmetric ? input.label : input.inverseLabel,
+      category: input.category, fromTypes: input.fromTypes, toTypes: input.toTypes, symmetric: input.symmetric, builtin: hidden };
+    const [row] = await db.insert(metaRelations).values(values)
+      .onConflictDoUpdate({ target: [metaRelations.householdId, metaRelations.graphId, metaRelations.key], set: { ...values, householdId: undefined } as never })
+      .returning();
+    return row;
+  });
 }
 
 export async function upsertAttribute(householdId: string, input: AttrIn, hidden = false) {
-  const values = { householdId, nodeType: input.nodeType as never, kindKey: input.kindKey ?? null, key: input.key, label: input.label,
-    dataType: input.dataType as never, options: input.options, required: input.required, sensitive: input.sensitive,
-    sortOrder: input.sortOrder ?? 5000, builtin: hidden };
-  // kindKey may be NULL → ON CONFLICT can't match it; do it by hand.
-  const [existing] = await db.select({ id: metaAttributes.id }).from(metaAttributes).where(and(eq(metaAttributes.householdId, householdId),
-    eq(metaAttributes.nodeType, input.nodeType as never), input.kindKey ? eq(metaAttributes.kindKey, input.kindKey) : isNull(metaAttributes.kindKey), eq(metaAttributes.key, input.key)));
-  if (existing) {
-    const [row] = await db.update(metaAttributes).set(values).where(eq(metaAttributes.id, existing.id)).returning();
+  return recorded(hidden ? "hide" : "attribute", async () => {
+    const values = { householdId, nodeType: input.nodeType as never, kindKey: input.kindKey ?? null, key: input.key, label: input.label,
+      dataType: input.dataType as never, options: input.options, required: input.required, sensitive: input.sensitive,
+      sortOrder: input.sortOrder ?? 5000, builtin: hidden };
+    // kindKey may be NULL → ON CONFLICT can't match it; do it by hand.
+    const [existing] = await db.select({ id: metaAttributes.id }).from(metaAttributes).where(and(eq(metaAttributes.householdId, householdId),
+      isNull(metaAttributes.graphId), eq(metaAttributes.nodeType, input.nodeType as never), input.kindKey ? eq(metaAttributes.kindKey, input.kindKey) : isNull(metaAttributes.kindKey), eq(metaAttributes.key, input.key)));
+    if (existing) {
+      const [row] = await db.update(metaAttributes).set(values).where(eq(metaAttributes.id, existing.id)).returning();
+      return row;
+    }
+    const [row] = await db.insert(metaAttributes).values(values).returning();
     return row;
-  }
-  const [row] = await db.insert(metaAttributes).values(values).returning();
-  return row;
+  });
 }
 
 export const upsert = { kinds: upsertKind, relations: upsertRelation, attributes: upsertAttribute } as const;
@@ -124,9 +134,11 @@ export async function usageCount(householdId: string, table: MetaTableName, row:
 }
 
 export async function deleteHouseholdRow(householdId: string, table: MetaTableName, id: string) {
-  const row = await getHouseholdRow(table, householdId, id);
-  if (!row) return null;
-  const t = { kinds: metaKinds, relations: metaRelations, attributes: metaAttributes }[table];
-  await db.delete(t).where(eq(t.id, id));
-  return row;
+  return recorded("delete", async () => {
+    const row = await getHouseholdRow(table, householdId, id);
+    if (!row) return null;
+    const t = { kinds: metaKinds, relations: metaRelations, attributes: metaAttributes }[table];
+    await db.delete(t).where(eq(t.id, id));
+    return row;
+  });
 }

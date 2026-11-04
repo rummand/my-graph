@@ -8,7 +8,7 @@ import {
   dedupeVerdict, firstFreeSlot, isBusy, isStale, overDailyCap, prefilter, safeInternalHref, startOfLocalDay, validatePayload,
 } from "./policy";
 import { birthdayReminderAt, buildHeartbeatProposals, heartbeatSummary, setKey, type HeartbeatData } from "./heartbeat-pure";
-import { canEditRecipe, canSeeRecipe, fillRecipe, recipePlaceholders, STARTER_RECIPES } from "@/lib/recipes/pure";
+import { canEditRecipe, canSeeRecipe, fillRecipe, recipePlaceholders, STARTER_RECIPES, starterRecipesFor } from "@/lib/recipes/pure";
 import { paragraphsDoc } from "./apply-doc";
 
 const CPH = "Europe/Copenhagen";
@@ -296,6 +296,14 @@ describe("recipes", () => {
     expect(STARTER_RECIPES.map((r) => r.name)).toEqual([
       "Weekly family summary", "What do we need to pack for <trip>", "Prepare for the next parent-teacher meeting", "Who haven't we seen in a while",
     ]);
+  });
+  it("seeds starters that follow the graph's template", () => {
+    expect(starterRecipesFor("family")).toBe(STARTER_RECIPES);
+    for (const kind of ["work", "project", "partner", "personal", "shared", "other"]) {
+      const text = starterRecipesFor(kind).map((r) => `${r.name} ${r.description} ${r.prompt}`).join(" ").toLowerCase();
+      expect(text).not.toMatch(/family|parent-teacher|school|kids|pack for/);
+    }
+    expect(starterRecipesFor("work").map((r) => r.name)).toContain("Weekly status");
   });
   it("follows visibility and graph", () => {
     const parent = { id: "u1", householdId: "h", role: "parent" as const };

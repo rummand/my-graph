@@ -7,6 +7,11 @@
  * so every field that moves is in `graph_events` with who, when and why.
  */
 import type { Viewer } from "@/lib/auth";
+import { db } from "@/db";
+import { currentScope, historyStore, type HistoryScope } from "@/lib/history/context";
+import { recordMeta, snapshotMeta } from "@/lib/history/record";
+import { abandon, getOne, list, propose } from "./store";
+import { deliver } from "./deliver";
 
 export type ChangeOp =
   | { op: "addNode"; nodeId?: string; type: string; kind?: string | null; label: string; summary?: string; props?: Record<string, unknown>; aliases?: string[]; startAt?: string | null; endAt?: string | null; visibility?: "private" | "parents" | "household" }
@@ -38,39 +43,82 @@ export type ChangeSetView = {
   changes: { id: string; seq: number; op: string; summary: string; note: string | null; receipt: Receipt; included: boolean; nodeId: string | null; edgeId: string | null; payload: Record<string, unknown> }[];
   /** Per-op verdict against the graph now: outstanding | landed | conflicted. */
   verdicts: Record<string, "outstanding" | "landed" | "conflicted">;
+  /** Hash of the ops as they stand; pass it back on deliver so an approval of an older version is refused. */
+  fingerprint?: string | null;
 };
 
 /** Opens a change set with its ops (node ids for new nodes are minted here). Returns the id, or null if not allowed. */
-export async function proposeChanges(_v: Viewer, _input: { title: string; description?: string; origin: ChangeSetOrigin; evidence?: Receipt; forUserId?: string; changes: ChangeInput[] }): Promise<{ id: string; nodeIds: Record<number, string> } | null> {
-  return null;
+export async function proposeChanges(v: Viewer, input: { title: string; description?: string; origin: ChangeSetOrigin; evidence?: Receipt; forUserId?: string; changes: ChangeInput[] }): Promise<{ id: string; nodeIds: Record<number, string> } | null> {
+  return propose(v, input);
 }
 
 /**
  * Applies a change set (all included ops, or only `onlyChangeIds`) in one transaction, recording history and provenance.
  * The person delivering must be allowed to write; ops that conflict are refused, not half-applied.
  */
-export async function deliverChangeSet(_v: Viewer, _id: string, _opts: { onlyChangeIds?: string[]; fingerprint?: string } = {}): Promise<{ ok: boolean; applied: number; conflicts: string[]; error?: string }> {
-  return { ok: false, applied: 0, conflicts: [], error: "Versioning is not available yet." };
+export async function deliverChangeSet(v: Viewer, id: string, opts: { onlyChangeIds?: string[]; fingerprint?: string } = {}): Promise<{ ok: boolean; applied: number; conflicts: string[]; error?: string }> {
+  return deliver(v, id, opts);
 }
 
-export async function abandonChangeSet(_v: Viewer, _id: string): Promise<boolean> {
-  return false;
+export async function abandonChangeSet(v: Viewer, id: string): Promise<boolean> {
+  return abandon(v, id);
 }
 
-export async function getChangeSet(_v: Viewer, _id: string): Promise<ChangeSetView | null> {
-  return null;
+export async function getChangeSet(v: Viewer, id: string): Promise<ChangeSetView | null> {
+  return getOne(v, id);
 }
 
-export async function listChangeSets(_v: Viewer, _opts: { status?: "draft" | "delivered" | "abandoned" | "all"; origin?: ChangeSetOrigin; limit?: number } = {}): Promise<ChangeSetView[]> {
-  return [];
+export async function listChangeSets(v: Viewer, opts: { status?: "draft" | "delivered" | "abandoned" | "all"; origin?: ChangeSetOrigin; limit?: number } = {}): Promise<ChangeSetView[]> {
+  return list(v, opts);
+}
+
+/** The signed-in viewer of this request, when a caller (meta admin) has none at hand. */
+async function requestViewer(): Promise<Viewer | null> {
+  try {
+    const { getViewer } = await import("@/lib/auth");
+    return await getViewer();
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Runs a write to the live graph (nodes, edges, meta, wiki) inside the history recorder: snapshot, write, diff, record
  * one `graph_events` row per field that moved. Existing gbrain writes should go through this.
+ *
+ * GBrain's own writes record their rows themselves (before/after inside their transaction) and take the hand from
+ * here; this wrapper also watches the graph's meta model, so kinds, relation types and attributes have history too.
+ * Recording never fails the write.
  */
-export async function remembering<T>(_v: Viewer | null, _ctx: { actorKind: "person" | "assistant" | "connector" | "import" | "system"; actorName?: string; changeSetId?: string; context?: string }, write: () => Promise<T>): Promise<T> {
-  return write();
+export async function remembering<T>(v: Viewer | null, ctx: { actorKind: "person" | "assistant" | "connector" | "import" | "system"; actorName?: string; changeSetId?: string; context?: string }, write: () => Promise<T>): Promise<T> {
+  const viewer = v ?? (await requestViewer());
+  const parent = currentScope();
+  const graphId = viewer?.graphId ?? parent?.graphId;
+  if (!graphId) return write();
+  const scope: HistoryScope = {
+    ...parent,
+    graphId,
+    actor: { kind: ctx.actorKind, id: ctx.actorKind === "person" ? viewer?.id ?? null : null, name: ctx.actorName ?? (ctx.actorKind === "person" ? viewer?.name ?? null : null) },
+    changeSetId: ctx.changeSetId ?? parent?.changeSetId ?? null,
+    context: ctx.context ?? parent?.context ?? null,
+    metaWatched: true,
+  };
+  const household = viewer?.graphHouseholdId ?? viewer?.householdId;
+  const watchMeta = !parent?.metaWatched && !!household;
+  let before: Awaited<ReturnType<typeof snapshotMeta>> | null = null;
+  if (watchMeta) {
+    try { before = await snapshotMeta(db, household!, graphId); } catch (e) { console.error("[history] could not snapshot the model", e); }
+  }
+  const result = await historyStore.run(scope, write);
+  if (before && household) {
+    try {
+      const after = await snapshotMeta(db, household, graphId);
+      await recordMeta(db, graphId, before, after, { actor: scope.actor, changeSetId: scope.changeSetId, context: scope.context });
+    } catch (e) {
+      console.error("[history] the model write happened but was not recorded", e);
+    }
+  }
+  return result;
 }
 
 export type HistoryEvent = {
@@ -78,6 +126,7 @@ export type HistoryEvent = {
   fromValue: unknown; toValue: unknown; actorKind: string; actorName: string | null; changeSetId: string | null; context: string | null; at: Date;
 };
 
-export async function historyOf(_v: Viewer, _opts: { subjectId?: string; since?: Date; until?: Date; limit?: number } = {}): Promise<HistoryEvent[]> {
-  return [];
+export async function historyOf(v: Viewer, opts: { subjectId?: string; since?: Date; until?: Date; limit?: number } = {}): Promise<HistoryEvent[]> {
+  const { historyFor } = await import("@/lib/history/read");
+  return historyFor(v, opts);
 }

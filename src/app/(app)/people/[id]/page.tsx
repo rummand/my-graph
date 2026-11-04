@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { PersonProfileView } from "@/components/people/person-profile";
 import { requireUser } from "@/lib/auth";
+import { getT } from "@/lib/i18n";
 import { personProfile } from "@/lib/people";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ async function load(id: string) {
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const p = await load((await params).id);
-  return { title: p?.person.label ?? "Person" };
+  return { title: p?.person.label ?? (await getT())("people.person") };
 }
 
 export default async function PersonPage({ params }: { params: Promise<{ id: string }> }) {

@@ -15,6 +15,8 @@ import { accessContext } from "@/lib/gbrain";
 import { nodeReadSql, sourceReadSql } from "@/lib/gbrain/access";
 import { embed } from "@/lib/mux";
 import { scopeOf } from "@/lib/graphs/pure";
+import { recordMentions } from "@/lib/mentions";
+import { mentionMarkup } from "@/lib/mentions/markup";
 import {
   canAddMemory, canEditMemory, cleanText, cosine, DEFAULT_CONTEXT_LIMIT, findDuplicate, formatMemoryBlock, initialStatus,
   memoryAllowed, MEMORY_MAX_CHARS, rankForContext,
@@ -197,7 +199,26 @@ export async function addMemory(v: Viewer, input: MemoryInput): Promise<Memory |
     }
     return row.id;
   });
+  await noteMentions(v, id);
   return getMemory(v, id);
+}
+
+/**
+ * Record which nodes a memory is about in `mentions` (so "Mentioned in" on a node lists it): the @mentions in its
+ * text plus its aboutNodeIds. Best effort; a failure never fails the save.
+ */
+async function noteMentions(v: Viewer, id: string) {
+  try {
+    const [m] = await db.select({ text: memories.text, about: memories.aboutNodeIds }).from(memories)
+      .where(and(eq(memories.id, id), eq(memories.graphId, v.graphId)));
+    if (!m) return;
+    const ids = m.about ?? [];
+    const labels = ids.length ? await db.select({ id: nodes.id, label: nodes.label }).from(nodes).where(and(inArray(nodes.id, ids), eq(nodes.graphId, v.graphId))) : [];
+    const about = labels.map((n) => mentionMarkup(n.label, n.id)).join(" ");
+    await recordMentions(v, { inType: "memory", inId: id, text: `${m.text} ${about}` });
+  } catch (e) {
+    console.error("[memory] recording mentions failed", e);
+  }
 }
 
 export async function updateMemory(v: Viewer, id: string, patch: Partial<Pick<Memory, "text" | "kind" | "status" | "aboutNodeIds" | "visibility">>): Promise<Memory | null> {
@@ -222,6 +243,7 @@ export async function updateMemory(v: Viewer, id: string, patch: Partial<Pick<Me
     set.visibility = patch.visibility;
   }
   await db.update(memories).set(set).where(and(eq(memories.id, m.id), eq(memories.graphId, v.graphId)));
+  if (set.text !== undefined || set.aboutNodeIds) await noteMentions(v, m.id);
   return getMemory(v, m.id);
 }
 
