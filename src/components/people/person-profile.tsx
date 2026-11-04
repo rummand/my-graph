@@ -44,7 +44,7 @@ export function PersonProfileView({ initial }: { initial: PersonProfile }) {
         <div className="min-w-0 space-y-10">
           <Details profile={profile} onSaved={setProfile} />
           <Relationships profile={profile} onSaved={reload} />
-          <MemoryPanel aboutNodeId={id} aboutName={profile.person.label.split(" ")[0]} />
+          <MemoryPanel title="Memory" aboutNodeId={id} aboutName={profile.person.label.split(" ")[0]} />
           <Milestones profile={profile} onSaved={reload} />
           {profile.provenance.length > 0 && (
             <Block title="Where this comes from">

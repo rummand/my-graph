@@ -138,7 +138,7 @@ export default async function NodePage({ params }: Props) {
         <aside className="min-w-0 space-y-6 lg:sticky lg:top-8 lg:self-start">
           <ProvenancePanel items={d.provenance.node} agents={d.agents} title={`Where ${node.label} came from`}
             className="rounded-lg bg-surface p-5" emptyText="No records yet. This was added without a source." />
-          {memoryAllowed(v) && <MemoryPanel aboutNodeId={node.id} aboutName={node.type === "person" ? node.label.split(" ")[0] : node.label} />}
+          {memoryAllowed(v) && <MemoryPanel title="Memory" aboutNodeId={node.id} aboutName={node.type === "person" ? node.label.split(" ")[0] : node.label} />}
           {d.mergeSuggestions.length > 0 && (
             <MergeSuggestions nodeId={node.id} nodeLabel={node.label}
               suggestions={d.mergeSuggestions.map((s) => ({ other: { id: s.other.id, type: s.other.type, label: s.other.label, summary: s.other.summary }, reason: s.reason, score: s.score }))} />

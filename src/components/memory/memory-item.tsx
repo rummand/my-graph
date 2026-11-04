@@ -52,6 +52,19 @@ export function MemoryItem({ m, onUpdate, onRemove, hideAbout, compact }: {
     if (await run({ text })) setEditing(false);
   }
 
+  const actions = m.canEdit ? (
+<div className={clsx("flex shrink-0 items-center gap-0.5", compact ? "text-muted" : "opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100")}>
+              <IconButton label="Edit" onClick={() => { setDraft(m.text); setEditing(true); }}><Pencil className="size-4" /></IconButton>
+              {m.status !== "pending" && (
+                <IconButton label={paused ? "Use this again" : "Pause: don't use this for now"} disabled={busy}
+                  onClick={() => void run({ status: paused ? "active" : "paused" })}>
+                  {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
+                </IconButton>
+              )}
+              <IconButton label="Forget this" onClick={() => onRemove(m)}><Trash2 className="size-4" /></IconButton>
+            </div>
+  ) : null;
+
   return (
     <motion.li layout="position" exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
       className={clsx("group list-none", compact ? "py-2.5" : "py-3.5")}>
@@ -89,19 +102,9 @@ export function MemoryItem({ m, onUpdate, onRemove, hideAbout, compact }: {
               {paused && <Badge>Paused</Badge>}
             </div>
             {error && <p role="alert" className="mt-1 text-sm text-danger">{error}</p>}
+            {compact && actions && <div className="-ml-2 mt-1">{actions}</div>}
           </div>
-          {m.canEdit && (
-            <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
-              <IconButton label="Edit" onClick={() => { setDraft(m.text); setEditing(true); }}><Pencil className="size-4" /></IconButton>
-              {m.status !== "pending" && (
-                <IconButton label={paused ? "Use this again" : "Pause: don't use this for now"} disabled={busy}
-                  onClick={() => void run({ status: paused ? "active" : "paused" })}>
-                  {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
-                </IconButton>
-              )}
-              <IconButton label="Forget this" onClick={() => onRemove(m)}><Trash2 className="size-4" /></IconButton>
-            </div>
-          )}
+          {!compact && actions}
         </div>
       )}
     </motion.li>

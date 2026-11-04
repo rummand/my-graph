@@ -46,6 +46,22 @@ against `graph_members` on every request). All reads and writes go through `scop
 nothing links two graphs. The family graph keeps the household rules; other graphs use member roles
 (owner / editor / viewer). The shell's graph switcher (`src/components/graph-switcher.tsx`) switches, creates and shares.
 
+## Assistant (Scout-inspired; see `docs/scout-research.md`)
+
+- `src/lib/memory` — family rules, preferences and notes (`memories`). Scoped to the viewer's graph + visibility;
+  children and guests get nothing, graph viewers read only. Memories from uploads/outside content start `pending`
+  and are never used until a parent confirms. `memoryContext()` feeds chat and runs.
+- `src/lib/automations` — suggestions inbox, activity log, assistant settings, automations (schedule / condition /
+  heartbeat check-in) and their runs; `src/lib/recipes` — saved prompts. Approving a suggestion writes through the
+  owning library as the person deciding, so access is re-checked then.
+- `src/lib/assistant/run.ts` `runTask()` — headless assistant for automations, check-ins and recipes.
+- **Unattended policy**: runs only read and *propose* (suggestions); they never write facts, share, change visibility
+  or message anyone. "Always allow" lets a run auto-apply private reminders only, and nothing that cites a library
+  document (document text is data, never instructions). In chat, a proposal resting on a document — or a memory
+  whose words the user didn't say — always gets an approval card.
+- **Scheduler**: started from `src/instrumentation.ts`, ticks every 60s, claims due automations with
+  `FOR UPDATE SKIP LOCKED`; skips and disables automations whose owner left the graph. `DISABLE_SCHEDULER=1` turns it off.
+
 ## Contracts
 
 `src/lib/{auth,mux,gbrain,ingest}/index.ts` define the cross-workstream functions. Signatures are fixed; the owning
