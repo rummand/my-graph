@@ -74,7 +74,7 @@ const messages: MessageTree = {
   back: "Ændringer",
   notFound: "Vi kunne ikke finde det forslag",
   notFoundBody: "Det er måske droppet, eller det hører til en anden graf.",
-  decideHint: "Fjern fluebenet ved det, du ikke vil have, og lever resten.",
+  decideHint: "Fjern fluebenet ved det, der ikke er klar, og lever resten. Det, du fravælger, venter videre i sit eget forslag.",
   created: "Foreslået {date}",
   deliveredAt: "Leveret {date}",
   review: "Gennemgå",
@@ -93,6 +93,27 @@ const messages: MessageTree = {
   noneTicked: "Sæt flueben ved mindst én ændring for at levere.",
   failed: "Det lykkedes ikke. Prøv igen om lidt.",
   showChanges: "Vis ændringerne",
+  rest: {
+    titlePrefix: "Resten af",
+    waitingIn: "De ændringer, du lod ligge, venter stadig i “{title}”.",
+    continues: "Det er de ændringer, der blev ladt ligge, da “{title}” blev leveret.",
+    open: "Åbn det",
+    delivered: { one: "{count} ændring, du lod ligge, venter stadig.", other: "{count} ændringer, du lod ligge, venter stadig." },
+  },
+  retired: {
+    title: "Trukket tilbage",
+    titleOn: "Trukket tilbage {date}",
+    body: "Det vises ikke længere i lister, søgning, grafen, tidslinjen eller assistentens svar. Historikken og kilderne er gemt.",
+    restore: "Foreslå at bringe det tilbage",
+    restoring: "Foreslår…",
+  },
+  restore: {
+    title: "Bring {name} tilbage",
+    note: "Bring det tilbage, der blev trukket tilbage.",
+    notFound: "Vi kunne ikke finde det.",
+    notRetired: "Det her er ikke trukket tilbage.",
+    notAllowed: "Du har ikke lov til at foreslå ændringer i denne graf.",
+  },
 };
 
 export default messages;

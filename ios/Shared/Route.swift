@@ -10,6 +10,11 @@ enum Route: Hashable {
     case askAbout(id: String, label: String, type: String)
     case memory
     case changes
+    /// One proposal: its changes with tick boxes, Deliver and Drop.
+    case changeSet(String)
+    /// Everything recorded about one person or thing.
+    case history(String, String)
+    case documents
     case settings
     case timeline
     /// Debug builds: open a new chat and ask this right away.
@@ -33,6 +38,8 @@ enum Route: Hashable {
         case "chat": return .chat(id, UUID())
         case "memory": return .memory
         case "timeline": return .timeline
+        case "changes": return id.map { .changeSet($0) } ?? .changes
+        case "artifacts": return .documents
         default: return nil
         }
     }

@@ -63,7 +63,7 @@ export function ChangeSetReview({ initial, context }: { initial: ChangeSetView; 
   const deliver = async () => {
     if (!ticked.length) { setNotice({ tone: "warn", text: t("changes.noneTicked") }); return; }
     setBusy("deliver"); setNotice(null);
-    const r = await call<{ applied: number; skipped?: number; changeSet: ChangeSetView }>(`/api/changes/${cs.id}/deliver`, {
+    const r = await call<{ applied: number; skipped?: number; restId?: string | null; changeSet: ChangeSetView }>(`/api/changes/${cs.id}/deliver`, {
       method: "POST", body: JSON.stringify({ onlyChangeIds: ticked.map((c) => c.id), fingerprint: cs.fingerprint ?? undefined }),
     });
     setBusy(null);
@@ -71,6 +71,8 @@ export function ChangeSetReview({ initial, context }: { initial: ChangeSetView; 
       setCs(r.data.changeSet);
       const parts = [t("changes.delivered", { count: r.data.applied })];
       if (r.data.skipped) parts.push(t("changes.alreadyThere", { count: r.data.skipped }));
+      const left = cs.changes.length - ticked.length;
+      if (r.data.restId && left > 0) parts.push(t("changes.rest.delivered", { count: left }));
       setNotice({ tone: r.data.error ? "warn" : "ok", text: [parts.join(" "), r.data.error].filter(Boolean).join(" ") });
       router.refresh();
       return;
@@ -97,6 +99,12 @@ export function ChangeSetReview({ initial, context }: { initial: ChangeSetView; 
 
   return (
     <div>
+      {cs.restOf && (
+        <p className="mb-4 text-sm text-muted">
+          {t("changes.rest.continues", { title: cs.restOf.title })}{" "}
+          <Link href={`/changes/${cs.restOf.id}`} className="text-accent hover:underline">{t("changes.rest.open")}</Link>
+        </p>
+      )}
       <ol className="space-y-2">
         {cs.changes.map((c) => {
           const d = describeChange(c, ctx, t);
@@ -148,6 +156,13 @@ export function ChangeSetReview({ initial, context }: { initial: ChangeSetView; 
           notice.tone === "ok" && "bg-accent-tint text-accent", notice.tone === "warn" && "bg-warn-tint text-warn", notice.tone === "danger" && "bg-danger-tint text-danger")}>
           {notice.tone === "ok" ? <Check aria-hidden className="mt-0.5 size-4 shrink-0" /> : <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0" />}
           <span>{notice.text}</span>
+        </p>
+      )}
+
+      {cs.restIn && (
+        <p className="mt-4 rounded-lg bg-surface px-4 py-3 text-sm">
+          {t("changes.rest.waitingIn", { title: cs.restIn.title })}{" "}
+          <Link href={`/changes/${cs.restIn.id}`} className="font-medium text-accent hover:underline">{t("changes.rest.open")}</Link>
         </p>
       )}
 

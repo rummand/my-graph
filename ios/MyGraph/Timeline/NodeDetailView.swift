@@ -78,6 +78,8 @@ struct NodeDetailView: View {
                 }
             }
 
+            HistorySection(subjectId: n.id, subjectName: n.label)
+
             Button { router.push(.askAbout(id: n.id, label: n.label, type: n.type)) } label: {
                 Label("Ask about this", systemImage: "sparkle")
             }

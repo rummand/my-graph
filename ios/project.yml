@@ -139,6 +139,20 @@ targets:
       properties:
         com.apple.security.application-groups: [$(APP_GROUP)]
 
+  # Taps driven against a running server (see README.md, "UI tests").
+  MyGraphUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: UITests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(BUNDLE_ID).uitests
+        TEST_TARGET_NAME: MyGraph
+        GENERATE_INFOPLIST_FILE: YES
+    dependencies:
+      - target: MyGraph
+
 schemes:
   MyGraph:
     build:
@@ -146,7 +160,12 @@ schemes:
         MyGraph: all
         MyGraphShare: all
         MyGraphWidget: all
+        MyGraphUITests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - MyGraphUITests
     archive:
       config: Release

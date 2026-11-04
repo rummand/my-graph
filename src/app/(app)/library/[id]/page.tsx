@@ -124,7 +124,7 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
           {s.isOwner && (
             <section aria-labelledby="file-h">
               <h2 id="file-h" className="mb-4 text-lg font-semibold tracking-[-0.01em]">{t("library.detail.theFile")}</h2>
-              <SourceSettings family={family} id={s.id} title={s.title} visibility={s.visibility} sensitive={s.sensitive} hasFile={!!s.mime} busy={busy} />
+              <SourceSettings family={family} id={s.id} title={s.title} visibility={s.visibility} sensitive={s.sensitive} hasFile={s.hasFile} busy={busy} />
             </section>
           )}
         </aside>
@@ -330,6 +330,15 @@ function Original({ L, d }: { L: Lx; d: Detail }) {
   if (email?.subject) emailRows.push([t("library.detail.email.subject"), email.subject]);
   if (email?.from) emailRows.push([t("library.detail.email.from"), email.from]);
   if (email?.date) emailRows.push([t("library.detail.email.sent"), formatMoment(L, email.date)]);
+  // Pasted text and saved web pages: the page it came from.
+  const pageUrl = typeof s.meta.url === "string" && /^https?:\/\//i.test(s.meta.url) ? s.meta.url : null;
+  if (pageUrl) {
+    emailRows.push([t("library.detail.webFrom"), (
+      <a key="page" href={pageUrl} target="_blank" rel="noreferrer noopener" className="inline-flex max-w-full items-center gap-1 text-accent hover:underline">
+        <ExternalLink aria-hidden className="size-3.5 shrink-0" /><span className="truncate">{pageUrl.replace(/^https?:\/\/(www\.)?/i, "")}</span>
+      </a>
+    )]);
+  }
   return (
     <section aria-label={t("library.detail.textAria")} className="rounded-lg bg-surface px-5 py-6 sm:px-10 sm:py-9">
       {emailRows.length > 0 && <div className="mb-6 border-b border-line pb-4"><Details rows={emailRows} flush /></div>}

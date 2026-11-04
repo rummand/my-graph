@@ -14,6 +14,13 @@ import {
   isSelfOf, pickSelfNode, selfKind, selfProps, selfVisibility, usesFamilyRules, type GraphKind, type Role, type SelfCandidate,
 } from "./pure";
 import type { Exec } from "./store";
+import { recordRows, snapshotScope, recordSnapshots, stampFor } from "@/lib/history/record";
+import { nodeSnap } from "@/lib/history/pure";
+
+/** Who the history says did it: the member themselves, or whoever added them (the graph owner). */
+function selfStamp(actorId: string | null | undefined, context: string, name: string | null = null) {
+  return stampFor({ actor: { kind: actorId ? "person" : "system", id: actorId ?? null, name }, context });
+}
 
 export type SelfUser = { id: string; name: string; householdId: string; role: Role; personNodeId?: string | null };
 export type SelfGraph = { id: string; kind: GraphKind; householdId: string };
@@ -37,7 +44,10 @@ async function homeNodeOf(ex: Exec, u: SelfUser): Promise<string | null> {
 /** Stamp the marker on a node that is the member's self node but doesn't carry it yet (their family node). */
 async function stamp(ex: Exec, c: SelfCandidate, userId: string): Promise<void> {
   if (isSelfOf(c.props, userId)) return;
-  await ex.update(nodes).set({ props: sql`${nodes.props} || ${JSON.stringify(selfProps(userId))}::jsonb` }).where(eq(nodes.id, c.id));
+  const before = await snapshotScope(ex, { nodeIds: [c.id] });
+  const [row] = await ex.update(nodes).set({ props: sql`${nodes.props} || ${JSON.stringify(selfProps(userId))}::jsonb` }).where(eq(nodes.id, c.id)).returning({ graphId: nodes.graphId });
+  // In the graph's history like any other edit (the marker is the system's, so it reads as the system's hand).
+  if (row) await recordSnapshots(ex, row.graphId, before, await snapshotScope(ex, { nodeIds: [c.id] }), selfStamp(null, "members:self"));
 }
 
 /** The member's self node in this graph, or null (read only; no creation). */
@@ -71,11 +81,12 @@ export async function ensureSelfNode(ex: Exec, user: SelfUser, graph: SelfGraph,
     const [row] = await tx.insert(nodes).values({
       householdId: graph.householdId, graphId: graph.id, ownerId: user.id, type: "person", kind: selfKind(user.role, family),
       label: user.name, props, visibility: selfVisibility(user.role, family),
-    }).returning({ id: nodes.id });
+    }).returning();
     await tx.insert(provenance).values({
       householdId: graph.householdId, graphId: graph.id, subjectType: "node", subjectId: row.id, activity: "manual_edit",
       agentType: "user", agentId: opts.actorId ?? user.id, confidence: 1, note: opts.note ?? "A member of this graph",
     });
+    await recordRows(tx, graph.id, { nodes: [[null, nodeSnap(row)]] }, selfStamp(opts.actorId ?? user.id, "members:self", (opts.actorId ?? user.id) === user.id ? user.name : null));
     // Their own family graph had no person node for them: this one becomes it.
     if (family && !home) await tx.update(users).set({ personNodeId: row.id }).where(eq(users.id, user.id));
     return row.id;

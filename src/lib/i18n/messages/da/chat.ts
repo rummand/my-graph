@@ -317,6 +317,70 @@ const messages: MessageTree = {
     tagNew: "ny {kind}",
     type: { person: "person", organization: "organisation", project: "projekt", place: "sted", event: "begivenhed", topic: "emne", thing: "ting" },
   },
+  /** Tekst serveren skriver i svar, kørselsresuméer og forslag (gemt på det sprog, den blev skrevet på). */
+  server: {
+    cutOff: "Svaret blev afbrudt, fordi modellen holdt op med at svare.",
+    degraded: {
+      notConfigured: "Jeg kan ikke skrive et svar lige nu, fordi modelgatewayen (mux) ikke er sat op endnu: MUX_API_KEY mangler.",
+      rejected: "Jeg kan ikke skrive et svar lige nu, fordi modelgatewayen (mux) afviste My Graphs API-nøgle.",
+      unreachable: "Jeg kan ikke få fat i modelgatewayen (mux) lige nu, så jeg kan ikke skrive et svar.",
+      error: "Noget gik galt, mens svaret blev skrevet.",
+      nothing: "Jeg kunne heller ikke finde noget i {noun}, der passer til spørgsmålet.",
+      matches: "Her er det, der er i {noun}, som passer til dit spørgsmål:",
+    },
+    status: { inferred: "gæt", unconfirmed: "ikke bekræftet", rejected: "afvist", superseded: "erstattet" },
+    summary: {
+      docs: { one: "{count} dokument", other: "{count} dokumenter" },
+      events: { one: "{count} kommende begivenhed", other: "{count} kommende begivenheder" },
+      reminders: { one: "{count} åben påmindelse", other: "{count} åbne påmindelser" },
+      found: "Fandt {what}",
+      nothing: "Fandt ikke noget nyt",
+      noSummary: "{found}; der blev ikke skrevet et resumé, fordi {why}.",
+      notSetUp: "modelgatewayen ikke er sat op",
+      unreachable: "modelgatewayen ikke kunne nås",
+      emptyPrompt: "Der var ikke noget at gøre: prompten er tom.",
+      askedNobody: "Spurgte “{question}”: ingen var der til at svare, så den fortsatte med det, den vidste",
+      cantWrite: "En foreslået ændring: ikke foreslået, denne konto kan ikke tilføje til grafen",
+    },
+    suggestion: {
+      reminder: "Tilføj påmindelse: {title}",
+      fact: "Gem fakta: {from} {relation} {to}",
+      wiki: "Start wikiside: {title}",
+      memory: "Husk: {text}",
+      rule: "Husk denne regel: {text}",
+      ruleFamily: "Husk denne familieregel: {text}",
+    },
+    describe: {
+      reminder: "Påmindelse: {title}",
+      fact: "Fakta: {from} {relation} {to}",
+      wiki: "Wikiside: {title}",
+      memory: "Husk: {text}",
+    },
+    skipped: {
+      waiting: "{what}: venter på godkendelse under Forslag",
+      notFiled: "{what}: ikke foreslået, den er afvist før, eller dagens grænse for forslag er nået",
+      remindersOff: "{what}: ikke foreslået, påmindelser er slået fra",
+      wikiOff: "{what}: ikke foreslået, wikiskrivning er slået fra",
+      noMemory: "{what}: ikke foreslået, hukommelse er ikke tilgængelig for denne konto",
+    },
+    widen: {
+      family: {
+        parentsItems: "ting kun forældre kan se", privateItems: "private ting",
+        everyone: "Samtalen indeholder {what}. Gemmer du det, kan alle i grafen se det, også børnene.",
+        parents: "Samtalen indeholder {what}. Gemmer du det, kan forældrene også se det.",
+      },
+      graph: {
+        parentsItems: "ting kun redaktører kan se", privateItems: "private ting",
+        everyone: "Samtalen indeholder {what}. Gemmer du det, kan alle i denne graf se det.",
+        parents: "Samtalen indeholder {what}. Gemmer du det, kan dem, der kan redigere grafen, også se det.",
+      },
+    },
+    cantAdd: {
+      guestFamily: "Gæster kan ikke tilføje til familiegrafen.",
+      guest: "Gæster kan ikke tilføje til denne graf.",
+      viewer: "Du kan se denne graf, men ikke tilføje til den.",
+    },
+  },
 };
 
 export default messages;

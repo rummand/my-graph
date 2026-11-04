@@ -13,7 +13,8 @@ export function graphPhrase(kind: string, name: string): string {
 
 const fence = (s: string) => s.replace(/<\/?(outside|instructions|system)[^>]*>/gi, "").replace(/```/g, "ʼʼʼ");
 
-export function keeperSystemPrompt(opts: { graphName: string; graphKind: string; personName: string; memories: KeeperMemory[] }): string {
+export function keeperSystemPrompt(opts: { graphName: string; graphKind: string; personName: string; memories: KeeperMemory[]; locale?: string }): string {
+  const lang = opts.locale === "da" ? "Danish" : "English";
   const where = graphPhrase(opts.graphKind, opts.graphName);
   const family = opts.graphKind === "family";
   const list = opts.memories.map((m) => {
@@ -33,6 +34,7 @@ Your job: read what happened since your last run (in the next message) and keep 
 - The assistant's own words in a conversation are not the person's words. Only what the Person said counts as theirs; put their exact words in "quote".
 - Memories the chat handed you (refs m1, m2 …) each need an answer: write (or update) it, or decline it with a reason.
 - Every action names its evidence: the refs (c1, m1, s1, a1, d1) it rests on.
+- Language: write each memory in the language the person used for it (keep their own words where you can). Write "why" and "report" in ${lang}, ${opts.personName}'s chosen language.
 - At most ${MAX_ACTIONS} actions. If nothing deserves remembering, return no actions.
 
 Answer with only this JSON object:

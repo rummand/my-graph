@@ -58,7 +58,7 @@ export const modelDraftSchema = z.object({
 });
 export type ModelDraft = z.infer<typeof modelDraftSchema>;
 
-const EKEY = /\[(?:\^)?(E\d{1,3})(?:\s*,\s*(E\d{1,3}))*\]/g;
+const EKEY = /\[(?:\^)?(E\d{1,3})(?:\s*,\s*(E\d{1,3}))*\]/gi;
 
 /**
  * Convert the model's draft: `[E3]` markers and `cites: ["E3"]` become citations of evidence E3; keys that were
@@ -81,12 +81,15 @@ export function fromModelDraft(draft: ModelDraft, evidence: Evidence[], opts: { 
     }
     return id;
   };
-  const markers = (t: string) => t.replace(EKEY, (m) => [...m.matchAll(/E\d{1,3}/g)].map((x) => use(x[0])).filter(Boolean).map((x) => `[^${x}]`).join(""));
+  const markers = (t: string) => t.replace(EKEY, (m) => [...m.matchAll(/E\d{1,3}/gi)].map((x) => use(x[0])).filter(Boolean).map((x) => `[^${x}]`).join(""));
   const cites = (ks: string[]) => [...new Set(ks.map(use).filter((x): x is string => !!x))];
   /** For list fields: markers in the text move into the item's cites; the text keeps none. */
   const pulled: string[] = [];
   const pull = (t: string | undefined) => (t ?? "").replace(/\[\^?(E\d{1,3}(?:\s*,\s*E\d{1,3})*)\]/gi, (_m, ks: string) => { pulled.push(...ks.split(/\s*,\s*/)); return ""; })
     .replace(/\[\^[A-Za-z0-9_-]{1,64}\]/g, "").replace(/\s+([.,;:!?])/g, "$1").replace(/\s{2,}/g, " ").trim();
+  /** Titles, column names and the subtitle carry no sources: evidence keys in them are just dropped. */
+  const bare = (t: string | undefined) => (t ?? "").replace(/\[\^?E\d{1,3}(?:\s*,\s*E\d{1,3})*\]/gi, "").replace(/\[\^[A-Za-z0-9_-]{1,64}\]/g, "")
+    .replace(/\s+([.,;:!?])/g, "$1").replace(/\s{2,}/g, " ").trim();
   const withPulled = (ks: string[]) => { const all = cites([...ks, ...pulled]); pulled.length = 0; return all; };
   const textAndCites = (t: string | undefined, ks: string[]) => {
     const own = cites(ks);
@@ -118,17 +121,17 @@ export function fromModelDraft(draft: ModelDraft, evidence: Evidence[], opts: { 
         if (its.length) blocks.push({ id: newId(), type: "people", items: its.slice(0, 40) });
       } else if (t === "table") {
         const rows = (b.rows ?? items).map((r) => ({ cells: (r.cells ?? []).map((c) => pull(c)).slice(0, 8), cites: withPulled(r.cites) })).filter((r) => r.cells.length);
-        if (rows.length) blocks.push({ id: newId(), type: "table", columns: (b.columns ?? []).slice(0, 8), rows: rows.slice(0, 60) });
+        if (rows.length) blocks.push({ id: newId(), type: "table", columns: (b.columns ?? []).slice(0, 8).map(bare), rows: rows.slice(0, 60) });
       } else if (t === "quote") {
         if (b.text?.trim()) { const text = pull(b.text); blocks.push({ id: newId(), type: "quote", text, attribution: pull(b.attribution), cites: withPulled(b.cites) }); }
       }
     }
-    return { id: newId("s"), title: s.title, blocks };
+    return { id: newId("s"), title: bare(s.title), blocks };
   }).filter((s) => s.title.trim() || s.blocks.length);
 
   return {
-    title: draft.title?.trim() || null,
-    content: normalizeContent({ subtitle: draft.subtitle ?? "", sections, citations, draft: null }),
+    title: bare(draft.title) || null,
+    content: normalizeContent({ subtitle: bare(draft.subtitle), sections, citations, draft: null }),
   };
 }
 

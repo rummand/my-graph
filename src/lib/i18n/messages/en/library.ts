@@ -19,7 +19,7 @@ const messages: MessageTree = {
 
   /* What people call each kind of file. */
   kind: { pdf: "PDF", document: "Word document", text: "Text file", image: "Photo", audio: "Recording", email: "Email", mailbox: "Mail import", other: "File" },
-  docKind: { mail: "Email", letter: "Letter", scan: "Scan", photo: "Photo", recording: "Recording", note: "Note", mailbox: "Mail import", file: "File" },
+  docKind: { mail: "Email", letter: "Letter", scan: "Scan", photo: "Photo", recording: "Recording", note: "Note", mailbox: "Mail import", file: "File", web_page: "Web page" },
   filter: { all: "Everything", mail: "Mail", letter: "Letters", scan: "Scans", photo: "Photos", recording: "Recordings", note: "Notes", group: "Kind of file" },
   stateFilter: { any: "Any state", processing: "Being read", pending: "Waiting to be read", failed: "Couldn't be read", ready: "Read", label: "State" },
   status: { stalled: "Stalled", pending: "Waiting to be read", processing: "Reading", ready: "Read", failed: "Couldn't read" },
@@ -57,6 +57,8 @@ const messages: MessageTree = {
     failed: "Finding people, places and dates failed: {reason}",
     partial: "Only part of the file was read for people and dates: {reason}",
     other: "Reading it for people and dates didn't finish: {reason}",
+    unread: "Couldn't read the page, so only the link is saved. Open the link to read it yourself.",
+    webOff: "Only the link is saved: reading web pages is turned off for you in this graph.",
   },
   origin: {
     email: "the email's sent date",
@@ -157,6 +159,35 @@ const messages: MessageTree = {
     removeRow: "Remove {name} from this list",
   },
 
+  /* Pasting into the library: files, text (a note) or a web address (a saved page). */
+  paste: {
+    button: "Paste from clipboard",
+    pressMac: "Your browser doesn't let this button read the clipboard. Press ⌘V instead.",
+    pressOther: "Your browser doesn't let this button read the clipboard. Press Ctrl+V instead.",
+    nothing: "There is nothing in the clipboard to add. Copy a file, some text or a web address first.",
+    untitled: "Pasted text, {date}",
+    textHeading: "Save the pasted text as a note?",
+    urlHeading: "Save this web page?",
+    titleLabel: "Title",
+    chars: { one: "{count} character", other: "{count} characters" },
+    from: "Copied from {host}",
+    urlHint: "The page is read and saved with its words, then read for people, places and dates like any file.",
+    saveNote: "Save note",
+    savePage: "Save page",
+    cancel: "Cancel",
+    dialogLabel: "Save what you pasted",
+    savingNote: "Saving the note",
+    readingPage: "Reading the page",
+    note: "Note",
+    webPage: "Web page",
+    unread: "Couldn't read the page. The link is saved.",
+    webOff: "Saved the link. Reading web pages is turned off for you.",
+    duplicateNote: "This text is already in the library. The name opens it.",
+    duplicatePage: "This page is already in the library. The name opens it.",
+    failed: "Couldn't save it. Please try again.",
+    titleNeeded: "Give the note a title.",
+  },
+
   /* A file's page. */
   detail: {
     back: "Library",
@@ -195,6 +226,7 @@ const messages: MessageTree = {
     heicDownload: "Download the original",
     heicTail: "to see it.",
     pdfAria: "The original PDF",
+    webFrom: "Web page",
     pdfOpen: "Open the PDF in its own tab",
     audioAria: "The recording and its transcript",
     textAria: "The original text",

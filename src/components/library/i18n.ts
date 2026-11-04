@@ -20,7 +20,7 @@ export function visibilityOptions(L: Lx): { value: Visibility; label: string; hi
 
 export const visibilityLabel = (L: Lx, v: Visibility) => L.t(`library.visibility.${L.family ? "family" : "graph"}.${v}.label`);
 
-const DOC_KINDS = new Set(["mail", "letter", "scan", "photo", "recording", "note", "mailbox", "file"]);
+const DOC_KINDS = new Set(["mail", "letter", "scan", "photo", "recording", "note", "mailbox", "file", "web_page"]);
 const CATEGORIES = new Set(["pdf", "document", "text", "image", "audio", "email", "mailbox", "other"]);
 
 /** What people call an item: "Letter", "Scan", "Email", else the kind of file. */
@@ -109,6 +109,8 @@ export function extractionNote(L: Pick<Lx, "t">, extraction: string | null): str
   if (!extraction || extraction === "done") return null;
   if (extraction.startsWith("skipped: mux unreachable")) return L.t("library.extraction.muxDown");
   if (extraction.startsWith("skipped: no text")) return L.t("library.extraction.noText");
+  if (extraction.startsWith("skipped: page could not be read")) return L.t("library.extraction.unread");
+  if (extraction.startsWith("skipped: reading web pages is off")) return L.t("library.extraction.webOff");
   if (extraction.startsWith("failed")) return L.t("library.extraction.failed", { reason: extraction.replace(/^failed:\s*/, "") });
   if (extraction.startsWith("partial")) return L.t("library.extraction.partial", { reason: extraction.replace(/^partial:\s*/, "") });
   return L.t("library.extraction.other", { reason: extraction });

@@ -9,6 +9,7 @@
  * Every applied proposal can be undone from the chat, and is logged to the assistant's activity log.
  */
 import { and, eq, ilike, isNull } from "drizzle-orm";
+import { voiceOf } from "./locale";
 import { db } from "@/db";
 import { nodes, reminders, sources, wikiPages, wikiRevisions } from "@/db/schema";
 import { audit, type Viewer } from "@/lib/auth";
@@ -183,7 +184,10 @@ async function applyMemory(v: Viewer, ctx: ApplyCtx, p: Extract<Proposal, { type
  * proposal stored in a suggestion's payload). Checks write access; throws ProposalError.
  */
 export async function applyProposal(v: Viewer, p: Proposal, ctx: ApplyCtx, basis: "user" | "document" = "user"): Promise<ProposalResult> {
-  if (!scopeOf(v).canWrite) throw new ProposalError(403, v.role === "guest" ? "Guests can't add to the family brain." : "You can look at this graph but not add to it.");
+  if (!scopeOf(v).canWrite) {
+    const { t, family } = await voiceOf(v);
+    throw new ProposalError(403, t(v.role === "guest" ? (family ? "chat.server.cantAdd.guestFamily" : "chat.server.cantAdd.guest") : "chat.server.cantAdd.viewer"));
+  }
   try {
     switch (p.type) {
       case "propose_fact": return await applyFact(v, ctx, p);
@@ -295,7 +299,7 @@ export async function annotateProposal(v: Viewer, p: Proposal, level: Sensitivit
         .map((e) => `${from.label} ${p.relation.replace(/_/g, " ")} ${label.get(e.toId) ?? "someone"}`);
       if (!current.length) current = null;
     }
-    return { widens: wideningWarning(level, target), current };
+    return { widens: wideningWarning(level, target, await voiceOf(v)), current };
   } catch {
     return { widens: null, current: null };
   }

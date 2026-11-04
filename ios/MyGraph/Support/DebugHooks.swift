@@ -35,7 +35,9 @@ enum DebugHooks {
         case "source": return id.map { .source($0) }
         case "chat": return .chat(id == "new" ? nil : id, UUID())
         case "memory": return .memory
-        case "changes": return .changes
+        case "changes": return id.map { .changeSet($0) } ?? .changes
+        case "documents": return .documents
+        case "history": return id.map { .history($0, "") }
         case "settings": return .settings
         case "widget": return .debugWidget
         default: return nil

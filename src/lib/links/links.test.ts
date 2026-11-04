@@ -120,6 +120,20 @@ describe("propagation", () => {
     expect(await propagateChange(b.d, "n-fam", ["props.phone"])).toEqual({ proposed: [], skipped: 1 });
     expect(b.propose).not.toHaveBeenCalled();
   });
+  it("a repeated edit folds into the Update proposal already waiting instead of opening another", async () => {
+    const amend = vi.fn(async () => "cs-waiting");
+    const { d, propose } = deps({ amend });
+    const r = await propagateChange(d, "n-fam", ["props.phone"]);
+    expect(r.proposed).toEqual([{ graphId: SARA, nodeId: "n-sara", changeSetId: "cs-waiting", fields: ["props.phone"], folded: true }]);
+    expect(amend).toHaveBeenCalledWith("dad", SARA, expect.objectContaining({ nodeId: "n-sara", set: { props: { phone: "+45 1234 5678", email: "old@x.dk" } } }));
+    expect(propose).not.toHaveBeenCalled();
+  });
+  it("opens a new proposal only when none is waiting", async () => {
+    const { d, propose } = deps({ amend: vi.fn(async () => null) });
+    const r = await propagateChange(d, "n-fam", ["props.phone"]);
+    expect(r.proposed[0].changeSetId).toBe("cs-1");
+    expect(propose).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("unlink", () => {

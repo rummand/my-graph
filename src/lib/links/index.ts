@@ -15,7 +15,7 @@ import type { Viewer } from "@/lib/auth";
 import { GBrainError, getNode, isUuid, listNodes, readableNodeIds, upsertNode, type GNode, type NodeType, type Visibility } from "@/lib/gbrain";
 import { scopeOf } from "@/lib/graphs/pure";
 import { graphsOfUser, toContext, type MyGraph } from "@/lib/graphs/store";
-import { abandonChangeSet, getChangeSet, proposeChanges, remembering } from "@/lib/changes";
+import { abandonChangeSet, amendPendingLinkUpdate, getChangeSet, proposeChanges, remembering } from "@/lib/changes";
 import { getMeta } from "@/lib/meta";
 import { getT, tFor, type TFn } from "@/lib/i18n";
 import {
@@ -449,6 +449,9 @@ export async function onNodeChanged(v: Viewer, nodeId: string, changedFields: Fi
     return out;
   }
 
+  const nameOf = (f: string) => f.startsWith("props.") ? f.slice(6) : t(`links.fields.${f}`);
+  const fieldsOf = (set: Record<string, unknown>) => Object.entries(set).flatMap(([k, x]) => k === "props" && x && typeof x === "object" ? Object.keys(x).map((pk) => `props.${pk}`) : [k]);
+
   return propagateChange({
     othersOf: async () => (await activateDelivered(await membersOfIdentity(me.identityId))).filter((m) => m.nodeId !== nodeId && m.status === "active"),
     source: async () => {
@@ -468,10 +471,18 @@ export async function onNodeChanged(v: Viewer, nodeId: string, changedFields: Fi
       const vp = await viewerOf(proposerId, graphId);
       return vp ? getNode(vp, otherId) : null;
     },
+    amend: async (proposerId, graphId, p) => {
+      const vp = await viewerOf(proposerId, graphId);
+      if (!vp) return null;
+      return amendPendingLinkUpdate(vp, {
+        identityId: me.identityId, nodeId: p.nodeId, set: p.set, title: t("links.cs.updateTitle", { name: p.label }),
+        note: (merged) => t("links.cs.updateNote", { fields: fieldsOf(merged).map(nameOf).join(", ") }),
+      }).catch((e) => { console.error("[links] could not fold into the waiting proposal", e); return null; });
+    },
     propose: async (proposerId, graphId, p) => {
       const vp = await viewerOf(proposerId, graphId);
       if (!vp) return null;
-      const names = p.fields.map((f) => f.startsWith("props.") ? f.slice(6) : t(`links.fields.${f}`)).join(", ");
+      const names = p.fields.map(nameOf).join(", ");
       const res = await proposeChanges(vp, {
         title: t("links.cs.updateTitle", { name: p.label }),
         origin: "automation", forUserId: proposerId,

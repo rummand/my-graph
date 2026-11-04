@@ -1,9 +1,9 @@
 "use client";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUpFromLine, Check, LoaderCircle, X } from "lucide-react";
+import { ArrowUpFromLine, Check, ClipboardPaste, Globe, LoaderCircle, X } from "lucide-react";
 import { Button, Kbd } from "@/components/ui";
 import type { SourceSummary } from "@/lib/ingest/library";
 import { ACCEPT_ATTR, MAX_UPLOAD_BYTES, mimeCategory } from "@/lib/ingest/mime";
@@ -12,11 +12,21 @@ import { extractionNote, formatBytes, type Lx, type Visibility } from "./i18n";
 import { formatDate } from "@/lib/i18n/dates";
 import { useLx } from "./use-lx";
 import { SensitiveToggle, VisibilitySelect } from "./visibility-select";
+import { PasteConfirm, type PendingPaste } from "./paste-confirm";
+import { choosePaste, hostOf, isApplePlatform, isTextTarget, pastedFiles, titleFromText, type ClipboardSnapshot } from "./paste";
 
 type Item = {
-  key: string; name: string; size: number; mime: string; progress: number; preview: string | null;
+  key: string; name: string; size: number | null; mime: string; progress: number; preview: string | null;
   state: "queued" | "uploading" | "done" | "duplicate" | "error"; error?: string; sourceId?: string;
+  /** A file, pasted text (a note) or a pasted web address (a saved page). */
+  origin: "file" | "text" | "url";
+  /** Web pages: the site. */
+  host?: string | null;
+  /** A page saved as a link only: why. */
+  note?: string;
 };
+
+type PasteResponse = { sourceId?: string; duplicate?: boolean; title?: string; read?: boolean; webOff?: boolean; error?: string };
 
 type UploadResponse = { results?: { name: string; sourceId?: string; duplicate?: boolean; error?: string }[]; error?: string };
 
@@ -47,8 +57,56 @@ function namePasted(L: Lx, f: File, i: number): File {
 
 const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
 
+/** What the paste event carries, as plain values. */
+function snapshotOf(e: ClipboardEvent): ClipboardSnapshot {
+  const dt = e.clipboardData;
+  const get = (type: string) => { try { return dt?.getData(type) || null; } catch { return null; } };
+  return {
+    files: pastedFiles(dt),
+    text: get("text/plain"), html: get("text/html"), uriList: get("text/uri-list"),
+    mozUrl: get("text/x-moz-url") ?? get("text/x-moz-url-priv"),
+    inField: isTextTarget(e.target) || isTextTarget(document.activeElement),
+  };
+}
+
+const IMAGE_EXT: Record<string, string> = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp", "image/heic": "heic", "image/tiff": "tiff" };
+
 /**
- * Where files come in: a large drop area (the whole window accepts a drop, and ⌘V pastes files),
+ * The clipboard read by the Paste button (navigator.clipboard.read, which asks permission or shows the browser's
+ * own Paste prompt). Null when the browser doesn't let a button read it: then ⌘V / Ctrl+V is the way.
+ */
+async function readClipboard(): Promise<ClipboardSnapshot | null> {
+  const c = typeof navigator !== "undefined" ? navigator.clipboard : undefined;
+  if (c && typeof c.read === "function") {
+    try {
+      const snap: ClipboardSnapshot = { files: [] };
+      for (const item of await c.read()) {
+        const image = item.types.find((ty) => ty.startsWith("image/"));
+        if (image) {
+          const blob = await item.getType(image);
+          snap.files.push(new File([blob], `image.${IMAGE_EXT[image] ?? image.split("/")[1] ?? "png"}`, { type: image }));
+        }
+        const text = async (ty: string) => (item.types.includes(ty) ? (await item.getType(ty)).text() : null);
+        snap.text ??= await text("text/plain");
+        snap.html ??= await text("text/html");
+        snap.uriList ??= await text("text/uri-list");
+      }
+      return snap;
+    } catch { /* refused or unsupported types: try plain text */ }
+  }
+  if (c && typeof c.readText === "function") {
+    try { return { files: [], text: await c.readText() }; } catch { /* refused */ }
+  }
+  return null;
+}
+
+const noSubscribe = () => () => {};
+/** ⌘ on Apple devices, Ctrl elsewhere (⌘ while rendering on the server). */
+const useApple = () => useSyncExternalStore(noSubscribe, () => isApplePlatform(navigator as Navigator & { userAgentData?: { platform?: string } }), () => true);
+
+/**
+ * Where files come in: a large drop area (the whole window accepts a drop; ⌘V or the Paste button adds files, text
+ * as a note, or a web address as a saved page),
  * the default sharing for new files, and one row per file that follows it from upload to "read".
  */
 export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false, family = false }: {
@@ -80,7 +138,7 @@ export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false
       file,
       item: {
         key: `${file.name}-${file.size}-${Math.random().toString(36).slice(2)}`, name: file.name, size: file.size, mime: file.type,
-        progress: 0, state: "queued",
+        progress: 0, state: "queued", origin: "file",
         preview: file.type.startsWith("image/") && file.type !== "image/heic" && file.size < 25 * 1024 * 1024 ? URL.createObjectURL(file) : null,
       },
     }));
@@ -129,17 +187,80 @@ export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false
     };
   }, [start]);
 
-  // Paste files or screenshots anywhere on the page (text pastes into fields are left alone).
+  // Text and web addresses wait for a yes (an accidental paste must not create anything); files go straight in.
+  const [pending, setPending] = useState<PendingPaste | null>(null);
+  const [pasteKey, setPasteKey] = useState(0);
+  const [hint, setHint] = useState<string | null>(null);
+  const apple = useApple();
+
   useEffect(() => {
-    const paste = (e: ClipboardEvent) => {
-      const files = Array.from(e.clipboardData?.files ?? []);
-      if (files.length === 0) return;
-      e.preventDefault();
-      void start(files.map((f, i) => namePasted(L, f, i)));
-    };
+    if (!hint) return;
+    const timer = setTimeout(() => setHint(null), 8000);
+    return () => clearTimeout(timer);
+  }, [hint]);
+
+  /** Act on a paste: true when it was ours. */
+  const take = useCallback((snap: ClipboardSnapshot): boolean => {
+    const c = choosePaste(snap);
+    if (c.kind === "none") return false;
+    setHint(null);
+    if (c.kind === "files") { void start(c.files.map((f, i) => namePasted(L, f, i))); return true; }
+    setPasteKey((k) => k + 1);
+    if (c.kind === "url") { setPending({ kind: "url", url: c.url, title: c.title }); return true; }
+    const now = new Date();
+    const title = titleFromText(c.text) ?? t("library.paste.untitled", { date: formatDate(now, "date", { locale: L.locale, timeZone: L.timeZone }) });
+    setPending({ kind: "text", text: c.text, title, sourceUrl: c.sourceUrl });
+    return true;
+  }, [start, L, t]);
+
+  // Paste files, screenshots, text or a web address anywhere on the page (text pasted into a field stays in the field).
+  useEffect(() => {
+    const paste = (e: ClipboardEvent) => { if (take(snapshotOf(e))) e.preventDefault(); };
     window.addEventListener("paste", paste);
     return () => window.removeEventListener("paste", paste);
-  }, [start, L]);
+  }, [take]);
+
+  // Closing the question gives focus back to the page, so the next ⌘V is ours again (not the closing title field's).
+  const closePending = () => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    setPending(null);
+  };
+
+  const pasteButton = async () => {
+    const snap = await readClipboard();
+    if (!snap) { setHint(t(apple ? "library.paste.pressMac" : "library.paste.pressOther")); return; }
+    if (!take(snap)) setHint(t("library.paste.nothing"));
+  };
+
+  const savePasted = async (p: PendingPaste, title: string) => {
+    closePending();
+    const key = `paste-${Math.random().toString(36).slice(2)}`;
+    const item: Item = p.kind === "text"
+      ? { key, name: title, size: new Blob([p.text]).size, mime: "text/plain", progress: 0, preview: null, state: "uploading", origin: "text", host: p.sourceUrl ? hostOf(p.sourceUrl) : null }
+      : { key, name: title || p.url, size: null, mime: "text/html", progress: 0, preview: null, state: "uploading", origin: "url", host: hostOf(p.url) };
+    setItems((xs) => [item, ...xs]);
+    const payload = p.kind === "text"
+      ? { kind: "text", title, text: p.text, sourceUrl: p.sourceUrl, visibility, sensitive }
+      : { kind: "url", url: p.url, title: title || p.title || null, visibility, sensitive };
+    let status = 0;
+    let r: PasteResponse = {};
+    try {
+      const res = await fetch("/api/library/paste", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+      status = res.status;
+      r = (await res.json().catch(() => ({}))) as PasteResponse;
+    } catch {
+      r = { error: t("library.upload.dropped") };
+    }
+    if (r.sourceId && !r.error) {
+      patch(key, {
+        state: r.duplicate ? "duplicate" : "done", progress: 1, sourceId: r.sourceId, name: r.title || item.name,
+        note: r.read === false ? t(r.webOff ? "library.paste.webOff" : "library.paste.unread") : undefined,
+      });
+    } else {
+      patch(key, { state: "error", error: r.error ?? (status === 401 ? t("library.upload.signedOut") : t("library.paste.failed")) });
+    }
+    onUploaded?.();
+  };
 
   // Free image previews when rows go away.
   const previews = useRef(new Set<string>());
@@ -182,8 +303,12 @@ export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false
                 <input ref={inputRef} id={inputId} type="file" multiple accept={ACCEPT_ATTR} className="sr-only" tabIndex={-1}
                   onChange={(e) => { void start(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
                 <Button type="button" onClick={() => inputRef.current?.click()}>{t("library.upload.choose")}</Button>
-                <span className="hidden text-sm text-muted sm:inline">{t("library.upload.orPaste")} <Kbd>⌘</Kbd> <Kbd>V</Kbd></span>
+                <Button type="button" variant="secondary" onClick={() => void pasteButton()}>
+                  <ClipboardPaste aria-hidden className="size-4" />{t("library.paste.button")}
+                </Button>
+                <span className="hidden text-sm text-muted sm:inline">{t("library.upload.orPaste")} <Kbd>{apple ? "⌘" : "Ctrl"}</Kbd> <Kbd>V</Kbd></span>
               </div>
+              {hint && <p role="status" className="mt-2 max-w-[56ch] text-sm text-warn">{hint}</p>}
             </div>
           </div>
           <div className="min-w-0 space-y-4 lg:w-[340px]">
@@ -217,6 +342,12 @@ export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false
         </AnimatePresence>
       </div>
 
+      <AnimatePresence>
+        {pending && (
+          <PasteConfirm key={pasteKey} L={L} pending={pending} onCancel={closePending} onSave={(title) => void savePasted(pending, title)} />
+        )}
+      </AnimatePresence>
+
       {/* Drop anywhere: a quiet layer over the page while files are dragged in. */}
       <AnimatePresence>
         {dragging && (
@@ -245,9 +376,11 @@ function UploadRow({ L, item: i, live, onRemove }: { L: Lx; item: Item; live?: S
   let spinning = false;
   let done = false;
   if (i.state === "queued") line = t("library.upload.queued");
+  else if (i.state === "uploading" && i.origin !== "file") { line = t(i.origin === "url" ? "library.paste.readingPage" : "library.paste.savingNote"); spinning = true; }
   else if (i.state === "uploading") { line = i.progress >= 1 ? t("library.upload.saving") : t("library.upload.progress", { pct: Math.round(i.progress * 100) }); spinning = true; }
   else if (i.state === "error") { line = i.error; tone = "danger"; }
-  else if (i.state === "duplicate") line = t("library.upload.duplicate");
+  else if (i.state === "duplicate") line = t(i.origin === "url" ? "library.paste.duplicatePage" : i.origin === "text" ? "library.paste.duplicateNote" : "library.upload.duplicate");
+  else if (i.note) { line = i.note; tone = "warn"; }
   else if (!live) { line = t("library.upload.starts"); spinning = true; }
   else if (stuck) { line = t("library.upload.stuck"); tone = "warn"; }
   else if (live.status === "pending") { line = t("library.upload.waiting"); spinning = true; }
@@ -266,14 +399,18 @@ function UploadRow({ L, item: i, live, onRemove }: { L: Lx; item: Item; live?: S
         {i.preview
           // eslint-disable-next-line @next/next/no-img-element -- local object URL preview
           ? <img src={i.preview} alt="" className="size-full object-cover" />
-          : <span className="flex size-full items-center justify-center"><TypeIcon category={category} mime={i.mime} className="size-5" /></span>}
+          : <span className="flex size-full items-center justify-center">
+            {i.origin === "url" ? <Globe aria-hidden className="size-5" /> : <TypeIcon category={category} mime={i.mime} className="size-5" />}
+          </span>}
       </span>
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-3">
           <p className="min-w-0 flex-1 truncate text-sm font-medium" title={i.name}>
             {href ? <Link href={href} className="hover:underline">{i.name}</Link> : i.name}
           </p>
-          <span className="shrink-0 text-xs tabular-nums text-muted">{formatBytes(L, i.size)}</span>
+          <span className="shrink-0 text-xs tabular-nums text-muted">
+            {i.origin === "url" ? (i.host !== i.name ? i.host : null) : i.origin === "text" ? t("library.paste.note") : i.size != null ? formatBytes(L, i.size) : null}
+          </span>
         </div>
         <p className={clsx("mt-0.5 flex items-center gap-1.5 text-xs",
           tone === "muted" && "text-muted", tone === "accent" && "text-accent", tone === "danger" && "text-danger", tone === "warn" && "text-warn")}>
@@ -281,7 +418,7 @@ function UploadRow({ L, item: i, live, onRemove }: { L: Lx; item: Item; live?: S
           {done && <Check aria-hidden className="size-3 shrink-0" />}
           <span className="min-w-0">{line}</span>
         </p>
-        {(i.state === "uploading" || i.state === "queued") && (
+        {(i.state === "uploading" || i.state === "queued") && i.origin === "file" && (
           <div className="mt-1.5 h-0.5 overflow-hidden rounded-full bg-surface-2" role="progressbar" aria-label={t("library.upload.progressLabel", { name: i.name })}
             aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(i.progress * 100)}>
             <div className="h-full origin-left rounded-full bg-accent transition-transform duration-200 ease-out" style={{ transform: `scaleX(${i.progress})` }} />

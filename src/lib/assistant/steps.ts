@@ -1,6 +1,6 @@
 /**
  * "Show its work" (pure, unit-tested): the steps the assistant took while answering, in words people recognise
- * ("Searched the library", "Read 3 documents", "Checked the timeline", "Recalled 2 family rules"), and the line
+ * ("Searched the library", "Read 3 documents", "Checked the timeline", "Recalled 2 rules"), and the line
  * above each answer ("Worked for 4s, 3 steps").
  */
 import type { AssistantStep } from "@/db/schema";
@@ -58,10 +58,10 @@ export function itemSteps(items: ContextItem[], flags: RetrievalFlags): Assistan
   return out;
 }
 
-/** "Recalled 2 family rules and 1 preference". */
-export function memoryStep(c: MemoryCounts): AssistantStep | null {
+/** "Recalled 2 family rules and 1 preference" ("2 rules" outside a family graph). */
+export function memoryStep(c: MemoryCounts, opts: { family?: boolean } = {}): AssistantStep | null {
   const parts: string[] = [];
-  if (c.rules) parts.push(plural(c.rules, "family rule"));
+  if (c.rules) parts.push(plural(c.rules, opts.family === false ? "rule" : "family rule"));
   if (c.preferences) parts.push(plural(c.preferences, "preference"));
   if (c.notes) parts.push(plural(c.notes, "note"));
   if (!parts.length) return null;

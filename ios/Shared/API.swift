@@ -108,6 +108,7 @@ final class API: @unchecked Sendable {
         var r = URLRequest(url: url(path, query: query))
         r.httpMethod = method
         r.setValue("application/json", forHTTPHeaderField: "Accept")
+        r.setValue(AppLanguage.acceptLanguage, forHTTPHeaderField: "Accept-Language")
         if method != "GET" && method != "HEAD" { r.setValue(ServerConfig.origin, forHTTPHeaderField: "Origin") }
         if let json {
             r.setValue("application/json", forHTTPHeaderField: "Content-Type")

@@ -40,7 +40,7 @@ const messages: MessageTree = {
     },
     ics: {
       title: "Calendar link",
-      blurb: "Any calendar you can subscribe to with a link (.ics or webcal://): a sports club, a shared family calendar, the school year.",
+      blurb: "Any calendar you can subscribe to with a link (.ics or webcal://): a sports club, a shared calendar, a team or school schedule.",
       reads: "The events in that calendar: title, time, place and description.",
       never: "Changes the calendar or reaches anything other than the link you paste.",
       help: "Look for “Subscribe”, “Share” or “Secret address in iCal format” in the calendar's settings. Google Calendar: Settings, the calendar, Integrate calendar.",

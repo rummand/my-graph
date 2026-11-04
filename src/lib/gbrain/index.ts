@@ -12,10 +12,12 @@ import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, notInArray, or, sql
 import { alias } from "drizzle-orm/pg-core";
 import { embed } from "@/lib/mux";
 import {
-  canEditItem, canReadItem, ctxFor, edgeSelfReadSql, guestActive, nodeEditSql, nodeReadSql, sourceReadSql, type AccessCtx,
+  canEditItem, canReadItem, ctxFor, edgeSelfReadSql, guestActive, liveNodeSql, nodeEditSql, nodeReadSql, sourceReadSql, type AccessCtx,
 } from "./access";
+export { liveNodeSql } from "./access";
+export { isRetired } from "./pure";
 import {
-  clamp01, defaultEdgeStatus, findMergePairs, mergeAliases, namesMatch, narrowerVisibility, normalizeLabel,
+  clamp01, defaultEdgeStatus, findMergePairs, isRetired, mergeAliases, namesMatch, narrowerVisibility, normalizeLabel,
   normalizeRelation, noisyOr, rrfFuse, statusAfterReassert, toAnyPrefixTsQuery, toPrefixTsQuery, vectorLiteral,
 } from "./pure";
 import { ensureSearchIndexesOnce } from "./setup";
@@ -271,7 +273,8 @@ export async function upsertNode(v: Viewer, input: NodeInput, prov: ProvenanceIn
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`gbrain:node:${graphOf(ctx)}:${v.id}:${input.type}`}))`);
     // Resolution never reaches into another graph: the same name in Work and Family are two different nodes.
     const candidates = await tx.select({ id: nodes.id, label: nodes.label, aliases: nodes.aliases }).from(nodes)
-      .where(and(eq(nodes.graphId, graphOf(ctx)), eq(nodes.ownerId, v.id), eq(nodes.type, input.type), isNull(nodes.mergedInto)));
+      .where(and(eq(nodes.graphId, graphOf(ctx)), eq(nodes.ownerId, v.id), eq(nodes.type, input.type), isNull(nodes.mergedInto), liveNodeSql("nodes")));
+    // A retired node is not resolved into: a new mention starts a new node (restoring the old one is its own decision).
     const key = normalizeLabel(label);
     const match = input.id ? undefined : candidates.find((c) => normalizeLabel(c.label) === key)
       ?? candidates.find((c) => namesMatch(c, { label, aliases: input.aliases }));
@@ -415,7 +418,7 @@ export async function listNodes(v: Viewer, opts?: { type?: NodeType; q?: string;
   const limit = Math.min(Math.max(opts?.limit ?? 50, 1), 500);
   const q = opts?.q?.trim();
   const tq = q ? toPrefixTsQuery(q) : null;
-  const conds: (SQL | undefined)[] = [isNull(nodes.mergedInto), nodeReadSql(ctx, "nodes")];
+  const conds: (SQL | undefined)[] = [isNull(nodes.mergedInto), nodeReadSql(ctx, "nodes"), liveNodeSql("nodes")];
   if (opts?.type) conds.push(eq(nodes.type, opts.type));
   if (q) {
     const like = `%${q.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
@@ -627,7 +630,8 @@ export async function neighbourhood(v: Viewer, id: string, depth: 1 | 2 = 1): Pr
     }
     frontier = next;
   }
-  const rows = await readableNodes(ctx, [...nodeIds]);
+  // Retired neighbours stay out (the centre itself still opens by id).
+  const rows = (await readableNodes(ctx, [...nodeIds])).filter((r) => r.id === center.id || !isRetired(r.props));
   const byId = new Map(rows.map((r) => [r.id, r]));
   return {
     nodes: [center.id, ...[...nodeIds].filter((x) => x !== center.id)].map((x) => byId.get(x)).filter((r): r is NodeRow => !!r).map(toNode),
@@ -709,7 +713,7 @@ export async function search(v: Viewer, query: string, opts?: { limit?: number; 
   const includeChunks = !types || types.includes("document") || types.includes("source");
   const [ctx, qvec] = await Promise.all([accessContext(v), embedQuery(v, q), ensureSearchIndexesOnce()]);
   const vec = qvec ? vectorLiteral(qvec) : null;
-  const nodeWhere = and(isNull(nodes.mergedInto), nodeReadSql(ctx, "nodes"), types ? inArray(nodes.type, types) : undefined);
+  const nodeWhere = and(isNull(nodes.mergedInto), nodeReadSql(ctx, "nodes"), liveNodeSql("nodes"), types ? inArray(nodes.type, types) : undefined);
 
   const nodeText = async (tq: string) => (await db.select({ id: nodes.id }).from(nodes)
     .where(and(nodeWhere, sql`${nodes.search} @@ to_tsquery('simple', ${tq})`))
@@ -764,7 +768,7 @@ export async function search(v: Viewer, query: string, opts?: { limit?: number; 
 export async function timeline(v: Viewer, opts: { from?: Date; to?: Date; personIds?: string[]; topicIds?: string[]; limit?: number }): Promise<{ events: GNode[]; involves: { eventId: string; personId: string }[] }> {
   const ctx = await accessContext(v);
   const limit = Math.min(Math.max(opts.limit ?? 500, 1), 2000);
-  const conds: (SQL | undefined)[] = [isNotNull(nodes.startAt), isNull(nodes.mergedInto), nodeReadSql(ctx, "nodes")];
+  const conds: (SQL | undefined)[] = [isNotNull(nodes.startAt), isNull(nodes.mergedInto), nodeReadSql(ctx, "nodes"), liveNodeSql("nodes")];
   if (opts.from) conds.push(sql`coalesce(${nodes.endAt}, ${nodes.startAt}) >= ${opts.from.toISOString()}::timestamptz`);
   if (opts.to) conds.push(sql`${nodes.startAt} <= ${opts.to.toISOString()}::timestamptz`);
 
@@ -809,7 +813,7 @@ export async function graph(v: Viewer, opts?: { limit?: number; centerId?: strin
   const ctx = await accessContext(v);
   // Prefer well-connected nodes, then recent ones.
   const degree = sql`(select count(*) from edges de where (de.from_id = ${nodes.id} or de.to_id = ${nodes.id}) and de.status not in ('rejected', 'superseded'))`;
-  const rows = await db.select(nodeCols).from(nodes).where(and(isNull(nodes.mergedInto), nodeReadSql(ctx, "nodes")))
+  const rows = await db.select(nodeCols).from(nodes).where(and(isNull(nodes.mergedInto), nodeReadSql(ctx, "nodes"), liveNodeSql("nodes")))
     .orderBy(sql`${degree} desc`, desc(nodes.updatedAt)).limit(limit);
   const ids = rows.map((r) => r.id);
   const es = ids.length ? await visibleEdges(ctx, and(inArray(edges.fromId, ids), inArray(edges.toId, ids)), { limit: limit * 4 }) : [];
@@ -930,7 +934,7 @@ async function suggestions(v: Viewer, opts: { limit: number; focusId?: string })
   const ctx = await accessContext(v);
   if (!ctx.active || ctx.role === "guest") return [];
   const rows = await db.select(nodeCols).from(nodes)
-    .where(and(isNull(nodes.mergedInto), nodeEditSql(ctx, "nodes"), ne(nodes.type, "source")))
+    .where(and(isNull(nodes.mergedInto), nodeEditSql(ctx, "nodes"), liveNodeSql("nodes"), ne(nodes.type, "source")))
     .orderBy(desc(nodes.updatedAt)).limit(5000);
   const byId = new Map(rows.map((r) => [r.id, toNode(r)]));
   // Only pairs within one owner's graph can be merged (see mergeNodes).

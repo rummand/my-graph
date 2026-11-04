@@ -16,7 +16,8 @@ xcrun simctl install booted build/DerivedData/Build/Products/Debug-iphonesimulat
 xcrun simctl launch booted app.mygraph.ios
 ```
 
-The `MyGraph` scheme builds three targets: the app, `MyGraphShare` (share extension) and `MyGraphWidget` (WidgetKit).
+The `MyGraph` scheme builds the app, `MyGraphShare` (share extension) and `MyGraphWidget` (WidgetKit), and tests
+with `MyGraphUITests` (see "UI tests").
 Run `xcodegen generate` again after adding or removing files.
 
 ## Choosing the server
@@ -31,7 +32,8 @@ Debug builds also accept launch arguments, which make simulator runs and screens
 ```sh
 xcrun simctl launch booted app.mygraph.ios -MGServer http://localhost:3917 \
   -MGLogin anna@example.com:demo-demo-demo -MGTab people -MGRoute person:<uuid>
-# also: -MGAsk "question", -MGGraphs, -MGSignOut, -MGRoute memory|changes|settings|widget|node:<id>|source:<id>|chat:new
+# also: -MGAsk "question", -MGGraphs, -MGSignOut,
+#       -MGRoute memory|changes|changes:<id>|documents|history:<id>|settings|widget|node:<id>|source:<id>|chat:new|chat:<id>
 # language: -AppleLanguages "(da)" -AppleLocale da_DK
 ```
 
@@ -67,7 +69,21 @@ None of this is compiled into Release builds.
   - Schibsted Grotesk (variable font, OFL; licence in `MyGraph/Resources/Fonts/OFL.txt` and in Settings) is scaled
     with Dynamic Type.
 - **Languages.** English and Danish come from `Shared/Localizable.xcstrings`, plus `InfoPlist.xcstrings` for
-  permission prompts. The app follows the device language.
+  permission prompts. Every request sends `Accept-Language`. Once signed in, the account's language wins
+  (`/api/auth/me` → `locale`): screens switch through `\.locale` at once and the app keeps it as its language for the
+  next launch (`Shared/AppLanguage.swift`). Settings → Language saves it on the account (`PATCH /api/settings`), so
+  the web and the phone agree. A `-AppleLanguages` launch argument (screenshots, UI tests) keeps the iPhone's choice.
+  Server-written text (greeting, brief, suggestion labels, the week's shared row) comes in the account's language.
+- **Today** is one request (`GET /api/today`), cached for offline. It shows connections that need you, what is waiting
+  (suggestions and proposed changes), the brief, the week by person, to-dos, what needs attention and recent documents.
+- **Changes.** Proposed changes from agents (chat, uploads, web research, the Brain Keeper) never touch the graph until
+  a person delivers them. Today shows waiting proposals with Deliver, Drop and Review; Review (and More → Changes)
+  opens the proposal with a tick box per change (`PATCH /api/changes/:id/changes/:changeId`), its receipts, and
+  Deliver (with the proposal's fingerprint, so a stale approval is refused) or Drop. Graph viewers see them read-only.
+- **History.** Person and node screens end with "What changed" (`GET /api/history?subjectId=`), linking to the
+  proposal each change came from and to the full list.
+- **Documents.** More → Documents lists the graph's documents (`GET /api/artifacts`), read-only; a tap opens the
+  document on the web.
 
 ## TestFlight checklist
 
@@ -82,18 +98,20 @@ None of this is compiled into Release builds.
 6. Archive with the `MyGraph` scheme (Release), upload with Xcode Organizer, and add testers in App Store Connect.
    `ITSAppUsesNonExemptEncryption` is already `false`.
 
-## Server changes the app needs
+## Server routes made for the app
 
-These are not made; they live outside `ios/`.
+- `GET /api/auth/me` → `{ me: { id, name, email, role, personNodeId, locale, theme, timeZone, graph: { id, name, kind,
+  role, color, memberCount, isFamily } } }`. The app reads the viewer and the account's language from it.
+- `GET /api/today?days=7` → everything Today shows in one request, written in the account's language: `greeting`
+  (`text`, `date`), `brief`, `reminders`, `week` (`items`, `people`), `weekByPerson` (rows with entries, the shared row
+  last), `suggestions` (with `kindLabel`, `originLabel`, `alwaysLabel`), `changeSets` (drafts), `recent`, `connections`
+  that need the person, `attention` (unsure facts, failed uploads, possible duplicates) and `failed` (names of parts
+  that couldn't load; they are null, the rest still arrives). Pure helpers and tests: `src/app/api/today/shape.ts`.
+- If `/api/today` answers 404 (an older server), Today falls back to the six separate routes.
 
-1. **Change sets API.** `src/lib/changes` is still stubs, and there is no route. The app already calls:
-   - `GET /api/changes?status=draft|delivered|abandoned|all&limit=` → `{ changeSets: ChangeSetView[] }`
-   - `POST /api/changes/:id/deliver` (optional body `{ onlyChangeIds?, fingerprint? }`) → `{ ok, applied, conflicts }`
-   - `POST /api/changes/:id/abandon` → `{ ok }`
+## Server changes still needed
 
-   Until then, Today hides change sets and Changes says the server needs an update. Both pick the routes up
-   automatically once they answer.
-2. **Passkeys: apple-app-site-association.** iOS only offers a passkey for an RP ID whose domain lists the app.
+1. **Passkeys: apple-app-site-association.** iOS only offers a passkey for an RP ID whose domain lists the app.
    - Serve `https://<APP_URL host>/.well-known/apple-app-site-association` as `application/json`, with no redirect:
 
      ```json
@@ -107,20 +125,45 @@ These are not made; they live outside `ios/`.
      already accepts when it equals `APP_URL`.
    - The app's passkey code is in `MyGraph/Auth/PasskeySignIn.swift`. It is not testable on localhost (`rpId` is
      `localhost`).
-3. **Push (optional, for remote notifications).**
+2. **Push (optional, for remote notifications).**
    - A device-token route: `POST /api/devices { token, platform: "ios", locale }` and `DELETE` on sign-out.
    - A `device_tokens` table: user, graph, token, created, last seen.
    - An APNs HTTP/2 sender with a `.p8` key (`APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_KEY`, `APNS_TOPIC=app.mygraph.ios`),
      sent in-process from the existing reminder, suggestion and approval code paths.
    - Pushes should respect visibility and send titles only, without sensitive detail.
    - Local reminder notifications already work without any of this.
-4. **Share extension auth.** No change is needed: the extension reuses the Keychain-shared cookie. A bearer token
+3. **Share extension auth.** No change is needed: the extension reuses the Keychain-shared cookie. A bearer token
    would only be needed if cookies stop being shareable.
-5. **Nice to have.**
-   - `GET /api/auth/me` with name, role and person node id. The app reads the viewer from `/api/people` today.
-   - One JSON `GET /api/today`, so Today makes one request instead of six.
-   - Server-side Danish for generated text: nudges, relation labels and the brief are English even when the app is
-     in Danish.
+4. **History sentences.** `/api/history` returns raw events; the app writes the sentences itself
+   (`MyGraph/More/HistoryViews.swift`, mirroring the web's `history` messages). A `text` field written by the server
+   in the reader's language would keep the two in step.
+
+## UI tests
+
+`UITests/` holds an XCUITest target (`MyGraphUITests`) that drives the app against a running server as Anna and checks
+every tap against the API afterwards. The tests seed what they need through their own signed-in client
+(`UITests/Seeder.swift`): a to-do, a chat question the assistant answers with a reminder proposal, and a short note
+uploaded to the library, whose read-through proposes a change set.
+
+| Test | Taps |
+| --- | --- |
+| `testApproveAndDenySuggestionsOnToday` | Deny on one suggestion and Approve on another, on Today |
+| `testTickingATodoMarksItDone` | The tick on a new to-do |
+| `testApprovingAChatProposal` | Approve on a fresh chat proposal |
+| `testDeliveringAChangeSetWithOneChangeLeftOut` | Opens the proposal, unticks its last change, Deliver |
+
+```sh
+cd ios && xcodegen generate
+TEST_RUNNER_MG_SHOTS=/tmp/mg-shots \
+  xcodebuild -scheme MyGraph -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath build/DerivedData test
+# another server: TEST_RUNNER_MG_SERVER=https://…   (needs anna@example.com / demo-demo-demo)
+```
+
+They need the dev server (`http://localhost:3917`) with the demo data, and mux for the chat and upload seeds. The
+suggestions test skips when Anna has fewer than two pending suggestions; the chat test skips when the assistant
+doesn't propose anything. Waits are long (up to five minutes) because the development server compiles routes on
+first use. The tests change Anna's data the way a person would: a suggestion approved and one denied, a reminder made
+and ticked, a reminder added from chat, and a few library facts delivered.
 
 ## Not verified on the simulator
 
@@ -128,5 +171,6 @@ These are not made; they live outside `ios/`.
   the simulator; their menu items are hidden or disabled there.
 - Saving through the share extension from another app.
 - Adding the widget to the Home Screen. Its view was checked inside the app at widget sizes.
-- Tapping Approve / Always allow / Deny or ticking a to-do. These call the same routes as the web, but driving taps
-  wasn't possible in this environment.
+- "Always allow" on a suggestion or a chat proposal (the UI tests cover Approve and Deny, which share the code path).
+- The language switch in Settings: it saves on the account, and SwiftUI text switches at once through `\.locale`, but
+  text built in code (`String(localized:)`) follows only after the app is opened again.

@@ -347,6 +347,8 @@ const messages: MessageTree = {
     detailsNeedFixing: "Some details need fixing",
     invalidQuery: "Invalid query",
     onlyParents: "Only parents can change this",
+    onlyKeepers: "Only the people who look after this graph can change this",
+    ownersModelGraph: "This graph uses its owner's model. Only they can change it.",
     ownersModel: "This graph uses its owner's household model. Only they can change it.",
     server: "Something went wrong on our side. Try again in a moment.",
     badId: "That id isn't valid",

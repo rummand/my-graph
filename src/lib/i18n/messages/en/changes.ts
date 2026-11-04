@@ -74,7 +74,7 @@ const messages: MessageTree = {
   back: "Changes",
   notFound: "We couldn't find that proposal",
   notFoundBody: "It may have been dropped, or it belongs to another graph.",
-  decideHint: "Untick what you don't want, then deliver the rest.",
+  decideHint: "Untick what isn't ready, then deliver the rest. What you untick keeps waiting in a proposal of its own.",
   created: "Proposed {date}",
   deliveredAt: "Delivered {date}",
   review: "Review",
@@ -93,6 +93,27 @@ const messages: MessageTree = {
   noneTicked: "Tick at least one change to deliver.",
   failed: "That didn't work. Try again in a moment.",
   showChanges: "Show the changes",
+  rest: {
+    titlePrefix: "Rest of",
+    waitingIn: "The changes you left out are still waiting in “{title}”.",
+    continues: "These are the changes left out when “{title}” was delivered.",
+    open: "Open it",
+    delivered: { one: "{count} change you left out is still waiting.", other: "{count} changes you left out are still waiting." },
+  },
+  retired: {
+    title: "Retired",
+    titleOn: "Retired on {date}",
+    body: "This no longer shows in lists, search, the graph, the timeline or the assistant's answers. Its history and evidence are kept.",
+    restore: "Restore as a proposal",
+    restoring: "Proposing…",
+  },
+  restore: {
+    title: "Bring back {name}",
+    note: "Bring back what was retired.",
+    notFound: "We couldn't find that item.",
+    notRetired: "This item isn't retired.",
+    notAllowed: "You can't propose changes in this graph.",
+  },
 };
 
 export default messages;

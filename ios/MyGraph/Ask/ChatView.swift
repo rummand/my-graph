@@ -208,8 +208,11 @@ struct ProposalCard: View {
             case "pending", "queued":
                 HStack(spacing: 8) {
                     Button("Approve") { act("approve") }.buttonStyle(MGButtonStyle(kind: .primary, compact: true))
+                        .accessibilityIdentifier("proposal.approve")
                     Button("Always allow") { act("always") }.buttonStyle(MGButtonStyle(kind: .secondary, compact: true))
+                        .accessibilityIdentifier("proposal.always")
                     Button("Deny") { act("deny") }.buttonStyle(MGButtonStyle(kind: .ghost, compact: true))
+                        .accessibilityIdentifier("proposal.deny")
                     if busy { ProgressView() }
                 }
                 .disabled(busy)
@@ -217,6 +220,7 @@ struct ProposalCard: View {
                 HStack(spacing: 10) {
                     Label(proposal.result?.label ?? String(localized: "Done"), systemImage: "checkmark.circle.fill")
                         .mgFont(.secondaryStrong).foregroundStyle(Color.mgAccent)
+                        .accessibilityIdentifier("proposal.approved")
                     if proposal.result?.href != nil {
                         Button("Open") { open(proposal.result?.href) }.buttonStyle(MGButtonStyle(kind: .ghost, compact: true))
                     }

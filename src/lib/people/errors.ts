@@ -10,6 +10,8 @@ const CODES: Record<string, string> = {
   "Some details need fixing": "detailsNeedFixing",
   "Invalid query": "invalidQuery",
   "Only parents can change this": "onlyParents",
+  "Only the people who look after this graph can change this": "onlyKeepers",
+  "This graph uses its owner's model. Only they can change it.": "ownersModelGraph",
   "This graph uses its owner's household model. Only they can change it.": "ownersModel",
   "Something went wrong on our side. Try again in a moment.": "server",
   "That id isn't valid": "badId",

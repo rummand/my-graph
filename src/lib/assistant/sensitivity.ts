@@ -4,6 +4,7 @@
  * It is raised, never lowered, and shown as a badge. Before a proposal would write chat content somewhere more
  * people can see, the approval card says so.
  */
+import type { Voice } from "./voice";
 export type Sensitivity = "normal" | "parents" | "private";
 export type Visibility = "private" | "parents" | "household";
 
@@ -50,11 +51,19 @@ export function narrower(a: Visibility, b: Visibility): Visibility {
  * The warning for writing this conversation's content into a place with `target` visibility, or null when the
  * place is no wider than what the chat touched.
  */
-export function wideningWarning(conv: Sensitivity, target: Visibility): string | null {
+export function wideningWarning(conv: Sensitivity, target: Visibility, voice?: Pick<Voice, "t" | "family">): string | null {
   if (conv === "normal") return null;
-  const what = conv === "parents" ? "parents-only items" : "private items";
-  if (target === "household") return `This conversation includes ${what}. Saving this makes it visible to everyone in the graph, children included.`;
-  if (target === "parents" && conv === "private") return `This conversation includes ${what}. Saving this makes it visible to the parents too.`;
+  if (!voice) {
+    const what = conv === "parents" ? "parents-only items" : "private items";
+    if (target === "household") return `This conversation includes ${what}. Saving this makes it visible to everyone in the graph, children included.`;
+    if (target === "parents" && conv === "private") return `This conversation includes ${what}. Saving this makes it visible to the parents too.`;
+    return null;
+  }
+  // Outside a family graph "parents" are the people who can edit, and nobody is a child.
+  const g = voice.family ? "family" : "graph";
+  const what = voice.t(`chat.server.widen.${g}.${conv === "parents" ? "parentsItems" : "privateItems"}`);
+  if (target === "household") return voice.t(`chat.server.widen.${g}.everyone`, { what });
+  if (target === "parents" && conv === "private") return voice.t(`chat.server.widen.${g}.parents`, { what });
   return null;
 }
 

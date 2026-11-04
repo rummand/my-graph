@@ -4,14 +4,21 @@ import { api, ApiError } from "./api";
 
 export const passkeysSupported = () => typeof window !== "undefined" && browserSupportsWebAuthn();
 
+/** A browser-side passkey failure; `code` picks the translated message (auth.login.passkeyErrors.*). */
+export class PasskeyError extends Error {
+  constructor(readonly code: "cancelled" | "alreadyRegistered" | "failed", message: string) { super(message); this.name = "PasskeyError"; }
+}
+
+// Raw browser errors are technical and English ("Resident credentials or empty 'allowCredentials' lists are not
+// supported…"), so only server answers pass through; everything else becomes one of three plain messages.
 function friendly(e: unknown): Error {
   if (e instanceof ApiError) return e;
   if (e instanceof WebAuthnError) {
-    if (e.code === "ERROR_CEREMONY_ABORTED") return new Error("The passkey request was cancelled.");
-    if (e.code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") return new Error("This device already has a passkey for your account.");
+    if (e.code === "ERROR_CEREMONY_ABORTED") return new PasskeyError("cancelled", "The passkey request was cancelled or timed out.");
+    if (e.code === "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED") return new PasskeyError("alreadyRegistered", "This device already has a passkey for your account.");
   }
-  if (e instanceof Error && (e.name === "NotAllowedError" || e.name === "AbortError")) return new Error("The passkey request was cancelled or timed out.");
-  return e instanceof Error ? e : new Error("The passkey didn't work. Try again.");
+  if (e instanceof Error && (e.name === "NotAllowedError" || e.name === "AbortError")) return new PasskeyError("cancelled", "The passkey request was cancelled or timed out.");
+  return new PasskeyError("failed", "The passkey didn't work on this device. Try again, or use your password.");
 }
 
 export async function signInWithPasskey(): Promise<{ pending: boolean }> {

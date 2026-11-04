@@ -14,6 +14,7 @@ import { attentionItems, nextBirthday } from "./attention";
 import { circleIn } from "./circles";
 import { memberCircle, relationsToCenter, relationToYou, relationToYouParts, type PathEdge, type PathNode } from "./relpath";
 import { templateFor } from "@/lib/templates";
+import { isRetired, liveNodeSql } from "@/lib/gbrain";
 import { memberSelfNodes } from "@/lib/graphs/self";
 import type {
   CenterOption, Citation, FeedItem, Observation, PeopleOverview, PersonProfile, PersonSummary, RelationshipGroup,
@@ -37,9 +38,9 @@ export async function viewerPersonId(v: Viewer): Promise<string | null> {
   return row?.id ?? null;
 }
 
-/** Visible, unmerged nodes of the given types. */
+/** Visible, unmerged, not retired nodes of the given types. */
 export async function visibleNodes(v: Viewer, types: NodeRow["type"][], limit = 5000): Promise<NodeRow[]> {
-  return db.select().from(nodes).where(and(inArray(nodes.type, types), isNull(nodes.mergedInto), visibleWhere(v, nodes)))
+  return db.select().from(nodes).where(and(inArray(nodes.type, types), isNull(nodes.mergedInto), liveNodeSql("nodes"), visibleWhere(v, nodes)))
     .orderBy(nodes.label).limit(limit);
 }
 
@@ -250,14 +251,15 @@ export function redactForViewer(v: Viewer, ownerId: string, attrs: PersonProfile
 
 export async function personProfile(v: Viewer, id: string): Promise<PersonProfile | null> {
   const node = await visibleNode(v, id);
-  if (!node || node.type !== "person") return null;
+  // A retired person has no profile: they open on their node page, with the "Retired" notice.
+  if (!node || node.type !== "person" || isRetired(node.props)) return null;
   const b = await buildPeople(v);
   const summary = b.byId.get(id)!;
   const meta = b.meta;
 
   const touching = await edgesTouching(v, [id]);
   const otherIds = [...new Set(touching.map((e) => (e.fromId === id ? e.toId : e.fromId)))];
-  const others = otherIds.length ? await db.select().from(nodes).where(and(inArray(nodes.id, otherIds), isNull(nodes.mergedInto), visibleWhere(v, nodes))) : [];
+  const others = otherIds.length ? await db.select().from(nodes).where(and(inArray(nodes.id, otherIds), isNull(nodes.mergedInto), liveNodeSql("nodes"), visibleWhere(v, nodes))) : [];
   const otherById = new Map(others.map((n) => [n.id, n]));
   const live = touching.filter((e) => otherById.has(e.fromId === id ? e.toId : e.fromId));
   const [edgeCites, nodeCites, obs, docSources] = await Promise.all([

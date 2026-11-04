@@ -4,8 +4,148 @@
     "": {
       "shouldTranslate": false
     },
+    "%@ added it": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ tilføjede det"
+          }
+        }
+      }
+    },
+    "%@ brought it back": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ hentede det tilbage"
+          }
+        }
+      }
+    },
+    "%@ changed %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ændrede %@"
+          }
+        }
+      }
+    },
+    "%@ changed it": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ ændrede det"
+          }
+        }
+      }
+    },
+    "%@ linked it with the same one in another graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ koblede det til det samme i en anden graf"
+          }
+        }
+      }
+    },
+    "%@ merged something into it": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ lagde noget sammen med det"
+          }
+        }
+      }
+    },
+    "%@ needs you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ har brug for dig"
+          }
+        }
+      }
+    },
+    "%@ removed %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ fjernede %@"
+          }
+        }
+      }
+    },
+    "%@ removed it": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ fjernede det"
+          }
+        }
+      }
+    },
+    "%@ retired it": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ satte det på pension"
+          }
+        }
+      }
+    },
+    "%@ shared it with another graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ delte det med en anden graf"
+          }
+        }
+      }
+    },
+    "%@ unlinked it from another graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ koblede det fra en anden graf"
+          }
+        }
+      }
+    },
+    "%@ · %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@"
+          }
+        }
+      }
+    },
     "%lld": {
       "shouldTranslate": false
+    },
+    "%lld changes": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ændringer"
+          }
+        }
+      }
     },
     "%lld changes found in this file": {
       "localizations": {
@@ -57,6 +197,16 @@
         }
       }
     },
+    "%lld possible duplicates to check on the web": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld mulige dubletter at tjekke på nettet"
+          }
+        }
+      }
+    },
     "%lld reminders": {
       "localizations": {
         "da": {
@@ -77,6 +227,16 @@
         }
       }
     },
+    "%lld uploads couldn't be read": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld uploads kunne ikke læses"
+          }
+        }
+      }
+    },
     "%lld waiting": {
       "localizations": {
         "da": {
@@ -93,6 +253,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld%% sikker"
+          }
+        }
+      }
+    },
+    "1 change": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 ændring"
           }
         }
       }
@@ -127,12 +297,42 @@
         }
       }
     },
+    "1 possible duplicate to check on the web": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 mulig dublet at tjekke på nettet"
+          }
+        }
+      }
+    },
     "1 reminder": {
       "localizations": {
         "da": {
           "stringUnit": {
             "state": "translated",
             "value": "1 påmindelse"
+          }
+        }
+      }
+    },
+    "1 upload couldn't be read": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 upload kunne ikke læses"
+          }
+        }
+      }
+    },
+    "A connection": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En forbindelse"
           }
         }
       }
@@ -337,6 +537,16 @@
         }
       }
     },
+    "Already in the graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allerede i grafen"
+          }
+        }
+      }
+    },
     "Already in the library, so it wasn't added twice.": {
       "localizations": {
         "da": {
@@ -363,6 +573,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tillad altid"
+          }
+        }
+      }
+    },
+    "An import": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En import"
           }
         }
       }
@@ -467,6 +687,16 @@
         }
       }
     },
+    "Being written": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bliver skrevet"
+          }
+        }
+      }
+    },
     "Birthday": {
       "localizations": {
         "da": {
@@ -483,6 +713,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Har snart fødselsdag"
+          }
+        }
+      }
+    },
+    "Bringing back an earlier version": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Henter en tidligere version tilbage"
           }
         }
       }
@@ -563,6 +803,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ændringer"
+          }
+        }
+      }
+    },
+    "Changes appear here as soon as anything about this changes.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ændringer dukker op her, så snart noget ved det her ændrer sig."
           }
         }
       }
@@ -687,12 +937,62 @@
         }
       }
     },
+    "Deliver %lld": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aflevér %lld"
+          }
+        }
+      }
+    },
+    "Deliver %lld of %lld": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aflevér %lld af %lld"
+          }
+        }
+      }
+    },
+    "Deliver all": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aflevér alle"
+          }
+        }
+      }
+    },
     "Delivered": {
       "localizations": {
         "da": {
           "stringUnit": {
             "state": "translated",
             "value": "Gennemført"
+          }
+        }
+      }
+    },
+    "Delivered %lld changes. They're in the graph now, with a note of who delivered them.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ændringer er afleveret. De er i grafen nu, med en note om, hvem der afleverede dem."
+          }
+        }
+      }
+    },
+    "Delivered 1 change. It's in the graph now, with a note of who delivered it.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 ændring er afleveret. Den er i grafen nu, med en note om, hvem der afleverede den."
           }
         }
       }
@@ -717,6 +1017,26 @@
         }
       }
     },
+    "Documents": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumenter"
+          }
+        }
+      }
+    },
+    "Documents you or the assistant write from this graph, like a summary for a meeting, show up here. You make them on the web.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dokumenter, som du eller assistenten skriver ud fra grafen, fx et resumé til et møde, dukker op her. Du laver dem på nettet."
+          }
+        }
+      }
+    },
     "Done": {
       "localizations": {
         "da": {
@@ -727,12 +1047,32 @@
         }
       }
     },
+    "Draft": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kladde"
+          }
+        }
+      }
+    },
     "Drop": {
       "localizations": {
         "da": {
           "stringUnit": {
             "state": "translated",
             "value": "Kassér"
+          }
+        }
+      }
+    },
+    "Drop this proposal": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drop forslaget"
           }
         }
       }
@@ -1027,6 +1367,16 @@
         }
       }
     },
+    "From a connection": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra en forbindelse"
+          }
+        }
+      }
+    },
     "From a document": {
       "localizations": {
         "da": {
@@ -1043,6 +1393,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fra en automatisering"
+          }
+        }
+      }
+    },
+    "From an upload": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra en upload"
           }
         }
       }
@@ -1073,6 +1433,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fra det daglige tjek"
+          }
+        }
+      }
+    },
+    "From web research": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra research på nettet"
+          }
+        }
+      }
+    },
+    "From you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra dig"
           }
         }
       }
@@ -1187,12 +1567,52 @@
         }
       }
     },
+    "History": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Historik"
+          }
+        }
+      }
+    },
+    "History couldn't be loaded right now.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Historikken kunne ikke hentes lige nu."
+          }
+        }
+      }
+    },
     "How they're doing": {
       "localizations": {
         "da": {
           "stringUnit": {
             "state": "translated",
             "value": "Hvordan det går"
+          }
+        }
+      }
+    },
+    "Include this change": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tag ændringen med"
+          }
+        }
+      }
+    },
+    "Included: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Med: %@"
           }
         }
       }
@@ -1287,6 +1707,26 @@
         }
       }
     },
+    "Leave this change out": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lad ændringen være ude"
+          }
+        }
+      }
+    },
+    "Left out: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Udeladt: %@"
+          }
+        }
+      }
+    },
     "Letters": {
       "localizations": {
         "da": {
@@ -1357,6 +1797,16 @@
         }
       }
     },
+    "Memory, changes, documents, settings and sign out": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hukommelse, ændringer, dokumenter, indstillinger og log ud"
+          }
+        }
+      }
+    },
     "Memory, changes, settings and sign out": {
       "localizations": {
         "da": {
@@ -1393,6 +1843,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mere"
+          }
+        }
+      }
+    },
+    "My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph"
           }
         }
       }
@@ -1457,6 +1917,16 @@
         }
       }
     },
+    "Needs attention": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kræver opmærksomhed"
+          }
+        }
+      }
+    },
     "New chat": {
       "localizations": {
         "da": {
@@ -1477,6 +1947,16 @@
         }
       }
     },
+    "No changes to %@ have been recorded yet.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der er ikke registreret ændringer af %@ endnu."
+          }
+        }
+      }
+    },
     "No chats match": {
       "localizations": {
         "da": {
@@ -1493,6 +1973,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ingen chats endnu"
+          }
+        }
+      }
+    },
+    "No documents yet": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen dokumenter endnu"
           }
         }
       }
@@ -1543,6 +2033,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ved ikke endnu"
+          }
+        }
+      }
+    },
+    "Not sure yet · from %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikke sikkert endnu · fra %@"
           }
         }
       }
@@ -1633,6 +2133,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Intet i kalenderen de næste syv dage."
+          }
+        }
+      }
+    },
+    "Nothing reaches the graph until you deliver. Untick a change to leave it out.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet kommer ind i grafen, før du afleverer. Fjern fluebenet ved en ændring for at lade den være ude."
+          }
+        }
+      }
+    },
+    "Nothing recorded yet": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet registreret endnu"
           }
         }
       }
@@ -1803,6 +2323,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Åbner My Graph"
+          }
+        }
+      }
+    },
+    "Opens on the web": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbner på nettet"
           }
         }
       }
@@ -2037,6 +2567,36 @@
         }
       }
     },
+    "Proposal": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forslag"
+          }
+        }
+      }
+    },
+    "Proposed %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foreslået %@"
+          }
+        }
+      }
+    },
+    "Proposed by %@, %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Foreslået af %@, %@"
+          }
+        }
+      }
+    },
     "Proposed changes": {
       "localizations": {
         "da": {
@@ -2053,6 +2613,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Foreslåede ændringer fra chats, uploads og tjek vises her. Intet kommer ind i din graf, før du gennemfører det."
+          }
+        }
+      }
+    },
+    "Published": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Udgivet"
           }
         }
       }
@@ -2167,6 +2737,16 @@
         }
       }
     },
+    "Review": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gennemse"
+          }
+        }
+      }
+    },
     "Review in Changes": {
       "localizations": {
         "da": {
@@ -2193,6 +2773,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gem i My Graph"
+          }
+        }
+      }
+    },
+    "Saved on your account, so the web and this iPhone speak the same language, and the assistant writes in it too.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemmes på din konto, så nettet og denne iPhone taler samme sprog, og assistenten skriver også på det."
           }
         }
       }
@@ -2267,6 +2857,26 @@
         }
       }
     },
+    "See all": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se alle"
+          }
+        }
+      }
+    },
+    "See the proposal": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Se forslaget"
+          }
+        }
+      }
+    },
     "Seems to be having a hard time": {
       "localizations": {
         "da": {
@@ -2327,6 +2937,16 @@
         }
       }
     },
+    "Shared with you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delt med dig"
+          }
+        }
+      }
+    },
     "Show": {
       "localizations": {
         "da": {
@@ -2357,6 +2977,16 @@
         }
       }
     },
+    "Show older changes": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vis ældre ændringer"
+          }
+        }
+      }
+    },
     "Show the steps": {
       "localizations": {
         "da": {
@@ -2383,6 +3013,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Log ind"
+          }
+        }
+      }
+    },
+    "Sign in to it again on the web, under Connections, so it can keep bringing things in.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ind på den igen på nettet under Forbindelser, så den kan blive ved med at hente ting ind."
           }
         }
       }
@@ -2447,6 +3087,46 @@
         }
       }
     },
+    "Some text switches language the next time you open the app.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noget af teksten skifter sprog, næste gang du åbner appen."
+          }
+        }
+      }
+    },
+    "Someone": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nogen"
+          }
+        }
+      }
+    },
+    "Someone who can edit this graph decides on this.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det er en, der kan redigere grafen, der beslutter det her."
+          }
+        }
+      }
+    },
+    "Something changed since": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noget er ændret siden"
+          }
+        }
+      }
+    },
     "Something went wrong on our side. Please try again.": {
       "localizations": {
         "da": {
@@ -2473,6 +3153,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Noget gik galt. Prøv igen."
+          }
+        }
+      }
+    },
+    "Source": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kilde"
           }
         }
       }
@@ -2593,6 +3283,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Det ligner ikke en webadresse."
+          }
+        }
+      }
+    },
+    "The assistant": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Assistenten"
           }
         }
       }
@@ -2977,6 +3677,16 @@
         }
       }
     },
+    "What changed": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvad der er ændret"
+          }
+        }
+      }
+    },
     "What do we need to remember for the weekend?": {
       "localizations": {
         "da": {
@@ -3307,6 +4017,16 @@
         }
       }
     },
+    "Yours": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dine"
+          }
+        }
+      }
+    },
     "and %lld more": {
       "localizations": {
         "da": {
@@ -3327,8 +4047,188 @@
         }
       }
     },
+    "from %@ to %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fra %@ til %@"
+          }
+        }
+      }
+    },
+    "how exact the date is": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hvor præcis datoen er"
+          }
+        }
+      }
+    },
+    "how sure we are": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hvor sikre vi er"
+          }
+        }
+      }
+    },
     "https://mygraph.example.com": {
       "shouldTranslate": false
+    },
+    "no": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nej"
+          }
+        }
+      }
+    },
+    "sensitivity": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "følsomheden"
+          }
+        }
+      }
+    },
+    "the date": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "datoen"
+          }
+        }
+      }
+    },
+    "the detail “%@”": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oplysningen “%@”"
+          }
+        }
+      }
+    },
+    "the end date": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "slutdatoen"
+          }
+        }
+      }
+    },
+    "the kind": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "slagsen"
+          }
+        }
+      }
+    },
+    "the name": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "navnet"
+          }
+        }
+      }
+    },
+    "the other names": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "de andre navne"
+          }
+        }
+      }
+    },
+    "the relation": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "relationen"
+          }
+        }
+      }
+    },
+    "the status": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "status"
+          }
+        }
+      }
+    },
+    "the summary": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "resuméet"
+          }
+        }
+      }
+    },
+    "the type": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "typen"
+          }
+        }
+      }
+    },
+    "to %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "til %@"
+          }
+        }
+      }
+    },
+    "who can see it": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hvem der kan se det"
+          }
+        }
+      }
+    },
+    "yes": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ja"
+          }
+        }
+      }
     },
     "“%@”": {
       "localizations": {

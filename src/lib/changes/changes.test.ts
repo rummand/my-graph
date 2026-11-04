@@ -161,3 +161,130 @@ describe("who may deliver", () => {
     }
   });
 });
+
+/* ── Versioning polish: partial delivery, folding, evidence visibility, retired nodes, writes in history ── */
+
+import { evidenceOpen, evidenceRefs, mergeUpdateSet, restOf, restoreRetiredOps, restTitle } from "./pure";
+import { isRetired } from "@/lib/gbrain/pure";
+
+describe("partly delivered", () => {
+  const all = [
+    row("a", 1, "addNode", { nodeId: "n1", payload: { type: "person", label: "Anna" } }),
+    row("b", 2, "addEdge", { payload: { fromId: "n1", toId: "n2", relation: "attends" }, included: false }),
+    row("c", 3, "updateNode", { nodeId: "n3", payload: { set: { label: "X" } } }),
+  ];
+  it("what wasn't delivered keeps waiting, ticked again and renumbered in its old order", () => {
+    const rest = restOf(all, new Set(["a"]));
+    expect(rest.map((c) => [c.id, c.seq, c.included])).toEqual([["b", 1, true], ["c", 2, true]]);
+  });
+  it("nothing waits when everything was delivered", () => {
+    expect(restOf(all, new Set(["a", "b", "c"]))).toEqual([]);
+  });
+  it("names the follow-up after the original, never 'Rest of Rest of'", () => {
+    expect(restTitle("School letter")).toBe("Rest of School letter");
+    expect(restTitle("Rest of School letter")).toBe("Rest of School letter");
+    expect(restTitle("Resten af Skolebrev", "Resten af")).toBe("Resten af Skolebrev");
+    expect(restTitle("x".repeat(300)).length).toBe(200);
+  });
+  it("delivery applies the model and reminders inside its one transaction, wiki edits first with undo", () => {
+    const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "deliver.ts"), "utf8");
+    // The meta library's applyMetaOp opens its own transaction; delivery must not call it.
+    expect(src).not.toMatch(/applyMetaOp\(/);
+    expect(src).toMatch(/applyMetaOpTx\(tx,/);
+    expect(src).not.toMatch(/createReminder\(/);
+    expect(src).toMatch(/tx\.insert\(reminders\)/);
+    // Wiki edits run before the transaction and are undone if it fails.
+    expect(src.indexOf("wiki.updatePage(")).toBeLessThan(src.indexOf("db.transaction("));
+    expect(src).toMatch(/catch \(e\) \{\s*scope\.tx = undefined;\s*await undoWiki\(\);/);
+  });
+});
+
+describe("folding a repeated cross-graph update", () => {
+  it("newer fields win and props merge key by key", () => {
+    expect(mergeUpdateSet({ label: "Anna", props: { phone: "1", email: "a@x" } }, { props: { phone: "2" }, summary: "s" }))
+      .toEqual({ label: "Anna", summary: "s", props: { phone: "2", email: "a@x" } });
+  });
+  it("a removed value (null) replaces the older one", () => {
+    expect(mergeUpdateSet({ props: { phone: "1" } }, { props: { phone: null } })).toEqual({ props: { phone: null } });
+  });
+  it("folding changes the fingerprint, so an approval of the older version is stale", () => {
+    const before = [row("c", 1, "updateNode", { nodeId: "n", payload: { set: { props: { phone: "1" } } } })];
+    const after = [{ ...before[0], payload: { set: mergeUpdateSet({ props: { phone: "1" } }, { props: { phone: "2" } }) } }];
+    expect(fingerprintOf(after)).not.toBe(fingerprintOf(before));
+  });
+});
+
+describe("who sees a proposal, by its evidence", () => {
+  const shared = new Set(["s-household"]);
+  const readable = (id: string) => shared.has(id);
+  it("an import of a file every writer may read is open to every writer (co-parents see it)", () => {
+    const refs = evidenceRefs({ sourceId: "s-household" }, [{ sourceId: "s-household", quote: "Anna starts school" }, {}]);
+    expect(evidenceOpen(refs, readable)).toBe(true);
+    const set = { graphId: "g1", createdBy: "mum", forUserId: null, openEvidence: true };
+    expect(canSeeSet({ id: "dad", graphId: "g1", canWrite: true }, set)).toBe(true);
+    expect(canSeeSet({ id: "kid", graphId: "g1", canWrite: false }, set)).toBe(false);
+    expect(canSeeSet({ id: "dad", graphId: "g2", canWrite: true }, set)).toBe(false);
+  });
+  it("a private source anywhere keeps it with the proposer", () => {
+    expect(evidenceOpen(evidenceRefs({}, [{ sourceId: "s-household" }, { sourceId: "s-mums-private" }]), readable)).toBe(false);
+    expect(canSeeSet({ id: "dad", graphId: "g1", canWrite: true }, { graphId: "g1", createdBy: "mum", forUserId: null, openEvidence: false })).toBe(false);
+    expect(canSeeSet({ id: "mum", graphId: "g1", canWrite: true }, { graphId: "g1", createdBy: "mum", forUserId: null, openEvidence: false })).toBe(true);
+  });
+  it("a conversation is the person's own, so citing one keeps it private", () => {
+    expect(evidenceOpen(evidenceRefs({ conversationId: "c1" }, [{ sourceId: "s-household" }]), readable)).toBe(false);
+    expect(evidenceOpen(evidenceRefs({ conversationId: "c1" }, [{ sourceId: "s-household" }]), readable, (c) => c === "c1")).toBe(true);
+  });
+  it("no evidence, or a quote with nothing behind it, stays private", () => {
+    expect(evidenceOpen(evidenceRefs({}, [{}, {}]), readable)).toBe(false);
+    expect(evidenceOpen(evidenceRefs({}, [{ sourceId: "s-household" }, { quote: "overheard" }]), readable)).toBe(false);
+    expect(evidenceOpen(evidenceRefs({ messageId: "m1" }, [{ sourceId: "s-household" }]), readable)).toBe(false);
+  });
+  it("the SQL twin checks the same things", () => {
+    const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "store.ts"), "utf8");
+    const fn = src.slice(src.indexOf("function openEvidenceSql"), src.indexOf("export async function visibleSql"));
+    for (const k of ["sourceId", "conversationId", "quote", "messageId", "sourceReadSql", "nodeReadSql"]) expect(fn).toContain(k);
+  });
+});
+
+describe("retired nodes", () => {
+  it("are recognised by their marker", () => {
+    expect(isRetired({ retired: true })).toBe(true);
+    expect(isRetired({ retired: null, retiredAt: null })).toBe(false);
+    expect(isRetired({})).toBe(false);
+    expect(isRetired(null)).toBe(false);
+  });
+  it("come back as a proposal: the marker cleared and the facts replaced at retirement given back", () => {
+    const ops = restoreRetiredOps(
+      { id: "n1", props: { retired: true, retiredAt: "2026-11-01T10:00:00Z" } },
+      [{ edgeId: "e1", was: "confirmed" }, { edgeId: "e2", was: "inferred" }, { edgeId: "e3", was: "confirmed" }, { edgeId: "e1", was: "confirmed" }],
+      new Map([["e1", { status: "superseded" }], ["e2", { status: "superseded" }], ["e3", { status: "confirmed" }]]),
+    );
+    expect(ops).toEqual([
+      { op: "updateNode", nodeId: "n1", set: { props: { retired: null, retiredAt: null } }, note: "Bring back what was retired" },
+      { op: "updateEdge", edgeId: "e1", set: { status: "confirmed" }, note: "Bring back what was retired" },
+      { op: "updateEdge", edgeId: "e2", set: { status: "inferred" }, note: "Bring back what was retired" },
+    ]);
+    expect(restoreRetiredOps({ id: "n1", props: {} }, [], new Map())).toEqual([]);
+  });
+  it("are left out of every list reader in gbrain, but not out of reading by id", () => {
+    const src = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "../gbrain/index.ts"), "utf8");
+    const body = (name: string) => { const i = src.indexOf(`export async function ${name}(`); return src.slice(i, src.indexOf("\nexport ", i + 10)); };
+    for (const f of ["listNodes", "search", "timeline", "graph"]) expect(body(f), f).toMatch(/liveNodeSql\("nodes"\)/);
+    expect(body("neighbourhood")).toMatch(/isRetired/);
+    expect(body("getNode")).not.toMatch(/liveNodeSql|isRetired/);
+  });
+});
+
+describe("people and members' own nodes are written through gbrain or the history recorder", () => {
+  const read = (rel: string) => fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), rel), "utf8");
+  it("people writes never touch nodes or edges directly", () => {
+    const src = read("../people/writes.ts");
+    expect(src).not.toMatch(/(db|tx)\.(insert|update)\((nodes|edges)\)/);
+    expect(src).toMatch(/gbrain\.updateNode\(v, id, \{ kind \}/);
+  });
+  it("a member's self node is recorded in history when it is made or stamped", () => {
+    const src = read("../graphs/self.ts");
+    expect(src).toMatch(/recordRows\(tx, graph\.id, \{ nodes: \[\[null, nodeSnap\(row\)\]\] \}/);
+    expect(src).toMatch(/recordSnapshots\(ex, row\.graphId, before/);
+  });
+});

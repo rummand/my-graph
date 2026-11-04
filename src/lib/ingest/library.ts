@@ -154,7 +154,8 @@ export type ExtractedFact = {
 export type ExtractedEntity = { id: string; label: string; type: string; summary: string | null; startAt: string | null };
 
 export type SourceDetail = {
-  source: SourceSummary & { textContent: string | null; meta: Record<string, unknown>; nodeId: string | null };
+  /** hasFile: an original is stored (pasted notes and web pages have only their text). */
+  source: SourceSummary & { textContent: string | null; meta: Record<string, unknown>; nodeId: string | null; hasFile: boolean };
   chunks: { id: string; idx: number; text: string; locator: Locator }[];
   entities: ExtractedEntity[];
   facts: ExtractedFact[];
@@ -257,7 +258,7 @@ export async function getSourceDetail(v: Viewer, id: string): Promise<SourceDeta
   }
 
   return {
-    source: { ...summary, textContent: src.textContent, meta: m, nodeId: src.nodeId },
+    source: { ...summary, textContent: src.textContent, meta: m, nodeId: src.nodeId, hasFile: !!src.storageKey },
     chunks: chunkRows.map((c) => ({ ...c, locator: c.locator ?? {} })),
     entities,
     facts: [...facts.values()],

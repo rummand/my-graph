@@ -2,22 +2,32 @@
  * Delivering a change set (merging a branch), server-only. Only someone who may write in the graph delivers, and only
  * a set they can see. The ops are replayed onto the graph now first; a conflicted op is refused (the whole delivery
  * is), a landed one is skipped. The graph ops then apply in ONE transaction inside the history recorder, every write
- * stamped with the proposal (`change:<id>`) and a provenance row built from the op's receipt. Model ops (new kinds,
- * relation types, attributes) go first so the nodes and facts can use them; reminders and wiki pages after commit.
+ * stamped with the proposal (`change:<id>`) and a provenance row built from the op's receipt.
+ *
+ * All or nothing:
+ *  - Model ops (new kinds, relation types, attributes), the graph ops and reminders apply in that ONE transaction
+ *    (model first, so nodes and facts can use what it adds). If any of them fails, none of them happened.
+ *  - Wiki edits can't join a transaction (the wiki library saves revisions in its own), so they run FIRST, before the
+ *    transaction opens. If one fails, the ones before it are undone and nothing else is attempted; if the
+ *    transaction fails afterwards, the wiki edits are undone (a created page is deleted, an edited page gets its old
+ *    content back as a new revision). The wiki keeps that back-and-forth in its revision list; the graph never sees it.
+ *  - Partly delivered: the ops that weren't chosen keep waiting in a follow-up set, "Rest of <title>", linked both
+ *    ways through the sets' evidence (`restIn` / `restOf`), created in the same transaction.
  */
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { changes, changeSets, sources, type Locator } from "@/db/schema";
+import { changes, changeSets, reminders, sources, type Locator } from "@/db/schema";
 import { audit, type Viewer } from "@/lib/auth";
 import * as gbrain from "@/lib/gbrain";
 import { ensureSearchIndexesOnce } from "@/lib/gbrain/setup";
 import { historyStore, type HistoryScope } from "@/lib/history/context";
-import { recordEvent, stampFor } from "@/lib/history/record";
+import { recordEvent, recordMeta, snapshotMeta, stampFor } from "@/lib/history/record";
 import type { Receipt } from "./index";
-import { fingerprintOf, verdictsFor, type ChangeRowLike } from "./pure";
+import { fingerprintOf, restOf, restTitle, verdictsFor, type ChangeRowLike } from "./pure";
+import { applyMetaOpTx } from "./meta-tx";
 import { canWrite, isId, loadRow, nowFor, type ChangeRow, type SetRow } from "./store";
 
-export type DeliverResult = { ok: boolean; applied: number; conflicts: string[]; error?: string; stale?: boolean; skipped?: number; problems?: string[] };
+export type DeliverResult = { ok: boolean; applied: number; conflicts: string[]; error?: string; stale?: boolean; skipped?: number; problems?: string[]; restId?: string | null };
 
 const NODE_TYPES = new Set(["person", "place", "event", "topic", "document", "source", "organization", "project", "thing"]);
 const EDGE_STATUSES = new Set(["confirmed", "unconfirmed", "inferred"]);
@@ -109,41 +119,88 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
     : []);
 
   let applied = 0;
-  const problems: string[] = [];
+  const META = new Set(["addKind", "addRelationType", "addAttribute"]);
+  const fail = (error: string, extra: Partial<DeliverResult> = {}): DeliverResult => ({ ok: false, applied: 0, conflicts: [], error, ...extra });
 
-  // 1. The model first: nodes and facts below may use what it adds. applyMetaOp records its own history.
-  const kindKey = new Map<string, string>(), relKey = new Map<string, string>();
-  const { applyMetaOp } = await import("@/lib/meta/emergent");
-  for (const c of todo) {
-    const p = c.payload as Record<string, unknown>;
-    if (c.op === "addKind") {
-      const r = await applyMetaOp(v, { op: "addKind", nodeType: String(p.nodeType), key: String(p.key), label: String(p.label), pluralLabel: str(p.pluralLabel), parentKey: str(p.parentKey) ?? null, description: str(p.description) },
-        { changeSetId: set.id, origin: "emergent", status: "active" });
-      kindKey.set(`${p.nodeType}:${p.key}`, r.key); applied++;
-    } else if (c.op === "addRelationType") {
-      const r = await applyMetaOp(v, { op: "addRelationType", key: String(p.key), label: String(p.label), inverseLabel: String(p.inverseLabel ?? p.label), fromTypes: p.fromTypes as string[] | undefined, toTypes: p.toTypes as string[] | undefined, symmetric: !!p.symmetric, category: str(p.category) },
-        { changeSetId: set.id, origin: "emergent", status: "active" });
-      relKey.set(String(p.key), r.key); applied++;
-    } else if (c.op === "addAttribute") {
-      await applyMetaOp(v, { op: "addAttribute", nodeType: String(p.nodeType), kindKey: str(p.kindKey) ?? null, key: String(p.key), label: String(p.label), type: String(p.type ?? "text") },
-        { changeSetId: set.id, origin: "emergent", status: "active" });
-      applied++;
+  // 1. Wiki edits first (they can't join the transaction); each one knows how to undo itself.
+  const undo: (() => Promise<unknown>)[] = [];
+  const undoWiki = async () => { for (const fn of undo.reverse()) { try { await fn(); } catch (e) { console.error("[changes] could not undo a wiki edit", e); } } };
+  const wikiOps = todo.filter((c) => c.op === "editWiki");
+  const wikiDone: { pageId: string; title: string; kind: "created" | "updated"; text: string }[] = [];
+  if (wikiOps.length) {
+    const wiki = await import("@/lib/wiki");
+    for (const c of wikiOps) {
+      const p = c.payload as Record<string, unknown>;
+      try {
+        const slug = String(p.slug ?? ""), text = String(p.markdown ?? "");
+        const page = slug ? await wiki.getPage(v, slug) : null;
+        if (page) {
+          const r = await wiki.updatePage(v, page.slug, { version: page.version, content: { ...page.content, content: [...(page.content.content ?? []), ...paragraphs(text)] } });
+          const old = page.content;
+          undo.push(async () => {
+            const cur = await wiki.getPage(v, r.page.slug);
+            if (cur) await wiki.updatePage(v, cur.slug, { version: cur.version, content: old, force: true });
+          });
+          wikiDone.push({ pageId: r.page.id, title: r.page.title, kind: "updated", text });
+        } else {
+          const visibility = p.visibility === "parents" || p.visibility === "household" ? p.visibility : "private";
+          const created = await wiki.createPage(v, { title: String(p.title ?? slug ?? "New page"), visibility, content: { type: "doc", content: paragraphs(text) } });
+          undo.push(() => wiki.deletePage(v, created.slug));
+          wikiDone.push({ pageId: created.id, title: created.title, kind: "created", text });
+        }
+      } catch (e) {
+        await undoWiki();
+        return fail(`Nothing was delivered: the wiki page “${String(p.title ?? p.slug ?? "")}” couldn't be changed (${(e as Error).message}).`);
+      }
     }
   }
 
-  // 2. The graph: one transaction, history stamped with this proposal. (Search triggers exist before it opens, so
-  //    no DDL ever waits on the delivery's own locks.)
+  // 2. The model, the graph and reminders: one transaction, history stamped with this proposal. (Search triggers
+  //    exist before it opens, so no DDL ever waits on the delivery's own locks.)
   await ensureSearchIndexesOnce();
   const scope: HistoryScope = {
     graphId: v.graphId, actor: { kind: "person", id: v.id, name: v.name }, changeSetId: set.id, context: `change:${set.id}`, afterCommit: [], metaWatched: true,
   };
-  const graphOps = todo.filter((c) => !["addKind", "addRelationType", "addAttribute", "addReminder", "editWiki"].includes(c.op));
+  const stamp = { actor: scope.actor, changeSetId: set.id, context: scope.context };
+  const graphOps = todo.filter((c) => !META.has(c.op) && c.op !== "addReminder" && c.op !== "editWiki");
+  const delivered = new Set(chosen.map((c) => c.id));
+  const rest = all.filter((c) => !delivered.has(c.id));
+  let restId: string | null = null;
+  let restPrefix = "Rest of";
+  if (rest.length) {
+    try { const { getT } = await import("@/lib/i18n"); restPrefix = (await getT())("changes.rest.titlePrefix"); } catch { /* outside a request: English */ }
+  }
+  const household = v.graphHouseholdId ?? v.householdId;
   try {
     await historyStore.run(scope, () => db.transaction(async (tx) => {
       scope.tx = tx;
       const [locked] = await tx.select({ status: changeSets.status, fingerprint: changeSets.fingerprint }).from(changeSets).where(eq(changeSets.id, set.id)).for("update");
       if (!locked || locked.status !== "draft") throw new DeliverRefused("This proposal was decided by someone else just now.");
       if (opts.fingerprint && locked.fingerprint && locked.fingerprint !== opts.fingerprint) throw new DeliverRefused("This proposal changed after you looked at it. Look again, then deliver.", true);
+
+      // 2a. The model first: nodes and facts below may use what it adds. Its history is recorded in the same tx.
+      const kindKey = new Map<string, string>(), relKey = new Map<string, string>();
+      const metaOps = todo.filter((c) => META.has(c.op));
+      if (metaOps.length) {
+        const before = household ? await snapshotMeta(tx, household, v.graphId) : null;
+        for (const c of metaOps) {
+          const p = c.payload as Record<string, unknown>;
+          const ctx = { changeSetId: set.id, origin: "emergent" as const, status: "active" as const };
+          if (c.op === "addKind") {
+            const r = await applyMetaOpTx(tx, v, { op: "addKind", nodeType: String(p.nodeType), key: String(p.key), label: String(p.label), pluralLabel: str(p.pluralLabel), parentKey: str(p.parentKey) ?? null, description: str(p.description) }, ctx);
+            kindKey.set(`${p.nodeType}:${p.key}`, r.key);
+          } else if (c.op === "addRelationType") {
+            const r = await applyMetaOpTx(tx, v, { op: "addRelationType", key: String(p.key), label: String(p.label), inverseLabel: String(p.inverseLabel ?? p.label), fromTypes: p.fromTypes as string[] | undefined, toTypes: p.toTypes as string[] | undefined, symmetric: !!p.symmetric, category: str(p.category) }, ctx);
+            relKey.set(String(p.key), r.key);
+          } else {
+            await applyMetaOpTx(tx, v, { op: "addAttribute", nodeType: String(p.nodeType), kindKey: str(p.kindKey) ?? null, key: String(p.key), label: String(p.label), type: String(p.type ?? "text") }, ctx);
+          }
+          applied++;
+        }
+        if (before && household) await recordMeta(tx, v.graphId, before, await snapshotMeta(tx, household, v.graphId), stamp);
+      }
+
+      // 2b. The graph.
       for (const c of graphOps) {
         const p = c.payload as Record<string, unknown>;
         const prov = provFor(v, set, c, okSources);
@@ -185,60 +242,62 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
         }
         applied++;
       }
-      // Ops that weren't chosen leave the set; the set is delivered.
-      if (only) {
-        const left = all.filter((c) => !only.has(c.id) && c.included).map((c) => c.id);
-        if (left.length) await tx.update(changes).set({ included: false }).where(inArray(changes.id, left));
+
+      // 2c. Reminders, in the same transaction (the verdicts above already checked the node they are about; a node
+      //     this proposal adds exists by now).
+      for (const c of todo.filter((x) => x.op === "addReminder")) {
+        const p = c.payload as Record<string, unknown>;
+        const due = date(p.dueAt);
+        const title = String(p.title ?? "").trim().slice(0, 200);
+        if (!due || Number.isNaN(due.getTime()) || !title) throw new DeliverRefused(`The reminder “${title || "…"}” needs a title and a date.`);
+        const about = isId(p.aboutNodeId) ? p.aboutNodeId : null;
+        if (about && !(await gbrain.readableNodeIds(v, [about])).has(about) && !graphOps.some((g) => g.op === "addNode" && g.nodeId === about)) {
+          throw new DeliverRefused(`The reminder “${title}” is about someone you can't see.`);
+        }
+        await tx.insert(reminders).values({
+          householdId: v.graphHouseholdId, graphId: v.graphId, ownerId: v.id, title, detail: str(p.detail)?.slice(0, 2000) ?? null, dueAt: due, aboutNodeId: about, createdByKind: "user",
+        });
+        applied++;
+      }
+
+      // 2d. What wasn't chosen keeps waiting, in "Rest of <title>".
+      if (rest.length) {
+        const [follow] = await tx.insert(changeSets).values({
+          graphId: set.graphId, title: restTitle(set.title, restPrefix), description: set.description, status: "draft", origin: set.origin,
+          createdBy: set.createdBy, forUserId: set.forUserId, evidence: { ...(set.evidence ?? {}), restOf: set.id, restIn: undefined },
+        }).returning({ id: changeSets.id });
+        restId = follow.id;
+        for (const c of restOf(rest.map(asLike), new Set())) {
+          await tx.update(changes).set({ changeSetId: follow.id, seq: c.seq, included: true }).where(eq(changes.id, c.id));
+        }
+        const moved = await tx.select().from(changes).where(eq(changes.changeSetId, follow.id));
+        await tx.update(changeSets).set({ fingerprint: fingerprintOf(moved) }).where(eq(changeSets.id, follow.id));
       }
       const after = await tx.select().from(changes).where(eq(changes.changeSetId, set.id));
-      await tx.update(changeSets).set({ status: "delivered", deliveredAt: new Date(), deliveredBy: v.id, fingerprint: fingerprintOf(after), updatedAt: new Date() })
-        .where(eq(changeSets.id, set.id));
+      await tx.update(changeSets).set({
+        status: "delivered", deliveredAt: new Date(), deliveredBy: v.id, fingerprint: fingerprintOf(after), updatedAt: new Date(),
+        ...(restId ? { evidence: { ...(set.evidence ?? {}), restIn: restId } } : {}),
+      }).where(eq(changeSets.id, set.id));
     }));
   } catch (e) {
     scope.tx = undefined;
-    if (e instanceof DeliverRefused) return { ok: false, applied: 0, conflicts: [], error: e.message, stale: e.stale };
-    if (e instanceof gbrain.GBrainError) return { ok: false, applied: 0, conflicts: [], error: `Nothing was delivered: ${e.message}` };
+    await undoWiki();
+    if (e instanceof DeliverRefused) return fail(e.message, { stale: e.stale });
+    if (e instanceof gbrain.GBrainError) return fail(`Nothing was delivered: ${e.message}`);
     throw e;
   }
   scope.tx = undefined;
   for (const fn of scope.afterCommit ?? []) { try { fn(); } catch { /* embeddings are best effort */ } }
 
-  // 3. After commit: reminders and wiki pages, through their own libraries (they check access again).
-  const later = todo.filter((c) => c.op === "addReminder" || c.op === "editWiki");
-  if (later.length) {
-    const { createReminder } = await import("@/lib/briefs");
-    const wiki = await import("@/lib/wiki");
-    for (const c of later) {
-      const p = c.payload as Record<string, unknown>;
-      try {
-        if (c.op === "addReminder") {
-          const due = date(p.dueAt);
-          if (!due || Number.isNaN(due.getTime())) throw new Error("no date");
-          await createReminder(v, { title: String(p.title ?? "").slice(0, 200), detail: str(p.detail) ?? null, dueAt: due, aboutNodeId: isId(p.aboutNodeId) ? p.aboutNodeId : null });
-        } else {
-          const slug = String(p.slug ?? ""), text = String(p.markdown ?? "");
-          const page = slug ? await wiki.getPage(v, slug) : null;
-          let pageId: string, title: string, kind: "created" | "updated";
-          if (page) {
-            const r = await wiki.updatePage(v, page.slug, { version: page.version, content: { ...page.content, content: [...(page.content.content ?? []), ...paragraphs(text)] } });
-            pageId = r.page.id; title = r.page.title; kind = "updated";
-          } else {
-            const visibility = p.visibility === "parents" || p.visibility === "household" ? p.visibility : "private";
-            const created = await wiki.createPage(v, { title: String(p.title ?? slug ?? "New page"), visibility, content: { type: "doc", content: paragraphs(text) } });
-            pageId = created.id; title = created.title; kind = "created";
-          }
-          await recordEvent(db, v.graphId, { subjectType: "wiki", subjectId: pageId, subjectName: title, kind, field: "content", fromValue: null, toValue: text.slice(0, 500) },
-            stampFor({ actor: { kind: "person", id: v.id, name: v.name }, changeSetId: set.id, context: `change:${set.id}` }));
-        }
-        applied++;
-      } catch (e) {
-        problems.push(c.op === "addReminder" ? `The reminder “${String(p.title ?? "")}” couldn't be added: ${(e as Error).message}` : `The wiki page couldn't be changed: ${(e as Error).message}`);
-      }
-    }
+  // 3. The wiki edits are kept now: note them in the graph's history.
+  for (const w of wikiDone) {
+    await recordEvent(db, v.graphId, { subjectType: "wiki", subjectId: w.pageId, subjectName: w.title, kind: w.kind, field: "content", fromValue: null, toValue: w.text.slice(0, 500) },
+      stampFor({ actor: { kind: "person", id: v.id, name: v.name }, changeSetId: set.id, context: `change:${set.id}` }));
+    applied++;
   }
 
-  void audit(v, "changes.deliver", { type: "change_set", id: set.id }, { applied, skipped, title: set.title.slice(0, 120), origin: set.origin }).catch(() => {});
-  return { ok: true, applied, conflicts: [], skipped, ...(problems.length ? { problems, error: problems.join(" ") } : {}) };
+  void audit(v, "changes.deliver", { type: "change_set", id: set.id }, { applied, skipped, title: set.title.slice(0, 120), origin: set.origin, restId }).catch(() => {});
+  return { ok: true, applied, conflicts: [], skipped, restId };
 }
 
 class DeliverRefused extends Error {

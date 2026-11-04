@@ -15,9 +15,11 @@ export type PropagationDeps = {
   targetNode: (proposerId: string, graphId: string, nodeId: string) => Promise<ShareableNode | null>;
   /** Opens a change set in `graphId` (returns its id, or null when versioning isn't available). */
   propose: (proposerId: string, graphId: string, p: { nodeId: string; label: string; fields: FieldKey[]; set: Record<string, unknown> }) => Promise<string | null>;
+  /** Folds the change into the "Update <name>" already waiting in `graphId` for this node; its id, or null if none waits. */
+  amend?: (proposerId: string, graphId: string, p: { nodeId: string; label: string; fields: FieldKey[]; set: Record<string, unknown> }) => Promise<string | null>;
 };
 
-export type PropagationResult = { proposed: { graphId: string; nodeId: string; changeSetId: string; fields: FieldKey[] }[]; skipped: number };
+export type PropagationResult = { proposed: { graphId: string; nodeId: string; changeSetId: string; fields: FieldKey[]; folded?: boolean }[]; skipped: number };
 
 export async function propagateChange(deps: PropagationDeps, nodeId: string, changed: FieldKey[]): Promise<PropagationResult> {
   const result: PropagationResult = { proposed: [], skipped: 0 };
@@ -34,8 +36,11 @@ export async function propagateChange(deps: PropagationDeps, nodeId: string, cha
     if (!target) { result.skipped++; continue; }
     const [plan] = planPropagation({ source: src.node, sourceFields: src.shareFields, changed, targets: [{ ...o, node: target }] });
     if (!plan) continue;
-    const id = await deps.propose(proposer, o.graphId, { nodeId: o.nodeId, label: target.label, fields: plan.fields, set: plan.set });
-    if (id) result.proposed.push({ graphId: o.graphId, nodeId: o.nodeId, changeSetId: id, fields: plan.fields });
+    const input = { nodeId: o.nodeId, label: target.label, fields: plan.fields, set: plan.set };
+    // A proposal already waiting for this node takes the newer edit; only otherwise is a new one opened.
+    const folded = deps.amend ? await deps.amend(proposer, o.graphId, input) : null;
+    const id = folded ?? (await deps.propose(proposer, o.graphId, input));
+    if (id) result.proposed.push({ graphId: o.graphId, nodeId: o.nodeId, changeSetId: id, fields: plan.fields, ...(folded ? { folded: true } : {}) });
     else result.skipped++;
   }
   return result;

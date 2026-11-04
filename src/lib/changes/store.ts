@@ -11,10 +11,12 @@ import { db } from "@/db";
 import { changes, changeSets, users } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import { scopeOf } from "@/lib/graphs/pure";
+import { accessContext } from "@/lib/gbrain";
+import { nodeReadSql, sourceReadSql, type AccessCtx } from "@/lib/gbrain/access";
 import { activeTriples, namesOfType, readableSnapshots } from "@/lib/gbrain/versioning";
 import { getMeta } from "@/lib/meta";
 import type { ChangeInput, ChangeSetOrigin, ChangeSetView, Receipt } from "./index";
-import { ALL_OPS, canSeeSet, emptyNow, fingerprintOf, norm, summaryOf, toStored, verdictsFor, type ChangeRowLike, type Now, type Verdict } from "./pure";
+import { ALL_OPS, canSeeSet, emptyNow, fingerprintOf, mergeUpdateSet, norm, summaryOf, toStored, verdictsFor, type ChangeRowLike, type Now, type Verdict } from "./pure";
 
 export class ChangeError extends Error {
   constructor(public status: 400 | 403 | 404 | 409 | 422, message: string) { super(message); this.name = "ChangeError"; }
@@ -36,11 +38,28 @@ export function canWrite(v: Viewer): boolean {
   return member(v) && scopeOf(v).canWrite;
 }
 
+/**
+ * SQL: everything this set cites (its evidence and every op's receipt) is something this viewer may read — the SQL
+ * twin of `evidenceOpen` in ./pure: at least one source, every source readable (sources' own visibility rules), no
+ * conversation, no quote without a source, and every existing node an op targets readable too.
+ */
+function openEvidenceSql(ctx: AccessCtx): SQL {
+  const refs = sql`(select ${changeSets.evidence} as r union all select c.receipt from changes c where c.change_set_id = ${changeSets.id})`;
+  const has = (k: string) => sql`coalesce(x.r->>${k}, '') <> ''`;
+  return sql`(exists (select 1 from ${refs} x where ${has("sourceId")})
+    and not exists (select 1 from ${refs} x where ${has("conversationId")}
+      or (not ${has("sourceId")} and (coalesce(btrim(x.r->>'quote'), '') <> '' or (x.r->>'messageId') is not null))
+      or (${has("sourceId")} and not exists (select 1 from sources s where s.id::text = x.r->>'sourceId' and ${sourceReadSql(ctx, "s")})))
+    and not exists (select 1 from changes c join nodes n on n.id = c.node_id where c.change_set_id = ${changeSets.id} and not ${nodeReadSql(ctx, "n")}))`;
+}
+
 /** SQL: the change sets this viewer may see in their current graph. */
-export function visibleSql(v: Viewer): SQL {
+export async function visibleSql(v: Viewer): Promise<SQL> {
   const mine = or(eq(changeSets.createdBy, v.id), eq(changeSets.forUserId, v.id));
+  if (!canWrite(v)) return and(eq(changeSets.graphId, v.graphId), mine)!;
   const nobody = and(isNull(changeSets.createdBy), isNull(changeSets.forUserId));
-  return and(eq(changeSets.graphId, v.graphId), canWrite(v) ? or(mine, nobody) : mine)!;
+  const ctx = await accessContext(v);
+  return and(eq(changeSets.graphId, v.graphId), or(mine, nobody, openEvidenceSql(ctx)))!;
 }
 
 export function canSee(v: Viewer, row: Pick<SetRow, "graphId" | "createdBy" | "forUserId">): boolean {
@@ -91,7 +110,7 @@ export async function propose(v: Viewer, input: { title: string; description?: s
 
 async function loadRow(v: Viewer, id: string): Promise<SetRow | null> {
   if (!isId(id) || !member(v)) return null;
-  const [row] = await db.select().from(changeSets).where(and(eq(changeSets.id, id), visibleSql(v)));
+  const [row] = await db.select().from(changeSets).where(and(eq(changeSets.id, id), await visibleSql(v)));
   return row ?? null;
 }
 
@@ -148,6 +167,12 @@ async function views(v: Viewer, sets: SetRow[]): Promise<ChangeSetView[]> {
   const rel = await relationLabels(v);
   const creators = [...new Set(sets.map((s) => s.createdBy).filter((x): x is string => !!x))];
   const names = new Map((creators.length ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, creators)) : []).map((u) => [u.id, u.name]));
+  // Partly delivered sets point at their follow-up and back; a link is named only when the viewer may see that set.
+  const linkOf = (s: SetRow, k: "restIn" | "restOf") => { const x = (s.evidence ?? {})[k]; return isId(x) ? x : null; };
+  const linkIds = [...new Set(sets.flatMap((s) => [linkOf(s, "restIn"), linkOf(s, "restOf")]).filter((x): x is string => !!x))];
+  const linked = new Map((linkIds.length
+    ? await db.select({ id: changeSets.id, title: changeSets.title, status: changeSets.status }).from(changeSets).where(and(inArray(changeSets.id, linkIds), await visibleSql(v)))
+    : []).map((r) => [r.id, r]));
   const bySet = new Map<string, ChangeRow[]>();
   for (const r of rows) bySet.set(r.changeSetId, [...(bySet.get(r.changeSetId) ?? []), r]);
   return sets.map((s) => {
@@ -165,6 +190,8 @@ async function views(v: Viewer, sets: SetRow[]): Promise<ChangeSetView[]> {
       id: s.id, title: s.title, description: s.description, status: s.status, origin: s.origin as ChangeSetOrigin,
       createdAt: s.createdAt, deliveredAt: s.deliveredAt, createdByName: s.createdBy ? names.get(s.createdBy) ?? null : null,
       fingerprint: s.fingerprint,
+      restIn: linked.get(linkOf(s, "restIn") ?? "") ?? null,
+      restOf: linked.get(linkOf(s, "restOf") ?? "") ?? null,
       changes: list.map((c) => ({
         id: c.id, seq: c.seq, op: c.op, summary: summaryOf(asLike(c), nameOf, rel), note: c.note, receipt: (c.receipt ?? {}) as Receipt,
         included: c.included, nodeId: c.nodeId, edgeId: c.edgeId, payload: c.payload as Record<string, unknown>,
@@ -184,7 +211,7 @@ export async function list(v: Viewer, opts: { status?: "draft" | "delivered" | "
   if (!member(v)) return [];
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   const where = and(
-    visibleSql(v),
+    await visibleSql(v),
     opts.status && opts.status !== "all" ? eq(changeSets.status, opts.status) : undefined,
     opts.origin && ORIGINS.includes(opts.origin) ? eq(changeSets.origin, opts.origin) : undefined,
   );
@@ -195,7 +222,7 @@ export async function list(v: Viewer, opts: { status?: "draft" | "delivered" | "
 /** How many proposals wait for this viewer (nav badge, Today). */
 export async function waitingCount(v: Viewer): Promise<number> {
   if (!member(v)) return 0;
-  const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(changeSets).where(and(visibleSql(v), eq(changeSets.status, "draft")));
+  const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(changeSets).where(and(await visibleSql(v), eq(changeSets.status, "draft")));
   return r?.n ?? 0;
 }
 
@@ -227,6 +254,37 @@ export async function setIncluded(v: Viewer, setId: string, changeId: string, in
 }
 
 export { loadRow };
+
+/* ── Folding a repeated proposal into the one already waiting ────────────────────────────────────────── */
+
+/**
+ * Cross-graph propagation: when "Update <name>" already waits in this graph for the same linked node, a newer edit
+ * on the other side folds into it (newer fields win, props merge) instead of opening another proposal. The ops are
+ * re-signed (fingerprint), so an approval made before the newer edit is refused as stale. Returns the set's id, or
+ * null when nothing is waiting (the caller then proposes afresh).
+ */
+export async function amendPendingUpdate(v: Viewer, p: { identityId: string; nodeId: string; set: Record<string, unknown>; note?: (merged: Record<string, unknown>) => string; title?: string }): Promise<string | null> {
+  if (!member(v) || !isId(p.nodeId)) return null;
+  return db.transaction(async (tx) => {
+    const [hit] = await tx.select({ setId: changeSets.id, changeId: changes.id, payload: changes.payload }).from(changeSets)
+      .innerJoin(changes, eq(changes.changeSetId, changeSets.id))
+      .where(and(
+        eq(changeSets.graphId, v.graphId), eq(changeSets.status, "draft"), eq(changeSets.origin, "automation"),
+        or(eq(changeSets.forUserId, v.id), eq(changeSets.createdBy, v.id)),
+        sql`${changeSets.evidence}->'locator'->>'kind' = 'cross-graph-link'`,
+        sql`${changeSets.evidence}->'locator'->>'identityId' = ${p.identityId}`,
+        eq(changes.op, "updateNode"), eq(changes.nodeId, p.nodeId),
+      ))
+      .orderBy(desc(changeSets.createdAt)).limit(1).for("update");
+    if (!hit) return null;
+    const payload = (hit.payload ?? {}) as Record<string, unknown>;
+    const merged = mergeUpdateSet((payload.set as Record<string, unknown>) ?? {}, p.set);
+    await tx.update(changes).set({ payload: { ...payload, set: merged }, included: true, ...(p.note ? { note: p.note(merged).slice(0, 1000) } : {}) }).where(eq(changes.id, hit.changeId));
+    const all = await tx.select().from(changes).where(eq(changes.changeSetId, hit.setId));
+    await tx.update(changeSets).set({ fingerprint: fingerprintOf(all), updatedAt: new Date(), ...(p.title ? { title: p.title.slice(0, 200) } : {}) }).where(eq(changeSets.id, hit.setId));
+    return hit.setId;
+  });
+}
 
 /* ── What a reviewer needs next to a proposal ────────────────────────────────────────────────────────── */
 

@@ -5,7 +5,7 @@ import { Fingerprint } from "lucide-react";
 import { Button, Input } from "@/components/ui";
 import { api, errorFields, errorMessage, type FieldErrors } from "@/lib/auth/client/api";
 import { describedBy, Field } from "@/lib/auth/client/field";
-import { passkeysSupported, signInWithPasskey } from "@/lib/auth/client/passkeys";
+import { PasskeyError, passkeysSupported, signInWithPasskey } from "@/lib/auth/client/passkeys";
 import { ErrorNote, Notice } from "./notes";
 import { useT } from "@/lib/i18n/client";
 
@@ -52,7 +52,7 @@ export function LoginForm({ next, notice }: { next: string; notice: string | nul
       const r = await signInWithPasskey();
       done(r.pending);
     } catch (err) {
-      setError(errorMessage(err));
+      setError(err instanceof PasskeyError ? t(`auth.login.passkeyErrors.${err.code}`) : errorMessage(err));
       setBusy(null);
     }
   }

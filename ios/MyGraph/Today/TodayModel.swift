@@ -11,6 +11,12 @@ struct TodaySnapshot: Codable {
     var recent: [LibraryItem]
     var myName: String?
     var myPersonId: String?
+    /// From GET /api/today (nil when an older server answered through the separate routes).
+    var greeting: TodayGreeting?
+    var weekByPerson: [ServerWeekGroup]?
+    var connections: [ConnectionNeed]?
+    var attention: TodayAttention?
+    var changeSets: [ChangeSet]?
 }
 
 /// One person's row in "This week": their events and reminders for the next seven days.
@@ -45,36 +51,28 @@ final class TodayModel {
     func load(app: AppModel) async {
         if snap == nil, let cached = DiskCache.load(TodaySnapshot.self, key: "today-\(app.currentGraphId ?? "")") {
             snap = cached.value; fromCache = cached.savedAt
+            if changeSets == nil { changeSets = cached.value.changeSets }
         }
         loading = true
         defer { loading = false }
-        let cal = Calendar.current
-        let start = cal.startOfDay(for: Date())
-        let end = cal.date(byAdding: .day, value: 7, to: start)!
-        let api = API.shared
         do {
-            async let brief: BriefResponse = api.get("/api/briefs")
-            async let rem: RemindersResponse = api.get("/api/reminders", query: ["upcoming": "true", "days": "14", "limit": "50"])
-            async let tl: TimelineResponse = api.get("/api/timeline", query: ["from": ISODate.string(start), "to": ISODate.string(end), "types": "event"])
-            async let sug: SuggestionsResponse = api.get("/api/suggestions", query: ["status": "pending", "limit": "10"])
-            async let lib: LibraryResponse = api.get("/api/library", query: ["limit": "5"])
-            async let people: PeopleOverview = api.get("/api/people")
-            let (b, r, t, s, l) = try await (brief, rem, tl, sug, lib)
-            let p = try? await people
-            let me = p?.people.first { $0.isViewer == true }
-            app.rememberMe(name: me?.label, personId: me?.id)
-            let new = TodaySnapshot(brief: b.brief, reminders: r.reminders, week: t.items, people: t.people ?? [], suggestions: s.suggestions,
-                                    recent: l.items, myName: me?.label, myPersonId: me?.id)
+            let new: TodaySnapshot
+            do {
+                new = try await loadOne()
+            } catch APIError.notFound {
+                new = try await loadSeparately(app: app) // a server without GET /api/today
+            }
+            if let name = new.myName { app.rememberMe(name: name, personId: new.myPersonId) }
             snap = new
             fromCache = nil
             error = nil
             app.isOffline = false
             DiskCache.save(new, as: "today-\(app.currentGraphId ?? "")")
             if app.graphs.isEmpty { await app.loadGraphs() }
-            let next = NextUp.compute(reminders: r.reminders, events: t.items, people: t.people ?? [])
+            let next = NextUp.compute(reminders: new.reminders, events: new.week, people: new.people)
             NextUp.save(NextUpSnapshot(graphName: app.currentGraph?.name ?? "My Graph", graphHue: app.currentGraph?.hue ?? 210, items: next, savedAt: Date()))
             WidgetCenter.shared.reloadAllTimelines()
-            await ReminderNotifications.schedule(r.reminders)
+            await ReminderNotifications.schedule(new.reminders)
         } catch {
             #if DEBUG
             print("[debug] today failed: \(error)")
@@ -83,7 +81,37 @@ final class TodayModel {
             if error.isOffline { app.isOffline = true }
             self.error = error.plainMessage
         }
+    }
+
+    /// Everything in one request, written in the account's language.
+    private func loadOne() async throws -> TodaySnapshot {
+        let r: TodayResponse = try await API.shared.get("/api/today", query: ["days": "7"])
+        if let sets = r.changeSets { changeSets = sets } else if r.failed?.contains("changeSets") != true { changeSets = [] }
+        return TodaySnapshot(
+            brief: r.brief, reminders: r.reminders ?? snap?.reminders ?? [], week: r.week?.items ?? [], people: r.week?.people ?? [],
+            suggestions: r.suggestions ?? [], recent: r.recent ?? [], myName: r.me?.name, myPersonId: r.me?.personNodeId,
+            greeting: r.greeting, weekByPerson: r.weekByPerson, connections: r.connections, attention: r.attention, changeSets: changeSets
+        )
+    }
+
+    /// The six requests an older server needs.
+    private func loadSeparately(app: AppModel) async throws -> TodaySnapshot {
+        let cal = Calendar.current
+        let start = cal.startOfDay(for: Date())
+        let end = cal.date(byAdding: .day, value: 7, to: start)!
+        let api = API.shared
+        async let brief: BriefResponse = api.get("/api/briefs")
+        async let rem: RemindersResponse = api.get("/api/reminders", query: ["upcoming": "true", "days": "14", "limit": "50"])
+        async let tl: TimelineResponse = api.get("/api/timeline", query: ["from": ISODate.string(start), "to": ISODate.string(end), "types": "event"])
+        async let sug: SuggestionsResponse = api.get("/api/suggestions", query: ["status": "pending", "limit": "10"])
+        async let lib: LibraryResponse = api.get("/api/library", query: ["limit": "5"])
+        async let people: PeopleOverview = api.get("/api/people")
+        let (b, r, t, s, l) = try await (brief, rem, tl, sug, lib)
+        let p = try? await people
+        let me = p?.people.first { $0.isViewer == true }
         await loadChangeSets()
+        return TodaySnapshot(brief: b.brief, reminders: r.reminders, week: t.items, people: t.people ?? [], suggestions: s.suggestions,
+                             recent: l.items, myName: me?.label ?? app.myName, myPersonId: me?.id ?? app.myPersonId, changeSets: changeSets)
     }
 
     func loadChangeSets() async {
@@ -135,8 +163,10 @@ final class TodayModel {
     func decide(_ c: ChangeSet, _ action: String) async -> String? {
         deciding.insert(c.id); defer { deciding.remove(c.id) }
         do {
-            try await API.shared.post("/api/changes/\(c.id)/\(action)")
+            let body: [String: Any] = action == "deliver" ? (c.fingerprint.map { ["fingerprint": $0] } ?? [:]) : [:]
+            try await API.shared.post("/api/changes/\(c.id)/\(action)", json: body)
             changeSets?.removeAll { $0.id == c.id }
+            snap?.changeSets = changeSets
             return nil
         } catch {
             return error.plainMessage
@@ -145,6 +175,19 @@ final class TodayModel {
 
     var weekGroups: [WeekGroup] {
         guard let snap else { return [] }
+        if let server = snap.weekByPerson {
+            let done = Set(snap.reminders.filter(\.done).map(\.id))
+            let open = Set(snap.reminders.map(\.id))
+            return server.compactMap { g in
+                let entries = g.entries.compactMap { e -> WeekGroup.Entry? in
+                    // A to-do ticked on this screen leaves the week too.
+                    if let rid = e.reminderId, done.contains(rid) || !open.contains(rid) { return nil }
+                    let route: Route? = e.nodeId.map { .node($0) } ?? e.sourceId.map { .source($0) }
+                    return WeekGroup.Entry(id: e.id, title: e.title, at: e.at, allDay: e.allDay, route: route, isReminder: e.isReminder)
+                }
+                return entries.isEmpty ? nil : WeekGroup(id: g.id, personId: g.personId, name: g.name, entries: entries)
+            }
+        }
         let names = Dictionary(snap.people.map { ($0.id, $0.label) }, uniquingKeysWith: { a, _ in a })
         let order = snap.people.map(\.id)
         let end = Calendar.current.date(byAdding: .day, value: 7, to: Calendar.current.startOfDay(for: Date()))!

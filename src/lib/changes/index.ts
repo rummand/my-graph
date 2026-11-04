@@ -10,7 +10,7 @@ import type { Viewer } from "@/lib/auth";
 import { db } from "@/db";
 import { currentScope, historyStore, type HistoryScope } from "@/lib/history/context";
 import { recordMeta, snapshotMeta } from "@/lib/history/record";
-import { abandon, getOne, list, propose } from "./store";
+import { abandon, amendPendingUpdate, getOne, list, propose } from "./store";
 import { deliver } from "./deliver";
 
 export type ChangeOp =
@@ -45,6 +45,9 @@ export type ChangeSetView = {
   verdicts: Record<string, "outstanding" | "landed" | "conflicted">;
   /** Hash of the ops as they stand; pass it back on deliver so an approval of an older version is refused. */
   fingerprint?: string | null;
+  /** Partly delivered: the follow-up set the rest waits in ("Rest of …"), and, on a follow-up, the set it continues. */
+  restIn?: { id: string; title: string; status: string } | null;
+  restOf?: { id: string; title: string; status: string } | null;
 };
 
 /** Opens a change set with its ops (node ids for new nodes are minted here). Returns the id, or null if not allowed. */
@@ -56,8 +59,16 @@ export async function proposeChanges(v: Viewer, input: { title: string; descript
  * Applies a change set (all included ops, or only `onlyChangeIds`) in one transaction, recording history and provenance.
  * The person delivering must be allowed to write; ops that conflict are refused, not half-applied.
  */
-export async function deliverChangeSet(v: Viewer, id: string, opts: { onlyChangeIds?: string[]; fingerprint?: string } = {}): Promise<{ ok: boolean; applied: number; conflicts: string[]; error?: string }> {
+export async function deliverChangeSet(v: Viewer, id: string, opts: { onlyChangeIds?: string[]; fingerprint?: string } = {}): Promise<{ ok: boolean; applied: number; conflicts: string[]; error?: string; restId?: string | null }> {
   return deliver(v, id, opts);
+}
+
+/**
+ * Fold a newer edit of a linked node into the "Update <name>" proposal already waiting for it in the viewer's graph
+ * (cross-graph propagation). Returns that set's id, or null when none waits and a new proposal is needed.
+ */
+export async function amendPendingLinkUpdate(v: Viewer, p: { identityId: string; nodeId: string; set: Record<string, unknown>; note?: (merged: Record<string, unknown>) => string; title?: string }): Promise<string | null> {
+  return amendPendingUpdate(v, p);
 }
 
 export async function abandonChangeSet(v: Viewer, id: string): Promise<boolean> {

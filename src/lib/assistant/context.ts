@@ -130,7 +130,7 @@ function citationFor(n: number, it: ContextItem): Citation {
 export function numberContext(items: ContextItem[]): NumberedContext {
   const lines = items.map((it, i) => line(i + 1, it));
   return {
-    text: lines.length ? lines.join("\n") : "(Nothing in the family brain matched this question.)",
+    text: lines.length ? lines.join("\n") : "(Nothing in the graph matched this question.)",
     citations: items.map((it, i) => citationFor(i + 1, it)),
     sensitive: items.some((it) => it.sensitive),
     level: maxLevel(items.map((it) => it.level ?? (it.sensitive ? "parents" : "normal"))),

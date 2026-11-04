@@ -4,14 +4,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { clsx } from "clsx";
-import { ChevronLeft, Download, History, Play, Printer, RefreshCw, Sparkles, Trash2, X } from "lucide-react";
-import { Badge, Button, Field, Input, Select, Tabs, Textarea, buttonClass } from "@/components/ui";
+import { ChevronLeft, History, Play, RefreshCw, Sparkles, Trash2, X } from "lucide-react";
+import { Badge, Button, Field, Input, Select, Tabs, Textarea } from "@/components/ui";
 import { uncitedClaims, type ArtifactContent, type Citation, type Section } from "@/lib/artifacts/content";
 import type { ArtifactView, DiffPart, VersionSummary } from "@/lib/artifacts";
 import type { DesignSetView } from "@/lib/design-sets/tokens";
 import { useFormatDate, useT } from "@/lib/i18n/client";
 import { ArtifactPreview } from "./artifact-preview";
 import { ContentEditor } from "./block-editor";
+import { ExportMenu } from "./export-menu";
 
 type Loaded = { artifact: ArtifactView; set: DesignSetView };
 type Proposal = { section: Section; citations: Citation[]; before: string; after: string; diff: DiffPart[] };
@@ -174,8 +175,7 @@ export function ArtifactEditor({ initial, sets, graphName }: { initial: Loaded; 
         )}
         <div className="flex flex-wrap items-center gap-2">
           {a.kind === "deck" && <Button variant="secondary" onClick={() => setPresent(true)}><Play className="size-4" aria-hidden />{t("artifacts.editor.present")}</Button>}
-          <a href={`/artifacts/${a.id}/print`} className={buttonClass("secondary")} title={t("artifacts.editor.print")}><Printer className="size-4" aria-hidden /><span className="hidden sm:inline">PDF</span></a>
-          <a href={`/api/artifacts/${a.id}/export?format=html`} className={buttonClass("secondary")} title={`${t("artifacts.editor.downloadHtml")}. ${t("artifacts.editor.pptxLater")}`}><Download className="size-4" aria-hidden /><span className="hidden sm:inline">HTML</span></a>
+          <ExportMenu id={a.id} kind={a.kind} />
           {canEdit && <Button variant="ghost" onClick={openVersions} title={t("artifacts.editor.versions")}><History className="size-4" aria-hidden /><span className="hidden sm:inline">{t("artifacts.editor.versions")}</span></Button>}
           {canEdit && <Button variant="secondary" disabled={!dirty || saving} onClick={() => void save()}>{t("artifacts.editor.save")}</Button>}
           {canEdit && (a.status === "draft"

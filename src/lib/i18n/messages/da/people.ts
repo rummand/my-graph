@@ -321,6 +321,8 @@ const messages: MessageTree = {
     detailsNeedFixing: "Nogle oplysninger skal rettes",
     invalidQuery: "Ugyldig forespørgsel",
     onlyParents: "Kun forældre kan ændre det",
+    onlyKeepers: "Kun dem, der passer på denne graf, kan ændre det",
+    ownersModelGraph: "Denne graf bruger ejerens model. Kun ejeren kan ændre den.",
     ownersModel: "Denne graf bruger ejerens husstandsmodel. Kun ejeren kan ændre den.",
     server: "Noget gik galt hos os. Prøv igen om lidt.",
     badId: "Det id er ikke gyldigt",

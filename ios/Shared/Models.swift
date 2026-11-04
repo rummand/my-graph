@@ -112,6 +112,10 @@ struct Suggestion: Codable, Identifiable, Hashable {
     let origin: String?
     let status: String?
     let createdAt: Date?
+    /// Written by the server in the reader's language (GET /api/today only).
+    let kindLabel: String?
+    let originLabel: String?
+    let alwaysLabel: String?
 }
 
 struct SuggestionsResponse: Codable { let suggestions: [Suggestion] }
@@ -122,7 +126,15 @@ struct DecisionResponse: Codable {
     let label: String?
 }
 
-// MARK: - Change sets (versioning). The server's routes for these are not live yet; see ios/README.md.
+// MARK: - Change sets (versioning): GET /api/changes, POST /api/changes/:id/deliver|abandon.
+
+struct ChangeReceipt: Codable, Hashable {
+    let sourceId: String?
+    let quote: String?
+    let url: String?
+    let conversationId: String?
+    let confidence: Double?
+}
 
 struct ChangeItem: Codable, Identifiable, Hashable {
     let id: String
@@ -130,7 +142,9 @@ struct ChangeItem: Codable, Identifiable, Hashable {
     let op: String
     let summary: String?
     let note: String?
-    let included: Bool?
+    var included: Bool?
+    let nodeId: String?
+    let receipt: ChangeReceipt?
 }
 
 struct ChangeSet: Codable, Identifiable, Hashable {
@@ -140,11 +154,168 @@ struct ChangeSet: Codable, Identifiable, Hashable {
     let status: String
     let origin: String?
     let createdAt: Date?
+    let deliveredAt: Date?
     let createdByName: String?
-    let changes: [ChangeItem]?
+    var changes: [ChangeItem]?
+    /// Per change: outstanding | landed | conflicted.
+    let verdicts: [String: String]?
+    var fingerprint: String?
 }
 
 struct ChangeSetsResponse: Codable { let changeSets: [ChangeSet] }
+struct ChangeSetResponse: Codable { let changeSet: ChangeSet }
+struct DeliverResponse: Codable { let ok: Bool?; let applied: Int?; let conflicts: [String]?; let changeSet: ChangeSet? }
+struct IncludedResponse: Codable { let ok: Bool?; let fingerprint: String? }
+
+// MARK: - History (GET /api/history?subjectId=)
+
+extension JSONValue {
+    /// Short text for a history value, or nil when it isn't worth showing (objects, lists, nothing).
+    var shortText: String? {
+        switch self {
+        case .string(let s):
+            if s.count >= 10, s.first?.isNumber == true, let d = ISODate.parse(s) { return d.formatted(date: .abbreviated, time: s.count > 10 ? .shortened : .omitted) }
+            return s.count > 80 ? String(s.prefix(79)) + "…" : s
+        case .number(let n): return n.rounded() == n ? String(Int(n)) : String(format: "%.2f", n)
+        case .bool(let b): return b ? String(localized: "yes") : String(localized: "no")
+        case .array(let a):
+            let parts = a.compactMap(\.display)
+            return parts.isEmpty ? nil : parts.joined(separator: ", ")
+        case .null, .object: return nil
+        }
+    }
+}
+
+struct HistoryEvent: Codable, Identifiable, Hashable {
+    let id: String
+    let subjectType: String
+    let subjectId: String
+    let subjectName: String?
+    let kind: String
+    let field: String?
+    let fromValue: JSONValue?
+    let toValue: JSONValue?
+    let actorKind: String
+    let actorName: String?
+    let changeSetId: String?
+    let context: String?
+    let at: Date
+}
+
+struct HistoryResponse: Codable { let events: [HistoryEvent] }
+
+// MARK: - Documents (artifacts; read-only here)
+
+struct DocumentSummary: Codable, Identifiable, Hashable {
+    let id: String
+    let kind: String?
+    let title: String
+    let status: String?
+    let visibility: String?
+    let designSetName: String?
+    let ownerName: String?
+    let isMine: Bool?
+    let updatedAt: Date?
+    let publishedAt: Date?
+    let drafting: Bool?
+}
+
+struct DocumentsResponse: Codable { let artifacts: [DocumentSummary] }
+
+// MARK: - Me and Today in one request
+
+struct MeGraph: Codable, Hashable {
+    let id: String
+    let name: String
+    let kind: String?
+    let role: String?
+    let color: Double?
+    let memberCount: Int?
+    let isFamily: Bool?
+}
+
+struct Me: Codable, Hashable {
+    let id: String
+    let name: String
+    let email: String?
+    let role: String?
+    let personNodeId: String?
+    let locale: String?
+    let theme: String?
+    let timeZone: String?
+    let graph: MeGraph?
+}
+
+struct MeResponse: Codable { let me: Me }
+
+struct TodayGreeting: Codable, Hashable { let text: String; let date: String }
+
+struct ServerWeekEntry: Codable, Hashable, Identifiable {
+    let id: String
+    let title: String
+    let at: Date
+    let allDay: Bool
+    let isReminder: Bool
+    let nodeId: String?
+    let sourceId: String?
+    let reminderId: String?
+}
+
+struct ServerWeekGroup: Codable, Hashable, Identifiable {
+    let id: String
+    let personId: String?
+    let name: String
+    let entries: [ServerWeekEntry]
+}
+
+struct TodayWeek: Codable, Hashable {
+    let items: [TimelineItem]
+    let people: [TimelinePerson]
+}
+
+struct ConnectionNeed: Codable, Hashable, Identifiable {
+    let id: String
+    let label: String
+    let detail: String?
+}
+
+struct AttentionFactRef: Codable, Hashable, Identifiable {
+    let edgeId: String
+    let nodeId: String
+    let text: String
+    let confidence: Double?
+    let sourceId: String?
+    let sourceTitle: String?
+    var id: String { edgeId }
+}
+
+struct TodayAttention: Codable, Hashable {
+    let facts: [AttentionFactRef]
+    let factTotal: Int?
+    let failedUploads: Int?
+    let duplicates: Int?
+    let total: Int
+}
+
+struct TodayResponse: Codable {
+    let locale: String?
+    let greeting: TodayGreeting?
+    let me: TodayMe?
+    let canWrite: Bool?
+    let assistantEnabled: Bool?
+    let brief: Brief?
+    let reminders: [Reminder]?
+    let week: TodayWeek?
+    let weekByPerson: [ServerWeekGroup]?
+    let suggestions: [Suggestion]?
+    let changeSets: [ChangeSet]?
+    let recent: [LibraryItem]?
+    let connections: [ConnectionNeed]?
+    let attention: TodayAttention?
+    let failed: [String]?
+
+    struct TodayMe: Codable { let id: String; let name: String; let personNodeId: String? }
+}
 
 // MARK: - People
 

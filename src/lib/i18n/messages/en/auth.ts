@@ -22,6 +22,11 @@ const messages: MessageTree = {
     passkey: "Sign in with a passkey",
     passkeyBusy: "Waiting for your passkey…",
     passkeyHint: "Use your fingerprint, face or device PIN.",
+    passkeyErrors: {
+      cancelled: "The passkey request was cancelled or timed out.",
+      alreadyRegistered: "This device already has a passkey for your account.",
+      failed: "The passkey didn't work on this device. Try again, or use your password.",
+    },
     orPassword: "Or use your password",
     formLabel: "Sign in with your password",
     email: "Email or username",

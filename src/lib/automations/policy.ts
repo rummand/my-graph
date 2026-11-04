@@ -75,7 +75,7 @@ export const ACTION_KIND: Record<SuggestionKind, string> = {
 
 export const ACTION_LABEL: Record<string, string> = {
   "reminder.create": "Add reminders", "fact.add": "Add facts to the graph", "node.merge": "Merge duplicates",
-  "memory.save": "Save memories", "rule.save": "Save family rules", "wiki.edit": "Edit wiki pages",
+  "memory.save": "Save memories", "rule.save": "Save rules", "wiki.edit": "Edit wiki pages",
   // The keys chat's approval cards use for the same choice.
   "fact.create": "Add facts to the graph from chat", "wiki.create": "Write wiki notes from chat",
 };
@@ -85,7 +85,7 @@ export function alwaysLabelFor(kind: SuggestionKind): string | null {
   switch (kind) {
     case "reminder": return "Always allow new reminders";
     case "memory": return "Always save memories";
-    case "rule": return "Always save family rules";
+    case "rule": return "Always save rules";
     case "wiki_edit": return "Always allow wiki notes";
     case "fact": return "Always allow facts like this";
     case "merge": return "Always merge duplicates";

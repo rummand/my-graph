@@ -21,6 +21,11 @@ const messages: MessageTree = {
     passkey: "Log ind med en adgangsnøgle",
     passkeyBusy: "Venter på din adgangsnøgle…",
     passkeyHint: "Brug fingeraftryk, ansigt eller enhedens pinkode.",
+    passkeyErrors: {
+      cancelled: "Adgangsnøglen blev annulleret, eller tiden løb ud.",
+      alreadyRegistered: "Denne enhed har allerede en adgangsnøgle til din konto.",
+      failed: "Adgangsnøglen virkede ikke på denne enhed. Prøv igen, eller brug din adgangskode.",
+    },
     orPassword: "Eller brug din adgangskode",
     formLabel: "Log ind med din adgangskode",
     email: "E-mail eller brugernavn",

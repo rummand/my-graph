@@ -12,6 +12,8 @@
  * (route "smart", agent "my-graph:brain-keeper"; sensitive material stays on local models). When mux is down it still
  * empties its inbox without judgement (see fallbackActions).
  */
+import { voiceOf } from "@/lib/assistant/locale";
+import type { TFn } from "@/lib/i18n/core";
 import { and, desc, eq, gt, inArray, isNotNull, like, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { assistantActivity, changeSets, conversations, keeperRuns, messages, sources } from "@/db/schema";
@@ -52,12 +54,12 @@ export type KeeperRunView = {
 const hrefOf = (l: JournalEntry["links"][number]) =>
   l.type === "conversation" ? `/chat/${l.id}` : l.type === "source" ? `/library/${l.id}` : `/changes/${l.id}`;
 
-function toView(r: typeof keeperRuns.$inferSelect): KeeperRunView {
+function toView(r: typeof keeperRuns.$inferSelect, t: TFn): KeeperRunView {
   const actions = (r.actions as unknown as JournalEntry[]) ?? [];
   return {
     id: r.id, trigger: r.trigger, status: (["running", "done", "failed", "skipped"].includes(r.status) ? r.status : "failed") as KeeperRunView["status"],
     startedAt: r.startedAt.toISOString(), finishedAt: r.finishedAt?.toISOString() ?? null, read: r.read ?? {},
-    headline: r.status === "running" ? "Reading what happened since the last run…" : r.status === "failed" ? "The run stopped with an error." : reportHeadline(actions),
+    headline: r.status === "running" ? t("memory.keeper.report.running") : r.status === "failed" ? t("memory.keeper.report.failed") : reportHeadline(actions, t),
     report: r.report, model: r.model, error: r.error,
     actions: actions.map((a) => ({
       ...a,
@@ -73,7 +75,8 @@ export async function listKeeperRuns(v: Viewer, limit = 10): Promise<KeeperRunVi
   const rows = await db.select().from(keeperRuns)
     .where(and(eq(keeperRuns.graphId, v.graphId), eq(keeperRuns.userId, v.id)))
     .orderBy(desc(keeperRuns.startedAt)).limit(Math.max(1, Math.min(limit, 50)));
-  return rows.map(toView);
+  const { t } = await voiceOf(v);
+  return rows.map((r) => toView(r, t));
 }
 
 export type KeeperStatus = { busy: boolean; waiting: number; lastFinishedAt: string | null; nextRunAt: string | null; runs: KeeperRunView[] };
@@ -217,8 +220,9 @@ export async function runKeeper(v: Viewer, trigger: "schedule" | "person" = "per
 
   try {
     const m = await material(v, since);
+    const { t } = await voiceOf(v);
     if (!hasMaterial(m.read)) {
-      await db.update(keeperRuns).set({ status: trigger === "person" ? "done" : "skipped", read: m.read, finishedAt: new Date(), report: "Nothing new to remember since the last run." }).where(eq(keeperRuns.id, runId));
+      await db.update(keeperRuns).set({ status: trigger === "person" ? "done" : "skipped", read: m.read, finishedAt: new Date(), report: t("memory.keeper.report.nothing") }).where(eq(keeperRuns.id, runId));
       return (await listKeeperRuns(v, 1))[0] ?? null;
     }
     const mems = await keeperMemories(v);
@@ -230,7 +234,7 @@ export async function runKeeper(v: Viewer, trigger: "schedule" | "person" = "per
       const out = await mux.complete({
         route: "smart", maxTokens: 2500, temperature: 0, json: true,
         messages: [
-          { role: "system", content: keeperSystemPrompt({ graphName: v.graphName, graphKind: v.graphKind, personName: v.name, memories: mems }) },
+          { role: "system", content: keeperSystemPrompt({ graphName: v.graphName, graphKind: v.graphKind, personName: v.name, memories: mems, locale: (await voiceOf(v)).locale }) },
           { role: "user", content: keeperUserPrompt(m.evidence) },
         ],
         meta: { userId: v.id, agent: "my-graph:brain-keeper", traceId: runId, sensitive: m.sensitive, graphId: v.graphId },
@@ -248,7 +252,7 @@ export async function runKeeper(v: Viewer, trigger: "schedule" | "person" = "per
 
     const { planned, refused } = vetActions(actions, { memories: mems, evidence: m.evidence });
     const journal = await apply(v, runId, planned, m.evidence);
-    const report = composeReport(m.read, refused, { degraded });
+    const report = composeReport(m.read, refused, { degraded, t });
     if (refused.length) console.info(`[keeper] run ${runId}: refused ${refused.length}:`, refused.map((r) => `${r.action} (${r.reason})`).join("; "));
 
     await db.update(keeperRuns).set({

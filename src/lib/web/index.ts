@@ -26,6 +26,8 @@ import {
 } from "./pure";
 
 export { needsWeb, minimiseQuery, checkUrl, extractUrls, webTitle, hostOf } from "./pure";
+export { budgetForRun, newWebBudget, readsLeft, searchesLeft, spendWeb, webAllowance, RUN_WEB_LIMITS, type WebBudget } from "./budget";
+export { webHints } from "./hints";
 export type { WebNeed, ReadPage, FactNode } from "./pure";
 
 export class WebError extends Error {
@@ -138,14 +140,19 @@ export function pageItems(pages: WebPageUsed[], question: string): ContextItem[]
  * Research a question on the web. `avoid`: words that must never leave the graph (labels of sensitive items).
  * Returns outcome "unavailable" when mux can't search (the answer goes on from the graph alone).
  */
-export async function research(v: Viewer, input: { question: string; avoid?: string[]; conversationId?: string | null; signal?: AbortSignal; limit?: number }): Promise<Research> {
+export async function research(v: Viewer, input: {
+  question: string; avoid?: string[]; conversationId?: string | null; signal?: AbortSignal; limit?: number;
+  /** At most this many pages are read (unattended runs pass what is left of their budget). Default 3. */
+  maxPages?: number;
+}): Promise<Research> {
+  const maxPages = Math.max(0, Math.min(MAX_PAGES, input.maxPages ?? MAX_PAGES));
   const urls = extractUrls(input.question);
   const empty = (outcome: Research["outcome"], query = ""): Research => ({ query, results: 0, pages: [], items: [], outcome });
   const candidates: { url: string; snippet?: { title: string; snippet: string; engine: string | null; published: string | null } }[] = [];
   let query = "";
   let results = 0;
   if (urls.length) {
-    for (const u of urls.slice(0, MAX_PAGES)) candidates.push({ url: u });
+    for (const u of urls.slice(0, maxPages)) candidates.push({ url: u });
   } else {
     query = minimiseQuery(input.question, { avoid: input.avoid }).query;
     if (!query) return empty("nothing");
@@ -159,7 +166,7 @@ export async function research(v: Viewer, input: { question: string; avoid?: str
     }
     results = found.length;
     for (const r of found) {
-      if (candidates.length >= MAX_PAGES) break;
+      if (candidates.length >= maxPages) break;
       if (!checkUrl(r.url).ok || candidates.some((c) => c.url === r.url)) continue;
       candidates.push({ url: r.url, snippet: { title: r.title, snippet: r.snippet, engine: r.engine, published: r.published } });
     }

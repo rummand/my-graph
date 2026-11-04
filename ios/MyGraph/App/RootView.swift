@@ -107,6 +107,9 @@ private struct RouterStack<Content: View>: View {
         case .askAbout(let id, let label, let type): ChatView(conversationId: nil, mention: MentionItem(nodeId: id, label: label, type: type, typeLabel: nil, kindLabel: nil, summary: nil, isYou: nil))
         case .memory: MemoryView()
         case .changes: ChangesView()
+        case .changeSet(let id): ChangeSetDetailView(changeSetId: id)
+        case .history(let id, let label): HistoryView(subjectId: id, subjectName: label)
+        case .documents: DocumentsView()
         case .settings: SettingsView()
         case .timeline: TimelineScreen()
         case .debugAsk(let q): ChatView(conversationId: nil, autoAsk: q)
@@ -169,6 +172,7 @@ private struct ChromeModifier: ViewModifier {
                             Section(app.myName ?? String(localized: "Signed in")) {
                                 Button { router.push(.memory) } label: { Label("Memory", systemImage: "brain") }
                                 Button { router.push(.changes) } label: { Label("Changes", systemImage: "arrow.triangle.branch") }
+                                Button { router.push(.documents) } label: { Label("Documents", systemImage: "doc.richtext") }
                                 Button { router.push(.settings) } label: { Label("Settings", systemImage: "gearshape") }
                             }
                             Button(role: .destructive) { Task { await app.signOut() } } label: {
@@ -178,7 +182,8 @@ private struct ChromeModifier: ViewModifier {
                             Avatar(name: app.myName ?? "?", id: app.myPersonId, size: 30)
                         }
                         .accessibilityLabel(Text("More"))
-                        .accessibilityHint(Text("Memory, changes, settings and sign out"))
+                        .accessibilityHint(Text("Memory, changes, documents, settings and sign out"))
+                        .accessibilityIdentifier("more.menu")
                     }
                 }
             }

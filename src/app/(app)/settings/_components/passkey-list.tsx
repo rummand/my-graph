@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { Fingerprint, KeyRound, Pencil, Trash2 } from "lucide-react";
 import { Button, IconButton, Input } from "@/components/ui";
 import { api, errorMessage } from "@/lib/auth/client/api";
-import { addPasskey, guessDeviceName, passkeysSupported } from "@/lib/auth/client/passkeys";
+import { addPasskey, guessDeviceName, PasskeyError, passkeysSupported } from "@/lib/auth/client/passkeys";
 import { ErrorNote, Notice } from "@/app/login/notes";
 import { useT } from "@/lib/i18n/client";
 import { useWhen } from "./use-when";
@@ -34,7 +34,7 @@ export function PasskeyList({ passkeys }: { passkeys: Pk[] }) {
       setEditing(null);
       router.refresh();
     } catch (e) {
-      setError(errorMessage(e));
+      setError(e instanceof PasskeyError ? t(`auth.login.passkeyErrors.${e.code}`) : errorMessage(e));
     } finally {
       setBusy(null);
     }

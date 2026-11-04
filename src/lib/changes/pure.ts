@@ -24,12 +24,14 @@ export const norm = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s
 /**
  * A change set is visible to a viewer only inside its own graph, and only when it is theirs (they proposed it or it
  * waits for them) — or nobody's in particular (a connector, the system) and they may write in that graph. Anything
- * else reads as "not found".
+ * else reads as "not found" — except a proposal whose evidence every writer may read (see evidenceOpen): that one
+ * is open to every writer in the graph, so a co-parent sees what an import of a shared file proposes.
  */
-export function canSeeSet(v: { id: string; graphId: string | null; canWrite: boolean }, row: { graphId: string; createdBy: string | null; forUserId: string | null }): boolean {
+export function canSeeSet(v: { id: string; graphId: string | null; canWrite: boolean }, row: { graphId: string; createdBy: string | null; forUserId: string | null; openEvidence?: boolean }): boolean {
   if (!v.graphId || row.graphId !== v.graphId) return false;
   if (row.createdBy === v.id || row.forUserId === v.id) return true;
-  return !row.createdBy && !row.forUserId && v.canWrite;
+  if (!v.canWrite) return false;
+  return (!row.createdBy && !row.forUserId) || !!row.openEvidence;
 }
 
 /* ── Fingerprint ─────────────────────────────────────────────────────────────────────────────────────── */
@@ -309,4 +311,87 @@ export function project(state: GraphState, changes: ChangeRowLike[], at = new Da
     }
   }
   return out;
+}
+
+/* ── Partly delivered: what keeps waiting ────────────────────────────────────────────────────────────── */
+
+/** "Rest of …" for the follow-up set, never longer than a title may be and never "Rest of Rest of …". */
+export function restTitle(title: string, prefix = "Rest of"): string {
+  const base = title.replace(new RegExp(`^(${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s+)+`, "i"), "").trim() || title;
+  return `${prefix} ${base}`.slice(0, 200);
+}
+
+/**
+ * When only some ops of a set are delivered, the others keep waiting: they move to a follow-up set (ticked again,
+ * renumbered from 1, in their old order). Ops that were delivered or that the graph already said stay behind.
+ */
+export function restOf<T extends ChangeRowLike>(all: T[], delivered: Set<string>): (T & { seq: number; included: true })[] {
+  return [...all].sort((a, b) => a.seq - b.seq).filter((c) => !delivered.has(c.id)).map((c, i) => ({ ...c, seq: i + 1, included: true as const }));
+}
+
+/* ── Merging repeated updates (cross-graph propagation) ──────────────────────────────────────────────── */
+
+/** A newer `set` on top of an older one: newer fields win, props merge key by key. */
+export function mergeUpdateSet(older: Record<string, unknown>, newer: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...older, ...newer };
+  const a = older.props, b = newer.props;
+  if (a && typeof a === "object" && !Array.isArray(a) && b && typeof b === "object" && !Array.isArray(b)) {
+    out.props = { ...(a as Record<string, unknown>), ...(b as Record<string, unknown>) };
+  }
+  return out;
+}
+
+/* ── Whose eyes a proposal's evidence is for ─────────────────────────────────────────────────────────── */
+
+export type EvidenceRefs = { sourceIds: string[]; conversationIds: string[]; /** a quote or message with no source to check it against */ unanchored: boolean };
+
+/** Everything a set cites: its own evidence and every op's receipt. */
+export function evidenceRefs(setEvidence: Record<string, unknown> | null | undefined, receipts: (Record<string, unknown> | null | undefined)[]): EvidenceRefs {
+  const sources = new Set<string>(), conversations = new Set<string>();
+  let unanchored = false;
+  for (const r of [setEvidence, ...receipts]) {
+    if (!r) continue;
+    const s = typeof r.sourceId === "string" && r.sourceId ? r.sourceId : null;
+    const c = typeof r.conversationId === "string" && r.conversationId ? r.conversationId : null;
+    if (s) sources.add(s);
+    if (c) conversations.add(c);
+    if (!s && !c && ((typeof r.quote === "string" && r.quote.trim()) || typeof r.messageId === "string")) unanchored = true;
+  }
+  return { sourceIds: [...sources], conversationIds: [...conversations], unanchored };
+}
+
+/**
+ * A proposal is open to every writer in the graph when everything it cites is something they may read: at least one
+ * source, every source readable to the household writer looking, no conversation (chats belong to the person who
+ * had them) and no quote without a source behind it. Anything else stays with the proposer and whoever it waits for.
+ */
+export function evidenceOpen(refs: EvidenceRefs, readable: (sourceId: string) => boolean, ownConversation: (conversationId: string) => boolean = () => false): boolean {
+  if (refs.unanchored || !refs.sourceIds.length) return false;
+  if (!refs.conversationIds.every(ownConversation)) return false;
+  return refs.sourceIds.every(readable);
+}
+
+/* ── Bringing a retired node back ────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The ops that bring a retired node back, as a proposal: clear the retired marker, and give back the facts that were
+ * replaced when it was retired (history says which, and what they were before) if they are still replaced now.
+ */
+export function restoreRetiredOps(
+  node: { id: string; props: Record<string, unknown> },
+  replacedAtRetire: { edgeId: string; was: unknown }[],
+  edgesNow: Map<string, { status: string }>,
+  note = "Bring back what was retired",
+): ChangeOp[] {
+  if (node.props?.retired !== true && node.props?.retired !== "true") return [];
+  const ops: ChangeOp[] = [{ op: "updateNode", nodeId: node.id, set: { props: { retired: null, retiredAt: null } }, note } as ChangeOp];
+  const seen = new Set<string>();
+  for (const r of replacedAtRetire) {
+    if (seen.has(r.edgeId)) continue;
+    seen.add(r.edgeId);
+    const was = typeof r.was === "string" && ["confirmed", "unconfirmed", "inferred"].includes(r.was) ? r.was : null;
+    if (!was || edgesNow.get(r.edgeId)?.status !== "superseded") continue;
+    ops.push({ op: "updateEdge", edgeId: r.edgeId, set: { status: was }, note } as ChangeOp);
+  }
+  return ops;
 }

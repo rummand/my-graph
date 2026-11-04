@@ -87,86 +87,6 @@ struct MemoryView: View {
     }
 }
 
-/// Change sets: proposed changes that don't touch the graph until a person delivers them.
-struct ChangesView: View {
-    @Environment(AppModel.self) private var app
-    @State private var sets: [ChangeSet]?
-    @State private var unavailable = false
-    @State private var error: String?
-    @State private var busy: Set<String> = []
-    @State private var status = "draft"
-
-    var body: some View {
-        List {
-            Section {
-                Picker("Show", selection: $status) {
-                    Text("Waiting").tag("draft")
-                    Text("Delivered").tag("delivered")
-                    Text("Dropped").tag("abandoned")
-                }
-                .pickerStyle(.segmented)
-                .listRowBackground(Color.clear)
-                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
-            }
-            if unavailable {
-                EmptyStateView(title: "Changes aren't on this server yet",
-                               message: "When the assistant proposes changes to your graph, you'll review and deliver them here. Your server needs an update first.",
-                               systemImage: "arrow.triangle.branch")
-                    .listRowBackground(Color.clear)
-            } else if let sets {
-                if sets.isEmpty {
-                    EmptyStateView(title: status == "draft" ? "Nothing waiting" : "Nothing here",
-                                   message: "Proposed changes from chats, uploads and check-ins show up here. Nothing is added to your graph until you deliver it.",
-                                   systemImage: "checkmark.circle")
-                        .listRowBackground(Color.clear)
-                }
-                ForEach(sets) { c in
-                    if status == "draft" {
-                        ChangeSetCard(set: c, busy: busy.contains(c.id)) { action in Task { await act(c, action) } }
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                    } else {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(c.title).mgFont(.bodyStrong)
-                            if let d = c.createdAt { Text(Fmt.relative(d)).mgFont(.meta).foregroundStyle(Color.mgMuted) }
-                        }
-                        .listRowBackground(Color.mgSurface)
-                    }
-                }
-            } else if let error {
-                ErrorStateView(message: error) { await load() }.listRowBackground(Color.clear)
-            } else {
-                ProgressView().frame(maxWidth: .infinity).listRowBackground(Color.clear)
-            }
-        }
-        .listStyle(.insetGrouped)
-        .scrollContentBackground(.hidden)
-        .refreshable { await load() }
-        .navigationTitle(Text("Changes"))
-        .task(id: status) { await load() }
-    }
-
-    private func load() async {
-        do {
-            let r: ChangeSetsResponse = try await API.shared.get("/api/changes", query: ["status": status, "limit": "50"])
-            sets = r.changeSets; unavailable = false; error = nil
-        } catch let e as APIError {
-            if case .notFound = e { unavailable = true } else if sets == nil { error = e.plainMessage }
-        } catch {
-            if !error.isCancellation, sets == nil { self.error = error.plainMessage }
-        }
-    }
-
-    private func act(_ c: ChangeSet, _ action: String) async {
-        busy.insert(c.id); defer { busy.remove(c.id) }
-        do {
-            try await API.shared.post("/api/changes/\(c.id)/\(action)")
-            if action == "deliver" { Haptics.success() }
-            sets?.removeAll { $0.id == c.id }
-        } catch { app.banner = error.plainMessage; Haptics.warning() }
-    }
-}
-
 struct SettingsView: View {
     @Environment(AppModel.self) private var app
     @Environment(\.openURL) private var openURL
@@ -207,9 +127,17 @@ struct SettingsView: View {
                 Text("A notification when a reminder is due. Refreshed when you open the app and now and then in the background.")
             }
             Section {
-                Button("Language") { if let u = URL(string: UIApplication.openSettingsURLString) { openURL(u) } }
-                    .listRowBackground(Color.mgSurface)
-            } footer: { Text("My Graph follows your iPhone's language. English and Danish are available.") }
+                Picker("Language", selection: Binding(get: { app.locale }, set: { l in Task { await app.setLanguage(l) } })) {
+                    Text(verbatim: "English").tag("en")
+                    Text(verbatim: "Dansk").tag("da")
+                }
+                .listRowBackground(Color.mgSurface)
+                .accessibilityIdentifier("settings.language")
+                if app.languageNeedsRestart {
+                    Text("Some text switches language the next time you open the app.")
+                        .mgFont(.secondary).foregroundStyle(Color.mgMuted).listRowBackground(Color.mgSurface)
+                }
+            } footer: { Text("Saved on your account, so the web and this iPhone speak the same language, and the assistant writes in it too.") }
             Section {
                 Button { showServer = true } label: {
                     HStack { Text("Server"); Spacer(); Text(ServerConfig.current.host ?? "").foregroundStyle(Color.mgMuted) }

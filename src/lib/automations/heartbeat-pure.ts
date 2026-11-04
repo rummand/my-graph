@@ -4,6 +4,8 @@
  */
 import type { Citation } from "@/db/schema";
 import type { SuggestionKind } from "./index";
+import { makeT, type TFn } from "@/lib/i18n/core";
+import { DICTIONARIES } from "@/lib/i18n/messages";
 import { localParts, zonedTime } from "./schedule";
 
 export type HeartbeatData = {
@@ -25,10 +27,11 @@ export const BIRTHDAY_DAYS = 7;
 export const DUE_HOURS = 48;
 export const MAX_FACTS_PER_CHECKIN = 2;
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-const list = (xs: string[], max = 3) => (xs.length <= max ? joinAnd(xs) : `${xs.slice(0, max).join(", ")} and ${xs.length - max} more`);
-function joinAnd(xs: string[]) {
-  return xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`;
+const EN: TFn = makeT("en", DICTIONARIES.en);
+const H = "automations.server.heartbeat";
+const list = (xs: string[], t: TFn, max = 3) => (xs.length <= max ? joinAnd(xs, t) : t(`${H}.andMore`, { list: xs.slice(0, max).join(", "), count: xs.length - max }));
+function joinAnd(xs: string[], t: TFn) {
+  return xs.length <= 1 ? xs.join("") : t("chat.steps.and", { a: xs.slice(0, -1).join(", "), b: xs[xs.length - 1] });
 }
 const quoteTitle = (t: string) => `“${t.length > 60 ? `${t.slice(0, 57)}…` : t}”`;
 /** Stable short id for a set of ids (for group keys). */
@@ -49,38 +52,43 @@ export function birthdayReminderAt(date: Date, tz: string, freeMinute: number | 
   return zonedTime(dayBefore.getUTCFullYear(), dayBefore.getUTCMonth() + 1, dayBefore.getUTCDate(), Math.floor(m / 60), m % 60, tz).toISOString();
 }
 
+/**
+ * `t` is the owner's language (tFor(users.locale)): every title and body is written in it and stored as is.
+ */
 export function buildHeartbeatProposals(
-  d: HeartbeatData, opts: { now: Date; tz: string; capabilities: Record<string, boolean>; birthdayFreeMinute?: Record<string, number | null> },
+  d: HeartbeatData, opts: { now: Date; tz: string; capabilities: Record<string, boolean>; birthdayFreeMinute?: Record<string, number | null>; t?: TFn },
 ): Proposal[] {
   const out: Proposal[] = [];
+  const t = opts.t ?? EN;
   const cap = (k: string) => opts.capabilities[k] !== false;
   const { now } = opts;
+  const today = t(`${H}.openToday`);
 
   // Overdue reminders first: they are the most pressing.
   if (cap("reminders") && d.overdue.length) {
     const titles = d.overdue.map((r) => r.title);
     out.push({
-      kind: "nudge", title: d.overdue.length === 1 ? `Overdue: ${d.overdue[0].title}` : `${plural(d.overdue.length, "reminder")} are overdue`,
-      body: d.overdue.length === 1 ? null : `${list(titles)}. Tick them off on Today, or move them to a new date.`,
-      payload: { href: "/", label: "Open Today" }, citations: [], dedupeKey: `hb:overdue#${setKey(d.overdue.map((r) => r.id))}`,
+      kind: "nudge", title: d.overdue.length === 1 ? t(`${H}.overdueOne`, { title: d.overdue[0].title }) : t(`${H}.overdueMany`, { count: d.overdue.length }),
+      body: d.overdue.length === 1 ? null : t(`${H}.overdueBody`, { list: list(titles, t) }),
+      payload: { href: "/", label: today }, citations: [], dedupeKey: `hb:overdue#${setKey(d.overdue.map((r) => r.id))}`,
     });
   }
 
   if (cap("reminders") && d.dueSoon.length) {
     const titles = d.dueSoon.map((r) => (r.aboutLabel ? `${r.title} (${r.aboutLabel})` : r.title));
     out.push({
-      kind: "nudge", title: d.dueSoon.length === 1 ? `Due in the next two days: ${d.dueSoon[0].title}` : `${plural(d.dueSoon.length, "thing")} due in the next two days`,
-      body: d.dueSoon.length === 1 ? (d.dueSoon[0].aboutLabel ? `For ${d.dueSoon[0].aboutLabel}.` : null) : `${list(titles)}.`,
-      payload: { href: "/", label: "Open Today" }, citations: [], dedupeKey: `hb:due#${setKey(d.dueSoon.map((r) => r.id))}`,
+      kind: "nudge", title: d.dueSoon.length === 1 ? t(`${H}.dueOne`, { title: d.dueSoon[0].title }) : t(`${H}.dueMany`, { count: d.dueSoon.length }),
+      body: d.dueSoon.length === 1 ? (d.dueSoon[0].aboutLabel ? t(`${H}.dueFor`, { who: d.dueSoon[0].aboutLabel }) : null) : `${list(titles, t)}.`,
+      payload: { href: "/", label: today }, citations: [], dedupeKey: `hb:due#${setKey(d.dueSoon.map((r) => r.id))}`,
     });
   }
 
   if (cap("library") && d.uploads.length) {
     const titles = d.uploads.map((u) => quoteTitle(u.title));
     out.push({
-      kind: "nudge", title: d.uploads.length === 1 ? `New in the library: ${d.uploads[0].title}` : `${plural(d.uploads.length, "new file")} in the library`,
-      body: d.uploads.length === 1 ? "Have a look for dates or things to do." : `${list(titles)}. Have a look for dates or things to do.`,
-      payload: { href: d.uploads.length === 1 ? `/library/${d.uploads[0].id}` : "/library", label: "Open the library" },
+      kind: "nudge", title: d.uploads.length === 1 ? t(`${H}.uploadOne`, { title: d.uploads[0].title }) : t(`${H}.uploadMany`, { count: d.uploads.length }),
+      body: d.uploads.length === 1 ? t(`${H}.uploadLook`) : `${list(titles, t)}. ${t(`${H}.uploadLook`)}`,
+      payload: { href: d.uploads.length === 1 ? `/library/${d.uploads[0].id}` : "/library", label: t(`${H}.openLibrary`) },
       citations: d.uploads.slice(0, 4).map((u, i) => ({ n: i + 1, sourceId: u.id, title: u.title })),
       dedupeKey: `hb:uploads#${setKey(d.uploads.map((u) => u.id))}`,
     });
@@ -89,20 +97,24 @@ export function buildHeartbeatProposals(
   if (cap("people") && cap("reminders")) {
     for (const b of d.birthdays.filter((x) => x.daysUntil <= BIRTHDAY_DAYS)) {
       const year = localParts(b.date, opts.tz).year;
-      const when = b.daysUntil === 0 ? "today" : b.daysUntil === 1 ? "tomorrow" : `in ${b.daysUntil} days`;
-      const turning = b.turning ? `, turning ${b.turning}` : "";
-      const title = `${b.label}'s birthday`;
-      const already = d.reminderTitles.some((t) => t.includes(b.label.toLowerCase()) && (t.includes("birthday") || t.includes("fødselsdag")));
+      const when = b.daysUntil === 0 ? t(`${H}.whenToday`) : b.daysUntil === 1 ? t(`${H}.whenTomorrow`) : t(`${H}.whenInDays`, { count: b.daysUntil });
+      const turning = b.turning ? t(`${H}.turning`, { age: b.turning }) : "";
+      const already = d.reminderTitles.some((x) => x.includes(b.label.toLowerCase()) && (x.includes("birthday") || x.includes("fødselsdag")));
+      const open = t(`${H}.openPerson`, { name: b.label });
       if (b.daysUntil <= 1 || already) {
         out.push({
-          kind: "nudge", title: `${b.label}'s birthday is ${when}${turning}`, body: null,
-          payload: { href: `/people/${b.personId}`, label: `Open ${b.label}` }, citations: [{ n: 1, nodeId: b.personId, title: b.label }],
+          kind: "nudge", title: t(`${H}.birthdayIs`, { name: b.label, when, turning }), body: null,
+          payload: { href: `/people/${b.personId}`, label: open }, citations: [{ n: 1, nodeId: b.personId, title: b.label }],
           dedupeKey: `hb:bday:${b.personId}:${year}`,
         });
       } else {
         out.push({
-          kind: "reminder", title: `Add a reminder for ${title}`, body: `${b.label}'s birthday is ${when}${turning}. A reminder the day before leaves time for a present or a call.`,
-          payload: { title: `${title}${turning ? ` (${b.turning})` : ""}: present or call`, dueAt: birthdayReminderAt(b.date, opts.tz, opts.birthdayFreeMinute?.[b.personId]), aboutNodeId: b.personId },
+          kind: "reminder", title: t(`${H}.birthdayAdd`, { name: b.label }),
+          body: t(`${H}.birthdayBody`, { name: b.label, when, turning }),
+          payload: {
+            title: t(b.turning ? `${H}.birthdayReminderAge` : `${H}.birthdayReminder`, { name: b.label, age: b.turning ?? "" }),
+            dueAt: birthdayReminderAt(b.date, opts.tz, opts.birthdayFreeMinute?.[b.personId]), aboutNodeId: b.personId,
+          },
           citations: [{ n: 1, nodeId: b.personId, title: b.label }], dedupeKey: `hb:bday:${b.personId}:${year}`,
         });
       }
@@ -113,9 +125,9 @@ export function buildHeartbeatProposals(
     const month = `${localParts(now, opts.tz).year}-${localParts(now, opts.tz).month}`;
     for (const p of d.outOfTouch.slice(0, 2)) {
       out.push({
-        kind: "nudge", title: `It's been a while since you were in touch with ${p.label}`,
-        body: p.daysSince !== null ? `${p.daysSince} days since you were last in touch; usually it's about every ${p.cadenceDays} days.` : `Nothing logged yet, and they've been in the graph for over ${p.cadenceDays} days.`,
-        payload: { href: `/people/${p.personId}`, label: `Open ${p.label}` }, citations: [{ n: 1, nodeId: p.personId, title: p.label }],
+        kind: "nudge", title: t(`${H}.outOfTouch`, { name: p.label }),
+        body: p.daysSince !== null ? t(`${H}.outOfTouchBody`, { days: p.daysSince, cadence: p.cadenceDays }) : t(`${H}.outOfTouchNever`, { cadence: p.cadenceDays }),
+        payload: { href: `/people/${p.personId}`, label: t(`${H}.openPerson`, { name: p.label }) }, citations: [{ n: 1, nodeId: p.personId, title: p.label }],
         dedupeKey: `hb:contact:${p.personId}:${month}`,
       });
     }
@@ -124,34 +136,34 @@ export function buildHeartbeatProposals(
   if (d.facts.edges.length) {
     for (const e of d.facts.edges.slice(0, MAX_FACTS_PER_CHECKIN)) {
       out.push({
-        kind: "fact", title: `Is this right? ${e.fromLabel} ${e.relationLabel} ${e.toLabel}`,
-        body: e.sourceTitle ? `Read from ${quoteTitle(e.sourceTitle)}; nobody has checked it yet.` : "Nobody has checked this yet.",
+        kind: "fact", title: t(`${H}.factCheck`, { from: e.fromLabel, relation: e.relationLabel, to: e.toLabel }),
+        body: e.sourceTitle ? t(`${H}.factFrom`, { source: quoteTitle(e.sourceTitle) }) : t(`${H}.factUnchecked`),
         payload: { edgeId: e.id }, dedupeKey: `hb:fact:${e.id}`,
-        citations: [e.sourceId ? { n: 1, sourceId: e.sourceId, title: e.sourceTitle ?? "Source", confidence: e.confidence } : { n: 1, nodeId: e.fromId, title: e.fromLabel, confidence: e.confidence }],
+        citations: [e.sourceId ? { n: 1, sourceId: e.sourceId, title: e.sourceTitle ?? t(`${H}.source`), confidence: e.confidence } : { n: 1, nodeId: e.fromId, title: e.fromLabel, confidence: e.confidence }],
       });
     }
     const rest = d.facts.total - Math.min(d.facts.edges.length, MAX_FACTS_PER_CHECKIN);
     if (rest > 0) {
       out.push({
-        kind: "nudge", title: `${plural(rest, "more fact")} waiting to be checked`, body: "They were read from your files or guessed by the assistant. Confirm or correct them from each person's page.",
-        payload: { href: `/node/${d.facts.edges[0].fromId}`, label: "Start checking" }, citations: [], dedupeKey: `hb:facts#${Math.floor(rest / 10)}`,
+        kind: "nudge", title: t(`${H}.moreFacts`, { count: rest }), body: t(`${H}.moreFactsBody`),
+        payload: { href: `/node/${d.facts.edges[0].fromId}`, label: t(`${H}.startChecking`) }, citations: [], dedupeKey: `hb:facts#${Math.floor(rest / 10)}`,
       });
     }
   }
   return out;
 }
 
-/** The one plain sentence for the run log when the model summary isn't available. */
-export function heartbeatSummary(created: number, held: number, data: HeartbeatData): string {
+/** The one plain sentence for the run log when the model summary isn't available (in the owner's language). */
+export function heartbeatSummary(created: number, held: number, data: HeartbeatData, t: TFn = EN): string {
   const bits: string[] = [];
-  if (data.overdue.length) bits.push(`${plural(data.overdue.length, "overdue reminder")}`);
-  if (data.dueSoon.length) bits.push(`${plural(data.dueSoon.length, "thing")} due soon`);
-  if (data.uploads.length) bits.push(`${plural(data.uploads.length, "new file")}`);
+  if (data.overdue.length) bits.push(t(`${H}.sum.overdue`, { count: data.overdue.length }));
+  if (data.dueSoon.length) bits.push(t(`${H}.sum.dueSoon`, { count: data.dueSoon.length }));
+  if (data.uploads.length) bits.push(t(`${H}.sum.files`, { count: data.uploads.length }));
   const bdays = data.birthdays.filter((b) => b.daysUntil <= BIRTHDAY_DAYS).length;
-  if (bdays) bits.push(`${plural(bdays, "birthday")} this week`);
-  if (data.outOfTouch.length) bits.push(`${plural(data.outOfTouch.length, "person", "people")} to get in touch with`);
-  if (data.facts.total) bits.push(`${plural(data.facts.total, "fact")} to check`);
-  if (!bits.length) return "Nothing needs you right now.";
-  const tail = created ? ` Added ${plural(created, "suggestion")} to your inbox.` : " Nothing new for your inbox.";
-  return `Found ${joinAnd(bits)}.${tail}${held ? ` Held back ${held} (today's limit).` : ""}`;
+  if (bdays) bits.push(t(`${H}.sum.birthdays`, { count: bdays }));
+  if (data.outOfTouch.length) bits.push(t(`${H}.sum.people`, { count: data.outOfTouch.length }));
+  if (data.facts.total) bits.push(t(`${H}.sum.facts`, { count: data.facts.total }));
+  if (!bits.length) return t(`${H}.sum.nothing`);
+  const tail = created ? t(`${H}.sum.added`, { count: created }) : t(`${H}.sum.nothingNew`);
+  return `${t(`${H}.sum.found`, { what: joinAnd(bits, t) })}${tail}${held ? t(`${H}.sum.held`, { count: held }) : ""}`;
 }

@@ -318,6 +318,70 @@ const messages: MessageTree = {
     tagNew: "new {kind}",
     type: { person: "person", organization: "organisation", project: "project", place: "place", event: "event", topic: "topic", thing: "thing" },
   },
+  /** Text the server writes into answers, run summaries and suggestions (stored in the language it was written in). */
+  server: {
+    cutOff: "The answer was cut off because the model stopped responding.",
+    degraded: {
+      notConfigured: "I can't write an answer right now because the model gateway (mux) isn't set up yet: MUX_API_KEY is missing.",
+      rejected: "I can't write an answer right now because the model gateway (mux) refused My Graph's API key.",
+      unreachable: "I can't reach the model gateway (mux) right now, so I can't write an answer.",
+      error: "Something went wrong while writing the answer.",
+      nothing: "I also couldn't find anything in {noun} that matches the question.",
+      matches: "Here is what {noun} has that matches your question:",
+    },
+    status: { inferred: "inferred", unconfirmed: "unconfirmed", rejected: "rejected", superseded: "replaced" },
+    summary: {
+      docs: { one: "{count} document", other: "{count} documents" },
+      events: { one: "{count} upcoming event", other: "{count} upcoming events" },
+      reminders: { one: "{count} open reminder", other: "{count} open reminders" },
+      found: "Found {what}",
+      nothing: "Found nothing new",
+      noSummary: "{found}; no summary was written because {why}.",
+      notSetUp: "the model gateway isn't set up",
+      unreachable: "the model gateway couldn't be reached",
+      emptyPrompt: "There was nothing to do: the prompt is empty.",
+      askedNobody: "Asked “{question}”: nobody was there to answer, so it went on with what it knew",
+      cantWrite: "A suggested change: not suggested, this account can't add to the graph",
+    },
+    suggestion: {
+      reminder: "Add reminder: {title}",
+      fact: "Save fact: {from} {relation} {to}",
+      wiki: "Start wiki page: {title}",
+      memory: "Remember: {text}",
+      rule: "Remember this rule: {text}",
+      ruleFamily: "Remember this family rule: {text}",
+    },
+    describe: {
+      reminder: "Reminder: {title}",
+      fact: "Fact: {from} {relation} {to}",
+      wiki: "Wiki note: {title}",
+      memory: "Remember: {text}",
+    },
+    skipped: {
+      waiting: "{what}: waiting for approval in Suggestions",
+      notFiled: "{what}: not suggested, it was dismissed before or today's suggestion limit was reached",
+      remindersOff: "{what}: not suggested, reminders are turned off",
+      wikiOff: "{what}: not suggested, wiki writing is turned off",
+      noMemory: "{what}: not suggested, memory isn't available for this account",
+    },
+    widen: {
+      family: {
+        parentsItems: "parents-only items", privateItems: "private items",
+        everyone: "This conversation includes {what}. Saving this makes it visible to everyone in the graph, children included.",
+        parents: "This conversation includes {what}. Saving this makes it visible to the parents too.",
+      },
+      graph: {
+        parentsItems: "items only editors can see", privateItems: "private items",
+        everyone: "This conversation includes {what}. Saving this makes it visible to everyone in this graph.",
+        parents: "This conversation includes {what}. Saving this makes it visible to the people who can edit this graph too.",
+      },
+    },
+    cantAdd: {
+      guestFamily: "Guests can't add to the family graph.",
+      guest: "Guests can't add to this graph.",
+      viewer: "You can look at this graph but not add to it.",
+    },
+  },
 };
 
 export default messages;

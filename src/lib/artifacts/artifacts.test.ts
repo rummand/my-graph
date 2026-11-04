@@ -171,6 +171,25 @@ describe("citations are preserved", () => {
     expect(uncitedClaims(content)).toEqual([]);
   });
 
+  it("keeps evidence keys out of titles, subtitles and column names", () => {
+    const ev: Evidence[] = [{ key: "E1", kind: "node", nodeType: "person", nodeId: N1, text: "Emma", citation: { kind: "node", nodeId: N1, label: "Emma", quote: null, locator: null } }];
+    const draft = modelDraftSchema.parse({
+      title: "Emma [E1]", subtitle: "This year [E1, E2]",
+      sections: [{ title: "About [E1]", blocks: [
+        { type: "table", columns: ["Day [E1]", "What"], rows: [{ cells: ["Mon", "Swim [e1]"], cites: [] }] },
+        { type: "text", text: "Nine years old [e1]." },
+      ] }],
+    });
+    const { title, content } = fromModelDraft(draft, ev);
+    expect(title).toBe("Emma");
+    expect(content.subtitle).toBe("This year");
+    expect(content.sections[0].title).toBe("About");
+    const table = content.sections[0].blocks[0] as { columns: string[]; rows: { cells: string[]; cites: string[] }[] };
+    expect(table.columns).toEqual(["Day", "What"]);
+    expect(table.rows[0]).toEqual({ cells: ["Mon", "Swim"], cites: ["c1"] });
+    expect((content.sections[0].blocks[1] as { text: string }).text).toBe("Nine years old [^c1].");
+  });
+
   it("the plain draft (mux down) cites every line", () => {
     const ev: Evidence[] = [
       { key: "E1", kind: "node", nodeType: "person", nodeId: N1, text: "Emma is in 3rd grade at Strandskolen and plays football on Tuesdays.", citation: { kind: "node", nodeId: N1, label: "Emma", quote: null, locator: null } },

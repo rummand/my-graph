@@ -146,6 +146,9 @@ const ZERO = "00000000-0000-0000-0000-000000000000";
 function BlockEditor({ b, ctx, sectionId, onChange }: { b: Block; ctx: Ctx; sectionId: string; onChange: (b: Block) => void }) {
   const t = useT();
   const flag = (item?: number) => ctx.uncited.has(`${sectionId}/${b.id}/${item ?? ""}`);
+  // Sources inside list fields show as [1], [2] like in text, never as raw markers.
+  const dv = (s: string) => toDisplay(s, ctx.nums);
+  const fv = (s: string) => fromDisplay(s, ctx.byNum);
   switch (b.type) {
     case "heading":
       return <Input value={b.text} onChange={(e) => onChange({ ...b, text: e.target.value })} placeholder={t("artifacts.blocks.heading")} className="font-semibold" />;
@@ -167,7 +170,7 @@ function BlockEditor({ b, ctx, sectionId, onChange }: { b: Block; ctx: Ctx; sect
             <ItemShell key={i} flagged={flag(i)} onRemove={() => onChange({ ...b, items: b.items.filter((_, k) => k !== i) })}>
               <div className="grid gap-1.5 pr-6 sm:grid-cols-[10rem_1fr]">
                 <Input className={sm} value={it.label} placeholder={t("artifacts.blocks.label")} onChange={(e) => onChange({ ...b, items: b.items.map((x, k) => (k === i ? { ...x, label: e.target.value } : x)) })} />
-                <Input className={sm} value={it.value} placeholder={t("artifacts.blocks.value")} onChange={(e) => onChange({ ...b, items: b.items.map((x, k) => (k === i ? { ...x, value: e.target.value } : x)) })} />
+                <Input className={sm} value={dv(it.value)} placeholder={t("artifacts.blocks.value")} onChange={(e) => onChange({ ...b, items: b.items.map((x, k) => (k === i ? { ...x, value: fv(e.target.value) } : x)) })} />
               </div>
               <Cites ids={it.cites} ctx={ctx} onChange={(ids) => onChange({ ...b, items: b.items.map((x, k) => (k === i ? { ...x, cites: ids } : x)) })} />
             </ItemShell>
@@ -182,9 +185,9 @@ function BlockEditor({ b, ctx, sectionId, onChange }: { b: Block; ctx: Ctx; sect
             <ItemShell key={i} flagged={flag(i)} onRemove={() => onChange({ ...b, items: b.items.filter((_, k) => k !== i) })}>
               <div className="grid gap-1.5 pr-6 sm:grid-cols-[11rem_1fr]">
                 <Input className={clsx(sm, "tabular-nums")} value={it.when} placeholder={t("artifacts.blocks.when")} onChange={(e) => onChange({ ...b, items: b.items.map((x, k) => (k === i ? { ...x, when: e.target.value } : x)) })} />
-                <Input className={sm} value={it.label} placeholder={t("artifacts.blocks.what")} onChange={(e) => onChange({ ...b, items: b.items.map((x, k) => (k === i ? { ...x, label: e.target.value } : x)) })} />
+                <Input className={sm} value={dv(it.label)} placeholder={t("artifacts.blocks.what")} onChange={(e) => onChange({ ...b, items: b.items.map((x, k) => (k === i ? { ...x, label: fv(e.target.value) } : x)) })} />
               </div>
-              <Input className={sm} value={it.detail} placeholder={t("artifacts.blocks.detail")} onChange={(e) => onChange({ ...b, items: b.items.map((x, k) => (k === i ? { ...x, detail: e.target.value } : x)) })} />
+              <Input className={sm} value={dv(it.detail)} placeholder={t("artifacts.blocks.detail")} onChange={(e) => onChange({ ...b, items: b.items.map((x, k) => (k === i ? { ...x, detail: fv(e.target.value) } : x)) })} />
               <Cites ids={it.cites} ctx={ctx} onChange={(ids) => onChange({ ...b, items: b.items.map((x, k) => (k === i ? { ...x, cites: ids } : x)) })} />
             </ItemShell>
           ))}
@@ -220,8 +223,8 @@ function BlockEditor({ b, ctx, sectionId, onChange }: { b: Block; ctx: Ctx; sect
             <ItemShell key={ri} flagged={flag(ri)} onRemove={() => onChange({ ...b, rows: b.rows.filter((_, k) => k !== ri) })}>
               <div className="grid gap-1.5 pr-6" style={{ gridTemplateColumns: `repeat(${cols}, minmax(6rem, 1fr))` }}>
                 {Array.from({ length: cols }, (_, ci) => (
-                  <Input key={ci} className={sm} value={r.cells[ci] ?? ""} onChange={(e) => {
-                    const cells = Array.from({ length: cols }, (_, k) => (k === ci ? e.target.value : r.cells[k] ?? ""));
+                  <Input key={ci} className={sm} value={dv(r.cells[ci] ?? "")} onChange={(e) => {
+                    const cells = Array.from({ length: cols }, (_, k) => (k === ci ? fv(e.target.value) : r.cells[k] ?? ""));
                     onChange({ ...b, rows: b.rows.map((x, k) => (k === ri ? { ...x, cells } : x)) });
                   }} />
                 ))}
@@ -239,7 +242,7 @@ function BlockEditor({ b, ctx, sectionId, onChange }: { b: Block; ctx: Ctx; sect
     case "quote":
       return (
         <div className={clsx("grid gap-1.5 rounded-md p-2", flag() ? "bg-warn-tint/70" : "bg-surface-2/50")}>
-          <Textarea rows={2} value={b.text} placeholder={t("artifacts.blocks.quoteText")} onChange={(e) => onChange({ ...b, text: e.target.value })} />
+          <Textarea rows={2} value={dv(b.text)} placeholder={t("artifacts.blocks.quoteText")} onChange={(e) => onChange({ ...b, text: fv(e.target.value) })} />
           <Input className={sm} value={b.attribution} placeholder={t("artifacts.blocks.attribution")} onChange={(e) => onChange({ ...b, attribution: e.target.value })} />
           <Cites ids={b.cites} ctx={ctx} onChange={(ids) => onChange({ ...b, cites: ids })} />
         </div>

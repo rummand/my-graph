@@ -16,6 +16,7 @@ struct MyGraphApp: App {
         WindowGroup {
             RootView()
                 .environment(app)
+                .environment(\.locale, Locale(identifier: app.locale))
                 .mgFont(.body)
                 .tint(.mgAccent)
                 .task { await app.bootstrap() }

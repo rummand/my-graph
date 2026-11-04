@@ -9,9 +9,13 @@
  *  - a memory is never wider than its evidence: its visibility is the narrowest of what it rests on;
  *  - a new memory that says what an existing one says becomes an update of that one (or nothing, if a person wrote it).
  */
+import { makeT, type TFn } from "@/lib/i18n/core";
+import { DICTIONARIES } from "@/lib/i18n/messages";
 import { z } from "zod";
 import { cleanText, findDuplicate, isNearDuplicate, MEMORY_MAX_CHARS, normalizeForCompare, type MemoryKind, type MemoryVisibility } from "@/lib/memory/pure";
 import { mostlySaid, quoteInText } from "@/lib/assistant/policy";
+
+const EN: TFn = makeT("en", DICTIONARIES.en);
 
 export type Visibility = MemoryVisibility;
 const VIS_RANK: Record<Visibility, number> = { private: 0, parents: 1, household: 2 };
@@ -300,43 +304,45 @@ export type JournalEntry = {
 };
 
 /** One plain line per kind of change, for the run's headline. */
-export function reportHeadline(j: JournalEntry[]): string {
+export function reportHeadline(j: JournalEntry[], t: TFn = EN): string {
   const n = (op: JournalEntry["op"]) => j.filter((e) => e.op === op).length;
-  const parts = [
-    n("wrote") && `wrote ${n("wrote")}`, n("updated") && `updated ${n("updated")}`,
-    n("merged") && `merged ${n("merged")}`, n("forgot") && `forgot ${n("forgot")}`,
-  ].filter(Boolean);
+  const parts = (["wrote", "updated", "merged", "forgot"] as const).filter((op) => n(op)).map((op) => t(`memory.keeper.report.${op}`, { count: n(op) }));
   const pending = j.filter((e) => e.op === "wrote" && e.status === "pending").length;
-  if (!parts.length) return n("declined") ? `Looked at ${n("declined")} suggestion${n("declined") === 1 ? "" : "s"} from chat; nothing needed keeping.` : "Nothing new to remember since the last run.";
+  if (!parts.length) return n("declined") ? t("memory.keeper.report.declinedOnly", { count: n("declined") }) : t("memory.keeper.report.nothing");
   const s = parts.join(", ");
-  return `${s[0].toUpperCase()}${s.slice(1)}${pending ? ` (${pending} waiting for you to confirm)` : ""}.`;
+  return `${s[0].toUpperCase()}${s.slice(1)}${pending ? t("memory.keeper.report.pending", { count: pending }) : ""}.`;
 }
+
+/** The refusal reasons (stored in English on the vetting result) → message keys, so a report reads in the person's language. */
+const REASON_KEY: Record<string, string> = Object.fromEntries(Object.entries({"pendingIntoActive": "A pending memory can't be merged into an active one.", "tooMany": "More changes than one run may make.", "noEvidence": "No evidence from what it read.", "noEvidenceRetire": "No evidence that it is no longer true.", "noSuch": "No such memory.", "notHanded": "Not one of the memories the chat handed over.", "notKeepers": "Not the keeper's to change.", "personMerged": "One of them was written by a person (or isn't the keeper's); it is never merged away.", "outsideChange": "Outside content alone never changes an active memory.", "outsideRetire": "Outside content alone never retires an active memory.", "duplicate": "That would duplicate another memory; merge them instead.", "personKeep": "The memory it keeps was written by a person; its words stay as they are.", "personRewrite": "A person wrote this one; the keeper never rewrites it.", "personForget": "A person wrote this one; the keeper never forgets it."} as Record<string, string>).map(([k, v]) => [v, k]));
 
 /** Does this run have anything to read? */
 export function hasMaterial(read: Record<string, number>): boolean {
   return (read.conversations ?? 0) + (read.proposals ?? 0) + (read.sources ?? 0) > 0;
 }
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /**
  * The run's report, written from what actually happened (never from the model's own account, which may claim
  * changes the rules refused): what it read, what it held back and why, and whether it ran without the model.
  */
-export function composeReport(read: Record<string, number>, refused: Refusal[], opts: { degraded?: boolean } = {}): string {
+export function composeReport(read: Record<string, number>, refused: Refusal[], opts: { degraded?: boolean; t?: TFn } = {}): string {
+  const t = opts.t ?? EN;
   const lines: string[] = [];
   const parts = [
-    read.conversations ? plural(read.conversations, "conversation") : "",
-    read.proposals ? plural(read.proposals, "suggestion from chat", "suggestions from chat") : "",
-    read.sources ? plural(read.sources, "new library item") : "",
+    read.conversations ? t("memory.keeper.report.conversations", { count: read.conversations }) : "",
+    read.proposals ? t("memory.keeper.report.proposals", { count: read.proposals }) : "",
+    read.sources ? t("memory.keeper.report.sources", { count: read.sources }) : "",
   ].filter(Boolean);
-  if (parts.length) lines.push(`Read ${parts.join(", ")}.`);
+  if (parts.length) lines.push(t("memory.keeper.report.read", { what: parts.join(", ") }));
   const quiet = new Set(["Nothing would change.", "Already remembered.", "Already changed in this run."]);
   const counts = new Map<string, number>();
   for (const r of refused) if (!quiet.has(r.reason)) counts.set(r.reason, (counts.get(r.reason) ?? 0) + 1);
   if (counts.size) {
-    lines.push(`Held back ${plural([...counts.values()].reduce((a, b) => a + b, 0), "change")}: ${[...counts].map(([why, n]) => (n > 1 ? `${why.replace(/\.$/, "")} (${n})` : why.replace(/\.$/, ""))).join("; ")}.`);
+    const say = (why: string) => (REASON_KEY[why] ? t(`memory.keeper.report.reason.${REASON_KEY[why]}`) : why).replace(/\.$/, "");
+    const why = [...counts].map(([w, n]) => (n > 1 ? `${say(w)} (${n})` : say(w))).join("; ");
+    lines.push(t("memory.keeper.report.heldBack", { count: [...counts.values()].reduce((a, b) => a + b, 0), why }));
   }
-  if (opts.degraded) lines.push("The model gateway (mux) couldn't be reached, so it only filed what the chat handed it: your own words were kept, anything from outside content waits for you.");
+  if (opts.degraded) lines.push(t("memory.keeper.report.degraded"));
   return lines.join("\n");
 }

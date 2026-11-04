@@ -12,6 +12,7 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { Viewer } from "@/lib/auth";
+import { voiceOf } from "@/lib/assistant/locale";
 import * as gbrain from "@/lib/gbrain";
 import { createReminder, ReminderInputError } from "@/lib/briefs";
 import { addMemory, updateMemory, type MemoryOrigin } from "@/lib/memory";
@@ -151,7 +152,8 @@ async function applyInner(v: Viewer, s: Suggestion): Promise<ApplyResult> {
       });
       if (!m) throw new AutomationError(503, "Memory isn't available yet, so this couldn't be saved. It stays in your inbox.");
       if (m.status !== "active") await updateMemory(v, m.id, { status: "active" });
-      return { href: "/memory", label: kind === "rule" ? `Family rule saved: ${m.text}` : `Remembered: ${m.text}` };
+      const { t, family } = await voiceOf(v);
+      return { href: "/memory", label: kind === "rule" ? t(family ? "automations.server.applied.ruleFamily" : "automations.server.applied.rule", { text: m.text }) : t("automations.server.applied.remembered", { text: m.text }) };
     }
     case "wiki_edit": {
       const p = parse(wikiEditPayload, s.payload);

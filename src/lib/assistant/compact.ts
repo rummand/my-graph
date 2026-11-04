@@ -39,7 +39,7 @@ export function compactMessages(older: Turn[], previous: string | null): MuxMess
   return [
     {
       role: "system",
-      content: "Summarise this conversation between a parent and their family assistant so it can continue without the full text. Keep every concrete fact, date, name, decision and open question, and the [n] citation numbers are not needed. Write 3 to 10 short bullet points starting with \"- \", in the language of the conversation. Reply with the bullets only.",
+      content: "Summarise this conversation between a person and their assistant in My Graph so it can continue without the full text. Keep every concrete fact, date, name, decision and open question, and the [n] citation numbers are not needed. Write 3 to 10 short bullet points starting with \"- \", in the language of the conversation. Reply with the bullets only.",
     },
     { role: "user", content: transcript(older, previous) },
   ];

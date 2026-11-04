@@ -9,17 +9,21 @@ struct TodayView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 28) {
+            // A plain VStack: Today is a handful of sections, and a lazy stack's height estimates could loop forever
+            // when cards change height (seen under XCUITest while scrolling).
+            VStack(alignment: .leading, spacing: 28) {
                 header
                 if let e = model.error, model.snap != nil {
                     NoticeBar(text: app.isOffline ? offlineText : e, tone: app.isOffline ? .muted : .danger)
                 }
                 if askNotifications { notificationsCard }
                 if let snap = model.snap {
+                    connections(snap)
                     waiting(snap)
                     brief(snap)
                     week
                     todos(snap)
+                    attention(snap)
                     recent(snap)
                 } else if model.loading {
                     ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
@@ -46,10 +50,12 @@ struct TodayView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(app.firstName.map { "\(Fmt.greeting()), \($0)" } ?? Fmt.greeting())
+            // The server writes the greeting in the account's language; offline, the app writes its own.
+            Text(model.snap?.greeting?.text ?? app.firstName.map { "\(Fmt.greeting()), \($0)" } ?? Fmt.greeting())
                 .mgFont(.title).foregroundStyle(Color.mgFg)
                 .accessibilityAddTraits(.isHeader)
-            Text(Fmt.longDate(Date())).mgFont(.body).foregroundStyle(Color.mgMuted)
+                .accessibilityIdentifier("today.greeting")
+            Text(model.snap?.greeting?.date ?? Fmt.longDate(Date())).mgFont(.body).foregroundStyle(Color.mgMuted)
         }
         .padding(.top, 8)
     }
@@ -89,13 +95,15 @@ struct TodayView: View {
                     Text("\(snap.suggestions.count + sets.count)").mgFont(.secondaryStrong).foregroundStyle(Color.mgWarn)
                         .accessibilityLabel(Text("\(snap.suggestions.count + sets.count) waiting"))
                 }
-                ForEach(sets) { c in ChangeSetCard(set: c, busy: model.deciding.contains(c.id)) { action in
-                    Task {
-                        if let e = await model.decide(c, action) { app.banner = e } else if action == "deliver" { Haptics.success() }
+                ForEach(sets) { c in
+                    ChangeSetCard(set: c, busy: model.deciding.contains(c.id), canDecide: app.canWrite, open: { router.push(.changeSet(c.id)) }) { action in
+                        Task {
+                            if let e = await model.decide(c, action) { app.banner = e; Haptics.warning() } else if action == "deliver" { Haptics.success() }
+                        }
                     }
-                } }
+                }
                 ForEach(snap.suggestions) { s in
-                    SuggestionCard(suggestion: s, busy: model.deciding.contains(s.id)) { decision in
+                    SuggestionCard(suggestion: s, busy: model.deciding.contains(s.id), canDecide: app.canWrite) { decision in
                         Task {
                             let (out, err) = await model.decide(s, decision)
                             if let err { app.banner = err; Haptics.warning(); return }
@@ -107,6 +115,68 @@ struct TodayView: View {
                 }
             }
             .animation(.easeOut(duration: 0.22), value: snap.suggestions)
+            .animation(.easeOut(duration: 0.22), value: model.changeSets)
+        }
+    }
+
+    // MARK: Connections that need you
+
+    @ViewBuilder
+    private func connections(_ snap: TodaySnapshot) -> some View {
+        if let list = snap.connections, !list.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(list) { c in
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "exclamationmark.arrow.triangle.2.circlepath").foregroundStyle(Color.mgWarn).accessibilityHidden(true)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("\(c.label) needs you").mgFont(.bodyStrong)
+                            Text(c.detail ?? String(localized: "Sign in to it again on the web, under Connections, so it can keep bringing things in."))
+                                .mgFont(.secondary).foregroundStyle(Color.mgMuted)
+                        }
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.mgWarnTint))
+                }
+            }
+        }
+    }
+
+    // MARK: Needs attention
+
+    @ViewBuilder
+    private func attention(_ snap: TodaySnapshot) -> some View {
+        if let a = snap.attention, a.total > 0 {
+            VStack(alignment: .leading, spacing: 10) {
+                SectionHeader("Needs attention") {
+                    Text("\(a.total)").mgFont(.secondaryStrong).foregroundStyle(Color.mgWarn)
+                }
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(a.facts) { f in
+                        Button { router.push(.node(f.nodeId)) } label: {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(f.text).mgFont(.body).foregroundStyle(Color.mgFg).multilineTextAlignment(.leading)
+                                Text(f.sourceTitle.map { String(localized: "Not sure yet · from \($0)") } ?? String(localized: "Not sure yet"))
+                                    .mgFont(.meta).foregroundStyle(Color.mgMuted)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if let n = a.failedUploads, n > 0 {
+                        Text(n == 1 ? String(localized: "1 upload couldn't be read") : String(localized: "\(n) uploads couldn't be read"))
+                            .mgFont(.secondary).foregroundStyle(Color.mgWarn).padding(.vertical, 8)
+                    }
+                    if let n = a.duplicates, n > 0 {
+                        Text(n == 1 ? String(localized: "1 possible duplicate to check on the web") : String(localized: "\(n) possible duplicates to check on the web"))
+                            .mgFont(.secondary).foregroundStyle(Color.mgMuted).padding(.vertical, 8)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.mgSurface))
+            }
         }
     }
 
@@ -270,6 +340,7 @@ struct ReminderRow: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Mark done: \(reminder.title)"))
+            .accessibilityIdentifier("todo.tick.\(reminder.id)")
             VStack(alignment: .leading, spacing: 3) {
                 Text(reminder.title).mgFont(.body).foregroundStyle(Color.mgFg).strikethrough(ticked)
                 HStack(spacing: 8) {
@@ -292,30 +363,51 @@ struct ReminderRow: View {
 struct SuggestionCard: View {
     let suggestion: Suggestion
     let busy: Bool
+    var canDecide = true
     let decide: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                StateBadge(text: kindLabel, tone: .warn)
-                if let o = suggestion.origin { Text(originLabel(o)).mgFont(.meta).foregroundStyle(Color.mgMuted) }
+                StateBadge(text: suggestion.kindLabel ?? kindLabel, tone: .warn)
+                if let o = suggestion.originLabel ?? suggestion.origin.map(originLabel) { Text(o).mgFont(.meta).foregroundStyle(Color.mgMuted) }
             }
             Text(suggestion.title).mgFont(.bodyStrong).foregroundStyle(Color.mgFg)
             if let b = suggestion.body, !b.isEmpty { Text(b).mgFont(.secondary).foregroundStyle(Color.mgMuted) }
             CitationRow(citations: suggestion.citations ?? [])
-            HStack(spacing: 8) {
-                Button("Approve") { decide("approve") }.buttonStyle(MGButtonStyle(kind: .primary, compact: true))
-                Button("Always allow") { decide("always") }.buttonStyle(MGButtonStyle(kind: .secondary, compact: true))
-                Button("Deny") { decide("deny") }.buttonStyle(MGButtonStyle(kind: .ghost, compact: true))
-                if busy { ProgressView().padding(.leading, 4) }
+            if canDecide {
+                HStack(spacing: 8) { buttons }
+                    .disabled(busy)
+            } else {
+                Text("Someone who can edit this graph decides on this.").mgFont(.meta).foregroundStyle(Color.mgMuted)
             }
-            .disabled(busy)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.mgSurface))
         .overlay(alignment: .leading) { Rectangle().fill(Color.mgWarn).frame(width: 3).clipShape(RoundedRectangle(cornerRadius: 2)) }
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("suggestion.\(suggestion.id)")
+    }
+
+    @ViewBuilder private var buttons: some View {
+        approve
+        always
+        deny
+        if busy { ProgressView().padding(.leading, 4) }
+    }
+    private var approve: some View {
+        Button("Approve") { decide("approve") }.buttonStyle(MGButtonStyle(kind: .primary, compact: true))
+            .accessibilityIdentifier("suggestion.approve")
+    }
+    private var always: some View {
+        Button(suggestion.alwaysLabel ?? String(localized: "Always allow")) { decide("always") }.buttonStyle(MGButtonStyle(kind: .secondary, compact: true))
+            .accessibilityIdentifier("suggestion.always")
+    }
+    private var deny: some View {
+        Button("Deny") { decide("deny") }.buttonStyle(MGButtonStyle(kind: .ghost, compact: true))
+            .accessibilityIdentifier("suggestion.deny")
     }
 
     private var kindLabel: String {
@@ -343,13 +435,18 @@ struct SuggestionCard: View {
 struct ChangeSetCard: View {
     let set: ChangeSet
     let busy: Bool
+    var canDecide = true
+    var open: (() -> Void)?
     let act: (String) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            StateBadge(text: String(localized: "Proposed changes"), tone: .warn)
+            HStack(spacing: 6) {
+                StateBadge(text: String(localized: "Proposed changes"), tone: .warn)
+                if let o = set.origin { Text(ChangeWords.origin(o)).mgFont(.meta).foregroundStyle(Color.mgMuted) }
+            }
             Text(set.title).mgFont(.bodyStrong)
-            if let d = set.description { Text(d).mgFont(.secondary).foregroundStyle(Color.mgMuted) }
+            if let d = set.description, !d.isEmpty { Text(d).mgFont(.secondary).foregroundStyle(Color.mgMuted) }
             let changes = (set.changes ?? []).filter { $0.included != false }
             if !changes.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -363,8 +460,18 @@ struct ChangeSetCard: View {
                 }
             }
             HStack(spacing: 8) {
-                Button("Deliver") { act("deliver") }.buttonStyle(MGButtonStyle(kind: .primary, compact: true))
-                Button("Drop") { act("abandon") }.buttonStyle(MGButtonStyle(kind: .ghost, compact: true))
+                if canDecide {
+                    Button(changes.count == (set.changes?.count ?? 0) ? String(localized: "Deliver") : String(localized: "Deliver \(changes.count)")) { act("deliver") }
+                        .buttonStyle(MGButtonStyle(kind: .primary, compact: true))
+                        .disabled(changes.isEmpty)
+                        .accessibilityIdentifier("changeset.deliver")
+                    Button("Drop") { act("abandon") }.buttonStyle(MGButtonStyle(kind: .ghost, compact: true))
+                        .accessibilityIdentifier("changeset.drop")
+                }
+                if let open {
+                    Button("Review") { open() }.buttonStyle(MGButtonStyle(kind: .secondary, compact: true))
+                        .accessibilityIdentifier("changeset.review")
+                }
                 if busy { ProgressView() }
             }
             .disabled(busy)
@@ -374,5 +481,25 @@ struct ChangeSetCard: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(Color.mgSurface))
         .overlay(alignment: .leading) { Rectangle().fill(Color.mgWarn).frame(width: 3) }
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("changeset.\(set.id)")
+    }
+}
+
+/// Plain words for where a proposal came from.
+enum ChangeWords {
+    static func origin(_ o: String) -> String {
+        switch o {
+        case "chat": return String(localized: "From a chat")
+        case "assistant": return String(localized: "From the assistant")
+        case "connector": return String(localized: "From a connection")
+        case "web": return String(localized: "From web research")
+        case "ingest": return String(localized: "From an upload")
+        case "automation": return String(localized: "From an automation")
+        case "heartbeat": return String(localized: "From the daily check-in")
+        case "keeper": return String(localized: "From the Brain Keeper")
+        case "restore": return String(localized: "Bringing back an earlier version")
+        default: return String(localized: "From you")
+        }
     }
 }

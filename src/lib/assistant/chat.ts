@@ -37,6 +37,7 @@ import { flagsFrom, offWords, plainQuestion, retrieve, type Retrieval } from "./
 import { chooseRoute } from "./route";
 import { isSensitivity, sensitivityBadge, type Sensitivity } from "./sensitivity";
 import { foldState } from "./state";
+import { voiceOf } from "./locale";
 import { itemSteps, memoryStep, offStep, searchStep, webSteps } from "./steps";
 import { addMessage, addState, conversationRows, createConversation, ownConversation, raiseConversationSensitivity, renameConversation, touchConversation } from "./store";
 
@@ -154,7 +155,10 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
       try {
         send("start", { conversationId: turn.conversationId, userMessageId: turn.userMessageId, title: turn.title, isNew: turn.isNew });
 
-        const settings: AssistantSettings = await safe(getAssistantSettings(v), DEFAULT_SETTINGS, "settings");
+        const [settings, voice] = await Promise.all([
+          safe(getAssistantSettings(v), DEFAULT_SETTINGS as AssistantSettings, "settings"),
+          voiceOf(v),
+        ]);
         const flags = flagsFrom(settings.capabilities);
         const canWrite = scopeOf(v).canWrite;
         const memOk = memoryAllowedFor(v);
@@ -171,7 +175,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
           return r;
         });
         const recall = memOk
-          ? safe(memoryContext(v, { question: plain, limit: 12 }), { text: "", items: [] as Memory[] }, "memory").then((m) => { step(memoryStep(memoryCounts(m.items))); return m; })
+          ? safe(memoryContext(v, { question: plain, limit: 12 }), { text: "", items: [] as Memory[] }, "memory").then((m) => { step(memoryStep(memoryCounts(m.items), { family: voice.family })); return m; })
           : Promise.resolve({ text: "", items: [] as Memory[] });
         const [found, mem] = await Promise.all([retrieval, recall]);
         if (mem.items.length) void markMemoriesUsed(v, mem.items.map((m) => m.id)).catch(() => {});
@@ -215,11 +219,12 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         send("sources", { sources: ctx.citations, route });
 
         const amb = ambiguousNames(question, found.people);
-        const hints = amb.map((a) => `"${a.name}" matches ${a.options.length} people the family knows: ${a.options.map((o) => o.label).join(", ")}. If it matters for the answer and the conversation doesn't say which, ask.`);
+        const hints = amb.map((a) => `"${a.name}" matches ${a.options.length} people ${voice.family ? "the family knows" : "in this graph"}: ${a.options.map((o) => o.label).join(", ")}. If it matters for the answer and the conversation doesn't say which, ask.`);
         if (mentioned.length) hints.push(`The person pointed at ${mentioned.map((m) => `"${m.label}"`).join(", ")} in the graph with @mentions: the question is about ${mentioned.length === 1 ? "that" : "those"}, not someone else with the same name.`);
         hints.push(...webHints({ need: need.use, allowed: webOk, web, today: longDay(now, tz) }));
         const messages = buildMessages({
           viewerName: v.name, today: longDay(now, tz), timeZone: tz, context: ctx.text, history: turn.history, question,
+          graphKind: v.graphKind, graphName: v.graphName, locale: voice.locale,
           tone: (settings.tone as Tone) ?? "warm", memory: mem.text, off, hints, summary: turn.summary, canRemember: memOk && canWrite,
         });
         const filter = new ProposalStreamFilter();
@@ -247,18 +252,18 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
           } else if (!raw.trim()) {
             degraded = reasonOf(e);
             if (degraded === "error") console.error("[assistant] mux stream failed:", e);
-            raw = degradedAnswer(degraded, ctx, items);
+            raw = degradedAnswer(degraded, ctx, items, voice);
             send("delta", { text: raw });
           } else {
             console.error("[assistant] mux stream broke off:", e);
-            const note = "\n\n_(The answer was cut off because the model stopped responding.)_";
+            const note = `\n\n_(${voice.t("chat.server.cutOff")})_`;
             raw = parseProposals(parseClarify(raw).text).text + note;
             send("delta", { text: note });
           }
           if (e instanceof mux.MuxError) meta = { model: null, route: null, requestId: e.requestId };
         }
         if (stopped) {
-          raw = `${parseProposals(parseClarify(raw).text).text}\n\n_(Stopped.)_`.trim();
+          raw = `${parseProposals(parseClarify(raw).text).text}\n\n_${voice.t("chat.stopped")}_`.trim();
         }
 
         // A clarifying question replaces proposals; when no model could ask, ask about an ambiguous name ourselves.

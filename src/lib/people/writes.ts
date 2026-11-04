@@ -1,11 +1,11 @@
 /**
- * People writes (server). Node/edge writes go through gbrain (provenance: manual_edit by the user); while gbrain's
- * stubs still throw "not implemented" we fall back to direct drizzle writes that record provenance the same way.
- * `nodes.kind` isn't in gbrain's NodeInput yet, so the kind is always set here (with its own provenance row).
+ * People writes (server). Every node and fact write goes through gbrain (provenance: manual_edit by the user), so it
+ * lands in the graph's history with who and when like any other edit — including the kind, which gbrain's NodeInput
+ * now carries. Nothing here writes nodes or edges directly.
  */
-import { and, eq, or } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { edges, nodes, observations, provenance } from "@/db/schema";
+import { nodes, observations } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import * as auth from "@/lib/auth";
 import * as gbrain from "@/lib/gbrain";
@@ -33,31 +33,15 @@ export function defaultVisibility(circle: string | null | undefined): Visibility
 
 const userProv = (v: Viewer, note?: string): ProvenanceInput => ({ activity: "manual_edit", agentType: "user", agentId: v.id, confidence: 1, note });
 
-function notImplemented(e: unknown): boolean {
-  return e instanceof Error && /not implemented/i.test(e.message);
-}
-
-async function viaGbrain<T>(primary: () => Promise<T>, fallback: () => Promise<T>): Promise<T> {
-  try { return await primary(); } catch (e) { if (notImplemented(e)) return fallback(); throw e; }
-}
-
 async function safeAudit(v: Viewer, action: string, target: { type: string; id: string }, meta: Record<string, unknown> = {}) {
   try { await auth.audit(v, action, target, meta); } catch { /* audit not available yet */ }
 }
 
-type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
-async function writeProv(tx: Tx | typeof db, v: Viewer, subjectType: "node" | "edge", subjectId: string, note?: string) {
-  await tx.insert(provenance).values({ householdId: v.graphHouseholdId, graphId: v.graphId, subjectType, subjectId, activity: "manual_edit", agentType: "user", agentId: v.id, confidence: 1, note });
-}
-
-/** Set nodes.kind directly (gbrain has no kind field yet), with provenance. No-op when unchanged. */
+/** Set the node's kind through gbrain (history + provenance). No-op when unchanged. */
 async function setKind(v: Viewer, id: string, kind: string | null, opts: { onlyIfEmpty?: boolean } = {}) {
   const [cur] = await db.select({ kind: nodes.kind }).from(nodes).where(and(eq(nodes.id, id), eq(nodes.graphId, v.graphId)));
   if (!cur || cur.kind === kind || (opts.onlyIfEmpty && cur.kind)) return;
-  await db.transaction(async (tx) => {
-    await tx.update(nodes).set({ kind, updatedAt: new Date() }).where(eq(nodes.id, id));
-    await writeProv(tx, v, "node", id, `Kind set to ${kind ?? "none"}`);
-  });
+  await gbrain.updateNode(v, id, { kind }, userProv(v, `Kind set to ${kind ?? "none"}`));
 }
 
 function propsOrThrow(meta: Meta, kind: string | null, props: Record<string, unknown>, partial: boolean) {
@@ -79,17 +63,6 @@ export type CreatePersonInput = {
   relation?: { key: string; direction: "out" | "in"; otherId: string } | null;
 };
 
-async function insertPersonDirect(v: Viewer, input: { label: string; props: Record<string, unknown>; visibility: Visibility; sensitive: boolean; kind: string | null }) {
-  return db.transaction(async (tx) => {
-    const [n] = await tx.insert(nodes).values({
-      householdId: v.graphHouseholdId, graphId: v.graphId, ownerId: v.id, type: "person", kind: input.kind, label: input.label, props: input.props,
-      visibility: input.visibility, sensitive: input.sensitive,
-    }).returning();
-    await writeProv(tx, v, "node", n.id, "Added on the People page");
-    return n.id;
-  });
-}
-
 export async function createPerson(v: Viewer, input: CreatePersonInput): Promise<{ id: string; created: boolean; edgeId: string | null }> {
   if (!scopeOf(v).canWrite) throw new PeopleError(403, readOnlyMessage(v, "add people"));
   const meta = await getMeta(v);
@@ -109,13 +82,8 @@ export async function createPerson(v: Viewer, input: CreatePersonInput): Promise
     if (!findRelation(meta.model, input.relation.key)) throw new PeopleError(422, "Unknown relation");
   }
 
-  const { id, created } = await viaGbrain(
-    async () => {
-      const r = await gbrain.upsertNode(v, { type: "person", label, props, visibility, sensitive, ...({ kind: input.kind } as object) }, userProv(v, "Added on the People page"));
-      return { id: r.node.id, created: r.created };
-    },
-    async () => ({ id: await insertPersonDirect(v, { label, props, visibility, sensitive, kind: input.kind }), created: true }),
-  );
+  const r = await gbrain.upsertNode(v, { type: "person", label, props, visibility, sensitive, kind: input.kind }, userProv(v, "Added on the People page"));
+  const { id, created } = { id: r.node.id, created: r.created };
   // An existing match (entity resolution) keeps the kind it already has.
   await setKind(v, id, input.kind, { onlyIfEmpty: !created });
 
@@ -160,13 +128,7 @@ export async function updatePerson(v: Viewer, id: string, patch: UpdatePersonInp
     ...(patch.aliases ? { aliases: patch.aliases } : {}),
   };
   if (Object.keys(nodePatch).length) {
-    await viaGbrain(
-      () => gbrain.updateNode(v, id, nodePatch, userProv(v, "Edited on the person's profile")).then(() => undefined),
-      () => db.transaction(async (tx) => {
-        await tx.update(nodes).set({ ...nodePatch, ...(props ? { props: { ...node.props, ...props } } : {}), summary: patch.summary !== undefined ? patch.summary : undefined, updatedAt: new Date() }).where(eq(nodes.id, id));
-        await writeProv(tx, v, "node", id, `Edited: ${Object.keys(nodePatch).join(", ")}`);
-      }),
-    );
+    await gbrain.updateNode(v, id, nodePatch, userProv(v, "Edited on the person's profile"));
   }
   if (patch.kind !== undefined) await setKind(v, id, patch.kind);
   await safeAudit(v, "people.update", { type: "node", id }, { fields: Object.keys(patch) });
@@ -175,26 +137,7 @@ export async function updatePerson(v: Viewer, id: string, patch: UpdatePersonInp
 /* ── Edges ────────────────────────────────────────────────────────────────────────────────────────────── */
 
 async function addEdgeSafe(v: Viewer, e: { fromId: string; toId: string; relation: string; visibility: Visibility }): Promise<string> {
-  const meta = await getMeta(v);
-  const symmetric = !!findRelation(meta.model, e.relation)?.symmetric;
-  return viaGbrain(
-    async () => (await gbrain.addEdge(v, { ...e, status: "confirmed", confidence: 1 }, userProv(v, "Added on the People page"))).id,
-    async () => {
-      const sameDir = and(eq(edges.fromId, e.fromId), eq(edges.toId, e.toId));
-      const reverse = and(eq(edges.fromId, e.toId), eq(edges.toId, e.fromId));
-      const [existing] = await db.select().from(edges).where(and(eq(edges.graphId, v.graphId), eq(edges.relation, e.relation), symmetric ? or(sameDir, reverse) : sameDir));
-      return db.transaction(async (tx) => {
-        if (existing && existing.status !== "rejected" && existing.status !== "superseded") {
-          await tx.update(edges).set({ status: "confirmed", confidence: 1 }).where(eq(edges.id, existing.id));
-          await writeProv(tx, v, "edge", existing.id, "Confirmed on the People page");
-          return existing.id;
-        }
-        const [row] = await tx.insert(edges).values({ householdId: v.graphHouseholdId, graphId: v.graphId, ownerId: v.id, ...e, status: "confirmed", confidence: 1 }).returning();
-        await writeProv(tx, v, "edge", row.id, "Added on the People page");
-        return row.id;
-      });
-    },
-  );
+  return (await gbrain.addEdge(v, { ...e, status: "confirmed", confidence: 1 }, userProv(v, "Added on the People page"))).id;
 }
 
 export type AddRelationInput = {

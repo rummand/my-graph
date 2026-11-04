@@ -7,7 +7,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { edges, nodes, shares } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
-import { canReadItem, edgeSelfReadSql, nodeReadSql, type AccessCtx } from "./access";
+import { canReadItem, edgeSelfReadSql, liveNodeSql, nodeReadSql, type AccessCtx } from "./access";
 import { accessContext, isUuid } from "./index";
 import { edgeSnap, nodeSnap, type EdgeSnap, type GraphState, type NodeSnap } from "@/lib/history/pure";
 
@@ -42,7 +42,7 @@ export async function namesOfType(v: Viewer, types: string[]): Promise<{ id: str
   if (!want.length) return [];
   const ctx = await accessContext(v);
   return db.select({ id: nodes.id, type: nodes.type, label: nodes.label, aliases: nodes.aliases }).from(nodes)
-    .where(and(isNull(nodes.mergedInto), inArray(nodes.type, want as never[]), nodeReadSql(ctx, "nodes"))).limit(20_000);
+    .where(and(isNull(nodes.mergedInto), inArray(nodes.type, want as never[]), nodeReadSql(ctx, "nodes"), liveNodeSql("nodes"))).limit(20_000);
 }
 
 /** Every node and fact in the viewer's current graph, unfiltered — only for rewinding; filter with `readableState`. */

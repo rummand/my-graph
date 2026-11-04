@@ -252,3 +252,14 @@ export function statusAfterReassert(
   if (incoming.agentType === "user" && incoming.status === "confirmed") return "confirmed";
   return current;
 }
+
+/* ── Retired nodes ──────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * A retired node stays (history and evidence keep pointing at it) but is out of every list, search, mention, people
+ * page, timeline, graph view and assistant retrieval. It still opens by id, with a "Retired" notice. The SQL twin
+ * is `liveNodeSql` in ./access.
+ */
+export function isRetired(props: Record<string, unknown> | null | undefined): boolean {
+  return props?.retired === true || props?.retired === "true";
+}

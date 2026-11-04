@@ -175,3 +175,8 @@ export function sourceReadSql(ctx: AccessCtx, alias = "sources"): SQL {
   const child = ctx.role === "child" ? sql` and (not ${a}.sensitive or ${a}.owner_id = ${ctx.id})` : sql``;
   return sql`(${g} and ${ruleSql(ctx, a)}${child})`;
 }
+
+/** WHERE fragment: the node row under `alias` is not retired (props.retired). Lists use it; reads by id don't. */
+export function liveNodeSql(alias = "nodes"): SQL {
+  return sql`coalesce(${ident(alias)}.props->>'retired', '') <> 'true'`;
+}

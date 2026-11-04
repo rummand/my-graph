@@ -40,7 +40,7 @@ const messages: MessageTree = {
     },
     ics: {
       title: "Kalenderlink",
-      blurb: "Enhver kalender, du kan abonnere på med et link (.ics eller webcal://): en sportsklub, en fælles familiekalender, skoleåret.",
+      blurb: "Enhver kalender, du kan abonnere på med et link (.ics eller webcal://): en sportsklub, en fælles kalender, et hold- eller skoleskema.",
       reads: "Begivenhederne i kalenderen: titel, tid, sted og beskrivelse.",
       never: "Ændrer kalenderen eller tilgår andet end det link, du indsætter.",
       help: "Kig efter “Abonnér”, “Del” eller “Hemmelig adresse i iCal-format” i kalenderens indstillinger. Google Kalender: Indstillinger, kalenderen, Integrer kalender.",
