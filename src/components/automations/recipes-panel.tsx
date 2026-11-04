@@ -2,14 +2,16 @@
 import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
-import { Button, CitationChip, EmptyState, Field, IconButton, Input, Select, Textarea } from "@/components/ui";
+import { Button, CitationChip, EmptyState, Field, IconButton, Input, Select } from "@/components/ui";
 import type { RecipeDTO, RecipeRunResult } from "@/lib/recipes";
-import { api, when, whenInline } from "./bits";
+import { MentionField, draftFrom, storedFrom, type MentionDraft } from "@/components/memory/mention-field";
+import { api, useCopy } from "./bits";
 import type { FormSeed } from "./automation-form";
 
 export function RecipesPanel({ initial, canCreate, onMakeAutomation, onOpenRun }: {
   initial: RecipeDTO[]; canCreate: boolean; onMakeAutomation: (seed: FormSeed) => void; onOpenRun: (id: string) => void;
 }) {
+  const { t, tv } = useCopy();
   const [items, setItems] = useState(initial);
   const [editing, setEditing] = useState<RecipeDTO | "new" | null>(null);
 
@@ -24,8 +26,8 @@ export function RecipesPanel({ initial, canCreate, onMakeAutomation, onOpenRun }
         )}
       </AnimatePresence>
       {items.length === 0 ? (
-        <EmptyState title="No recipes yet" action={canCreate ? <Button onClick={() => setEditing("new")}><Plus className="size-4" aria-hidden />New recipe</Button> : undefined}>
-          A recipe is a set of instructions you use again and again, like a weekly summary or a packing list for a trip.
+        <EmptyState title={t("automations.recipes.emptyTitle")} action={canCreate ? <Button onClick={() => setEditing("new")}><Plus className="size-4" aria-hidden />{t("automations.recipes.new")}</Button> : undefined}>
+          {tv("automations.recipes.empty")}
         </EmptyState>
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">
@@ -37,7 +39,7 @@ export function RecipesPanel({ initial, canCreate, onMakeAutomation, onOpenRun }
           ))}
         </ul>
       )}
-      {canCreate && items.length > 0 && !editing && <Button variant="secondary" onClick={() => setEditing("new")}><Plus className="size-4" aria-hidden />New recipe</Button>}
+      {canCreate && items.length > 0 && !editing && <Button variant="secondary" onClick={() => setEditing("new")}><Plus className="size-4" aria-hidden />{t("automations.recipes.new")}</Button>}
     </div>
   );
 }
@@ -45,6 +47,7 @@ export function RecipesPanel({ initial, canCreate, onMakeAutomation, onOpenRun }
 function RecipeItem({ r, canCreate, onEdit, onDelete, onMakeAutomation, onOpenRun }: {
   r: RecipeDTO; canCreate: boolean; onEdit: () => void; onDelete: () => void; onMakeAutomation: (s: FormSeed) => void; onOpenRun: (id: string) => void;
 }) {
+  const { t, whenInline } = useCopy();
   const [values, setValues] = useState<Record<string, string>>({});
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -58,14 +61,14 @@ function RecipeItem({ r, canCreate, onEdit, onDelete, onMakeAutomation, onOpenRu
       setResult(await api<RecipeRunResult>(`/api/recipes/${r.id}/run`, { method: "POST", json: { values } }));
       setAsking(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't run it.");
+      setError(e instanceof Error ? e.message : t("automations.recipes.couldNotRun"));
     } finally {
       setBusy(false);
     }
   }
   async function remove() {
-    if (!window.confirm(`Remove the recipe “${r.name}”?`)) return;
-    try { await api(`/api/recipes/${r.id}`, { method: "DELETE" }); onDelete(); } catch (e) { setError(e instanceof Error ? e.message : "Couldn't remove it."); }
+    if (!window.confirm(t("automations.recipes.confirmRemove", { name: r.name }))) return;
+    try { await api(`/api/recipes/${r.id}`, { method: "DELETE" }); onDelete(); } catch (e) { setError(e instanceof Error ? e.message : t("automations.recipes.couldNotRemove")); }
   }
 
   return (
@@ -77,8 +80,8 @@ function RecipeItem({ r, canCreate, onEdit, onDelete, onMakeAutomation, onOpenRu
         </div>
         {r.canEdit && (
           <div className="-mr-1 -mt-1 flex">
-            <IconButton label={`Edit ${r.name}`} onClick={onEdit}><Pencil className="size-4" /></IconButton>
-            <IconButton label={`Remove ${r.name}`} onClick={remove}><Trash2 className="size-4" /></IconButton>
+            <IconButton label={t("automations.recipes.edit", { name: r.name })} onClick={onEdit}><Pencil className="size-4" /></IconButton>
+            <IconButton label={t("automations.recipes.remove", { name: r.name })} onClick={remove}><Trash2 className="size-4" /></IconButton>
           </div>
         )}
       </div>
@@ -87,15 +90,15 @@ function RecipeItem({ r, canCreate, onEdit, onDelete, onMakeAutomation, onOpenRu
           {r.placeholders.map((p) => (
             <Field key={p} label={p[0].toUpperCase() + p.slice(1)}>
               <Input value={values[p] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [p]: e.target.value }))} maxLength={200}
-                placeholder={p === "trip" ? "the summer house in Skagen" : undefined} autoFocus={p === r.placeholders[0]} />
+                placeholder={p === "trip" || p === "rejse" ? t("automations.recipes.tripPlaceholder") : undefined} autoFocus={p === r.placeholders[0]} />
             </Field>
           ))}
         </div>
       )}
       <div className="mt-auto flex flex-wrap items-center gap-2 pt-3">
-        <Button size="sm" onClick={run} disabled={!canCreate || busy}>{busy ? "Running…" : asking ? "Run it" : "Run"}</Button>
-        {canCreate && <Button size="sm" variant="ghost" onClick={() => onMakeAutomation({ name: r.name.replace(/<([^<>]+)>/g, "…"), recipeId: r.id })}>Make it an automation</Button>}
-        {r.lastRun && !result && <button onClick={() => onOpenRun(r.lastRun!.id)} className="text-sm text-muted hover:text-fg">Last run {whenInline(r.lastRun.startedAt)}</button>}
+        <Button size="sm" onClick={run} disabled={!canCreate || busy}>{busy ? t("automations.recipes.running") : asking ? t("automations.recipes.runIt") : t("automations.recipes.run")}</Button>
+        {canCreate && <Button size="sm" variant="ghost" onClick={() => onMakeAutomation({ name: r.name.replace(/<([^<>]+)>/g, "…"), recipeId: r.id })}>{t("automations.recipes.makeAutomation")}</Button>}
+        {r.lastRun && !result && <button onClick={() => onOpenRun(r.lastRun!.id)} className="text-sm text-muted hover:text-fg">{t("automations.recipes.lastRun", { when: whenInline(r.lastRun.startedAt) })}</button>}
       </div>
       {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
       <AnimatePresence initial={false}>
@@ -103,7 +106,7 @@ function RecipeItem({ r, canCreate, onEdit, onDelete, onMakeAutomation, onOpenRu
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
             <div className="mt-3 rounded-md bg-surface-2 p-3 text-sm">
               {result.status === "failed" ? (
-                <p className="text-danger">{result.summary} Check that the assistant is reachable, then try again.</p>
+                <p className="text-danger">{result.summary} {t("automations.recipes.failedHint")}</p>
               ) : (
                 <div className="whitespace-pre-line leading-relaxed">{result.text}</div>
               )}
@@ -113,9 +116,9 @@ function RecipeItem({ r, canCreate, onEdit, onDelete, onMakeAutomation, onOpenRu
                     href={c.sourceId ? `/library/${c.sourceId}` : c.nodeId ? `/node/${c.nodeId}` : undefined} />)}
                 </div>
               )}
-              {result.skipped.length > 0 && <p className="mt-2 text-muted">Skipped: {result.skipped.join("; ")}.</p>}
-              {result.suggestionIds.length > 0 && <p className="mt-2 text-muted">It left {result.suggestionIds.length} suggestion{result.suggestionIds.length === 1 ? "" : "s"} in your inbox.</p>}
-              <button className="mt-2 text-accent hover:underline" onClick={() => onOpenRun(result.runId)}>See the run</button>
+              {result.skipped.length > 0 && <p className="mt-2 text-muted">{t("automations.recipes.skipped", { list: result.skipped.join("; ") })}</p>}
+              {result.suggestionIds.length > 0 && <p className="mt-2 text-muted">{t("automations.recipes.leftSuggestions", { count: result.suggestionIds.length })}</p>}
+              <button className="mt-2 text-accent hover:underline" onClick={() => onOpenRun(result.runId)}>{t("automations.recipes.seeRun")}</button>
             </div>
           </motion.div>
         )}
@@ -125,9 +128,10 @@ function RecipeItem({ r, canCreate, onEdit, onDelete, onMakeAutomation, onOpenRu
 }
 
 function RecipeForm({ recipe, onSaved, onCancel }: { recipe: RecipeDTO | null; onSaved: (r: RecipeDTO) => void; onCancel: () => void }) {
+  const { t, tv, vr } = useCopy();
   const [name, setName] = useState(recipe?.name ?? "");
   const [description, setDescription] = useState(recipe?.description ?? "");
-  const [prompt, setPrompt] = useState(recipe?.prompt ?? "");
+  const [prompt, setPrompt] = useState<MentionDraft>(() => draftFrom(recipe?.prompt ?? ""));
   const [visibility, setVisibility] = useState(recipe?.visibility ?? "household");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -135,35 +139,35 @@ function RecipeForm({ recipe, onSaved, onCancel }: { recipe: RecipeDTO | null; o
     e.preventDefault();
     setBusy(true); setError(null);
     try {
-      const body = { name, description, prompt, visibility };
+      const body = { name, description, prompt: storedFrom(prompt), visibility };
       const r = recipe
         ? await api<{ recipe: RecipeDTO }>(`/api/recipes/${recipe.id}`, { method: "PATCH", json: body })
         : await api<{ recipe: RecipeDTO }>("/api/recipes", { method: "POST", json: body });
       onSaved(r.recipe);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save it.");
+      setError(err instanceof Error ? err.message : t("automations.recipes.couldNotSave"));
     } finally {
       setBusy(false);
     }
   }
   return (
     <form onSubmit={submit} className="space-y-4 rounded-lg bg-surface p-4">
-      <p className="font-medium">{recipe ? "Edit recipe" : "New recipe"}</p>
-      <Field label="Name"><Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder="Packing list for <trip>" autoFocus /></Field>
-      <Field label="What it's for (optional)"><Input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} /></Field>
-      <Field label="Instructions" hint="Put a word in <angle brackets> to be asked for it each time, like <trip> or <child>.">
-        <Textarea rows={4} value={prompt} onChange={(e) => setPrompt(e.target.value)} maxLength={4000} />
+      <p className="font-medium">{recipe ? t("automations.recipes.formEdit") : t("automations.recipes.formNew")}</p>
+      <Field label={t("automations.recipes.name")}><Input value={name} onChange={(e) => setName(e.target.value)} maxLength={80} placeholder={tv("automations.recipes.namePlaceholder")} autoFocus /></Field>
+      <Field label={t("automations.recipes.purpose")}><Input value={description} onChange={(e) => setDescription(e.target.value)} maxLength={300} /></Field>
+      <Field label={t("automations.recipes.instructions")} hint={tv("automations.recipes.instructionsHint")}>
+        <MentionField rows={4} draft={prompt} onDraft={setPrompt} maxLength={4000} />
       </Field>
-      <Field label="Who can use it">
+      <Field label={t("automations.recipes.whoCanUse")}>
         <Select value={visibility} onChange={(e) => setVisibility(e.target.value as RecipeDTO["visibility"])} className="max-w-xs">
-          <option value="household">Everyone in this graph</option>
-          <option value="parents">Parents only</option>
-          <option value="private">Only me</option>
+          <option value="household">{t("automations.visibility.household")}</option>
+          <option value="parents">{t(`automations.visibility.parents.${vr}`)}</option>
+          <option value="private">{t("automations.visibility.private")}</option>
         </Select>
       </Field>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" disabled={busy}>{busy ? "Saving…" : recipe ? "Save changes" : "Add recipe"}</Button>
-        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" disabled={busy}>{busy ? t("automations.recipes.saving") : recipe ? t("automations.recipes.saveChanges") : t("automations.recipes.add")}</Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>{t("automations.recipes.cancel")}</Button>
         {error && <span role="alert" className="text-sm text-danger">{error}</span>}
       </div>
     </form>

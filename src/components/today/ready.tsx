@@ -7,6 +7,7 @@ import { clsx } from "clsx";
 import { CitationChip, IconButton } from "@/components/ui";
 import type { Citation } from "@/db/schema";
 import { splitCitations } from "@/lib/briefs/context";
+import { useT } from "@/lib/i18n/client";
 import { hrefs, TodaySection } from "./section";
 
 type Question = { q: string; why: string };
@@ -37,10 +38,11 @@ function Answer({ text, citations }: { text: string; citations: Citation[] }) {
 }
 
 /**
- * "Ready when you are": a few questions worth asking now, written from the family's own data, and the family's
- * saved recipes, which run right here and show their answer with sources.
+ * "Ready when you are": a few questions worth asking now, written from the graph's own data (and the graph template's
+ * examples), and the saved recipes, which run right here and show their answer with sources.
  */
 export function ReadyWhenYouAre({ questions, recipes }: { questions: Question[]; recipes: RecipeChip[] | null }) {
+  const t = useT();
   const [running, setRunning] = useState<string | null>(null);
   const [result, setResult] = useState<RunResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -50,10 +52,10 @@ export function ReadyWhenYouAre({ questions, recipes }: { questions: Question[];
     try {
       const res = await fetch(`/api/recipes/${encodeURIComponent(r.id)}/run`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" });
       const body = (await res.json().catch(() => ({}))) as { runId?: string; text?: string; citations?: Citation[]; error?: string };
-      if (!res.ok || typeof body.text !== "string") throw new Error(body.error ?? `“${r.name}” didn't run. Try again in a moment.`);
-      setResult({ recipeId: r.id, name: r.name, text: body.text.trim() || "It ran, but had nothing to say.", citations: body.citations ?? [], runId: body.runId ?? null });
+      if (!res.ok || typeof body.text !== "string") throw new Error(body.error ?? t("today.ready.didntRun", { name: r.name }));
+      setResult({ recipeId: r.id, name: r.name, text: body.text.trim() || t("today.ready.nothing"), citations: body.citations ?? [], runId: body.runId ?? null });
     } catch (e) {
-      setError(e instanceof TypeError ? "We couldn't reach My Graph. Check your connection and try again." : e instanceof Error ? e.message : "That didn't run. Try again.");
+      setError(e instanceof TypeError ? t("today.error.offline") : e instanceof Error ? e.message : t("today.ready.failed"));
     } finally {
       setRunning(null);
     }
@@ -62,7 +64,7 @@ export function ReadyWhenYouAre({ questions, recipes }: { questions: Question[];
   if (!questions.length && !recipes?.length) return null;
 
   return (
-    <TodaySection id="ready" title="Ready when you are">
+    <TodaySection id="ready" title={t("today.ready.title")}>
       <ul className="-mx-2 grid gap-x-4 sm:grid-cols-2">
         {questions.map((q) => (
           <li key={q.q} className="min-w-0">
@@ -79,7 +81,7 @@ export function ReadyWhenYouAre({ questions, recipes }: { questions: Question[];
 
       {recipes && recipes.length > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-sm text-muted">Your recipes</span>
+          <span className="mr-1 text-sm text-muted">{t("today.ready.recipes")}</span>
           {recipes.slice(0, 6).map((r) => (
             <button
               key={r.id}
@@ -97,7 +99,7 @@ export function ReadyWhenYouAre({ questions, recipes }: { questions: Question[];
               {r.name}
             </button>
           ))}
-          <Link href="/automations?view=recipes" className="ml-1 text-sm text-accent hover:underline">Manage</Link>
+          <Link href="/automations?view=recipes" className="ml-1 text-sm text-accent hover:underline">{t("today.ready.manage")}</Link>
         </div>
       )}
 
@@ -109,10 +111,10 @@ export function ReadyWhenYouAre({ questions, recipes }: { questions: Question[];
               <div className="mt-3 rounded-lg bg-surface p-4">
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <p className="text-sm text-muted">{result.name}</p>
-                  <IconButton label="Close" onClick={() => setResult(null)}><X aria-hidden className="size-4" /></IconButton>
+                  <IconButton label={t("common.close")} onClick={() => setResult(null)}><X aria-hidden className="size-4" /></IconButton>
                 </div>
                 <Answer text={result.text} citations={result.citations} />
-                {result.runId && <Link href={`/automations?run=${encodeURIComponent(result.runId)}`} className="mt-2 inline-block text-sm text-accent hover:underline">See how it worked</Link>}
+                {result.runId && <Link href={`/automations?run=${encodeURIComponent(result.runId)}`} className="mt-2 inline-block text-sm text-accent hover:underline">{t("today.ready.howItWorked")}</Link>}
               </div>
             </motion.div>
           )}

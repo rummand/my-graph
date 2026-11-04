@@ -12,11 +12,14 @@ import { clsx } from "clsx";
 import { AlertTriangle, ArrowLeft, Check, CloudOff, History, LoaderCircle, Lock, Pencil, Sparkles, Trash2, Users, Waypoints } from "lucide-react";
 import { Button, buttonClass, Select } from "@/components/ui";
 import type { Doc } from "@/lib/wiki/doc";
-import { VISIBILITIES, VISIBILITY_HINT, VISIBILITY_LABEL, type Visibility } from "@/lib/wiki/labels";
+import { useLocale, useT, useTimeZone } from "@/lib/i18n/client";
+import type { TFn } from "@/lib/i18n/core";
+import { VISIBILITIES, type Visibility } from "@/lib/wiki/labels";
+import { visibilityHint, visibilityLabel, visibilitySentence } from "./copy";
 import type { AcceptInfo, AcceptResult } from "./cowrite/cowrite-panel";
 import { clearCowrite } from "./cowrite/extension";
 import { DocView, isEmptyDoc, type MentionInfo } from "./doc-view";
-import { fullWhen, sentenceWhen } from "./when";
+import { makeWhen } from "./when";
 import { WikiEditor } from "./wiki-editor";
 
 export type ClientPage = {
@@ -33,20 +36,19 @@ type SaveState =
 
 const AUTOSAVE_MS = 1500;
 
-/** Who can see a page, as a sentence for the line under the title. */
-const VISIBILITY_SENTENCE: Record<Visibility, string> = {
-  private: "Only you can see this page.",
-  parents: "You and the other parents can see this page.",
-  household: "Everyone in the family can see this page.",
-};
-
 function When({ iso }: { iso: string }) {
+  const t = useT();
+  const locale = useLocale();
+  const timeZone = useTimeZone();
+  const when = makeWhen({ t, locale, timeZone });
   const d = new Date(iso);
-  return <time dateTime={iso} title={fullWhen(d)} suppressHydrationWarning>{sentenceWhen(d)}</time>;
+  return <time dateTime={iso} title={when.full(d)} suppressHydrationWarning>{when.sentence(d)}</time>;
 }
 
-export function WikiPageClient({ initial, startEditing, startAsking = false, mentions, children }: {
+export function WikiPageClient({ initial, startEditing, startAsking = false, mentions, family = false, children }: {
   initial: ClientPage; startEditing: boolean;
+  /** A family graph: visibility reads as parents / whole family, examples are family ones. */
+  family?: boolean;
   /** Open the editor with "Ask the assistant to write" ready (from ?assist=1). */
   startAsking?: boolean;
   /** Type and access for each mentioned node, so mentions render as the right chip. */
@@ -55,6 +57,9 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
   children?: React.ReactNode;
 }) {
   const router = useRouter();
+  const t = useT();
+  const tRef = useRef<TFn>(t);
+  tRef.current = t;
   const [page, setPage] = useState(initial);
   const [editing, setEditing] = useState(startEditing && initial.can.edit);
   const [title, setTitle] = useState(initial.title);
@@ -96,11 +101,11 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
       });
       const data = await res.json().catch(() => ({}));
       if (res.status === 409 && data.current) {
-        setState({ kind: "conflict", theirs: data.current, message: data.error ?? "Someone else changed this page while you were editing it." });
+        setState({ kind: "conflict", theirs: data.current, message: data.error ?? tRef.current("wiki.page.conflict.fallback") });
         return false;
       }
       if (!res.ok) {
-        setState({ kind: "error", message: data.error ?? (res.status === 401 ? "You've been signed out. Sign in again in another tab, then retry." : "Couldn't save.") });
+        setState({ kind: "error", message: data.error ?? tRef.current(res.status === 401 ? "wiki.page.save.signedOut" : "wiki.page.save.failed") });
         return false;
       }
       if (data.page) {
@@ -112,7 +117,7 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
       setState({ kind: dirty() ? "saving" : "saved" });
       return true;
     } catch {
-      setState({ kind: "error", message: "You seem to be offline. Your text is still here." });
+      setState({ kind: "error", message: tRef.current("wiki.page.save.offline") });
       return false;
     } finally {
       inFlight.current = false;
@@ -187,7 +192,7 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
    * whole page as the assistant's revision, so history shows exactly what each of them changed.
    */
   const acceptDraft = async (fullDoc: Doc, info: AcceptInfo): Promise<AcceptResult> => {
-    if (!(await flush())) return { ok: false, error: "Your own changes couldn't be saved first, so the draft isn't kept yet. Fix the save problem shown at the top, then accept again." };
+    if (!(await flush())) return { ok: false, error: t("wiki.page.accept.ownFirst") };
     try {
       const res = await fetch(`/api/wiki/${encodeURIComponent(page.slug)}/cowrite/accept`, {
         method: "POST", headers: { "content-type": "application/json" },
@@ -196,8 +201,8 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         return { ok: false, error: res.status === 409
-          ? `${data.error ?? "Someone else saved this page."} The draft is still here: copy what you need, then undo it and ask again.`
-          : data.error ?? "Couldn't keep the draft. Try again." };
+          ? t("wiki.page.accept.conflict", { error: data.error ?? t("wiki.page.accept.someoneSaved") })
+          : data.error ?? t("wiki.page.accept.failed") };
       }
       version.current = data.page.version;
       doc.current = fullDoc;
@@ -206,7 +211,7 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
       setState({ kind: "saved" });
       return { ok: true };
     } catch {
-      return { ok: false, error: "You seem to be offline. The draft is still here; accept again when you're back." };
+      return { ok: false, error: t("wiki.page.accept.offline") };
     }
   };
 
@@ -227,10 +232,10 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
         method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ visibility: v }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Couldn't change who can see this page.");
+      if (!res.ok) throw new Error(data.error ?? t("wiki.page.visFailed"));
       setPage((p) => ({ ...p, visibility: v }));
     } catch (e) {
-      setVisError(e instanceof Error ? e.message : "Couldn't change who can see this page.");
+      setVisError(e instanceof Error ? e.message : t("wiki.page.visFailed"));
     } finally {
       setVisBusy(false);
     }
@@ -243,8 +248,8 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
 
   const byline = (
     <p className="mt-3 text-sm text-muted">
-      {page.updatedByName ?? "Someone"} edited this <When iso={page.updatedAt} />.
-      {!page.isOwner && <> {page.ownerName} started it.</>}
+      {t("wiki.page.editedBy", { name: page.updatedByName ?? t("wiki.page.someone") })} <When iso={page.updatedAt} />.
+      {!page.isOwner && <> {t("wiki.page.startedBy", { name: page.ownerName })}</>}
     </p>
   );
 
@@ -254,33 +259,33 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
         {/* Above the sheet: the way back, and what you can do with the page. */}
         <div className="mb-3 flex min-h-9 items-center justify-between gap-3">
           <Link href="/wiki" className="-ml-2 inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-sm text-muted transition-colors hover:bg-surface-2 hover:text-fg">
-            <ArrowLeft aria-hidden className="size-4" />Wiki
+            <ArrowLeft aria-hidden className="size-4" />{t("wiki.title")}
           </Link>
           {!editing && (
             <div className="flex items-center gap-1.5">
-              <Link href={historyHref} className={buttonClass("ghost", "sm")}><History aria-hidden className="size-4" />History</Link>
-              {page.can.edit && <Button size="sm" variant="ghost" onClick={beginAsking}><Sparkles aria-hidden className="size-4 text-accent" /><span className="hidden sm:inline">Ask the assistant</span><span className="sm:hidden">Ask</span></Button>}
-              {page.can.edit && <Button size="sm" onClick={beginEditing}><Pencil aria-hidden className="size-3.5" />Edit</Button>}
+              <Link href={historyHref} className={buttonClass("ghost", "sm")}><History aria-hidden className="size-4" />{t("wiki.page.history")}</Link>
+              {page.can.edit && <Button size="sm" variant="ghost" onClick={beginAsking}><Sparkles aria-hidden className="size-4 text-accent" /><span className="hidden sm:inline">{t("wiki.page.ask")}</span><span className="sm:hidden">{t("wiki.page.askShort")}</span></Button>}
+              {page.can.edit && <Button size="sm" onClick={beginEditing}><Pencil aria-hidden className="size-3.5" />{t("wiki.page.edit")}</Button>}
             </div>
           )}
         </div>
 
         <article className={clsx("rounded-lg bg-surface", !editing && "px-5 pb-14 pt-8 sm:px-12 sm:pt-12 lg:px-16")} aria-labelledby={editing ? undefined : `${titleId}-h`}>
           {editing ? (
-            <WikiEditor pageId={page.id} pageVisibility={page.visibility} initialContent={doc.current} onChange={onDocChange} onReady={onReady} labelledBy={titleId}
+            <WikiEditor pageId={page.id} pageVisibility={page.visibility} family={family} initialContent={doc.current} onChange={onDocChange} onReady={onReady} labelledBy={titleId}
               cowrite={{ slug: page.slug, openSignal: askSignal, onAccept: acceptDraft, onPendingChange: onDraftPending }}
               toolbarEnd={<>
                 <SaveIndicator state={state} onRetry={() => void save()} />
                 <Button size="sm" onClick={() => void done()} disabled={state.kind === "conflict" || draftPending}
-                  title={draftPending ? "Accept or undo the assistant's draft first" : undefined}>Done</Button>
+                  title={draftPending ? t("wiki.page.draftFirst") : undefined}>{t("wiki.page.done")}</Button>
               </>}>
-              <label htmlFor={titleId} className="sr-only">Page title</label>
-              <input id={titleId} value={title} maxLength={200} placeholder="Untitled page"
+              <label htmlFor={titleId} className="sr-only">{t("wiki.page.titleLabel")}</label>
+              <input id={titleId} value={title} maxLength={200} placeholder={t("wiki.newPage.untitled")}
                 onChange={(e) => { setTitle(e.target.value); if (e.target.value.trim()) { titleRef.current = e.target.value; changed(); } }}
                 onKeyDown={(e) => { if (e.key === "Enter" || (e.key === "ArrowDown" && e.currentTarget.selectionStart === e.currentTarget.value.length)) { e.preventDefault(); editorRef.current?.commands.focus("start"); } }}
                 className="block w-full max-w-[68ch] bg-transparent p-0 text-[28px]/[1.2] font-semibold tracking-[-0.02em] text-fg caret-accent outline-none placeholder:text-muted/60" style={{ outline: "none" }} />
               {!title.trim()
-                ? <p className="mt-3 text-sm text-warn" role="alert">A page needs a title. The old one stays until you type a new one.</p>
+                ? <p className="mt-3 text-sm text-warn" role="alert">{t("wiki.page.needTitle")}</p>
                 : byline}
             </WikiEditor>
           ) : (
@@ -289,13 +294,13 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
               {byline}
               {isEmptyDoc(page.content) ? (
                 <div className="mt-8 max-w-[68ch] font-read text-[17px] leading-[1.75] text-muted">
-                  <p>Nothing is written here yet.</p>
+                  <p>{t("wiki.page.empty")}</p>
                   {page.can.edit && (
                     <>
-                      <p className="mt-1">Type @ to mention a person, place or event, and [[ to link another page.</p>
+                      <p className="mt-1">{t("wiki.page.emptyHint")}</p>
                       <div className="mt-5 flex flex-wrap gap-2 font-sans">
-                        <Button variant="secondary" onClick={beginEditing}><Pencil aria-hidden className="size-3.5" />Start writing</Button>
-                        <Button variant="ghost" onClick={beginAsking}><Sparkles aria-hidden className="size-4 text-accent" />Ask the assistant to draft it</Button>
+                        <Button variant="secondary" onClick={beginEditing}><Pencil aria-hidden className="size-3.5" />{t("wiki.page.startWriting")}</Button>
+                        <Button variant="ghost" onClick={beginAsking}><Sparkles aria-hidden className="size-4 text-accent" />{t("wiki.page.askDraft")}</Button>
                       </div>
                     </>
                   )}
@@ -309,45 +314,45 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
 
         <dialog ref={conflictRef} aria-labelledby={`${titleId}-conflict`} onCancel={(e) => e.preventDefault()}
           className="m-auto w-[min(32rem,calc(100vw-2rem))] rounded-lg bg-surface p-6 text-fg shadow-float backdrop:bg-fg/30">
-          <h2 id={`${titleId}-conflict`} className="flex items-center gap-2 text-lg font-semibold"><AlertTriangle aria-hidden className="size-5 text-warn" />Someone else just saved this page</h2>
-          <p className="mt-2 text-sm text-muted">{state.kind === "conflict" ? state.message : null} Choose which version to keep.</p>
+          <h2 id={`${titleId}-conflict`} className="flex items-center gap-2 text-lg font-semibold"><AlertTriangle aria-hidden className="size-5 text-warn" />{t("wiki.page.conflict.title")}</h2>
+          <p className="mt-2 text-sm text-muted">{state.kind === "conflict" ? state.message : null} {t("wiki.page.conflict.choose")}</p>
           <dl className="mt-4 space-y-3 text-sm">
-            <div><dt className="font-medium">Load their version</dt><dd className="text-muted">Changes you made since your last save are dropped.</dd></div>
-            <div><dt className="font-medium">Keep mine</dt><dd className="text-muted">Your version replaces theirs. Theirs stays in the history, so nothing is lost for good.</dd></div>
+            <div><dt className="font-medium">{t("wiki.page.conflict.loadTheirs")}</dt><dd className="text-muted">{t("wiki.page.conflict.loadTheirsHint")}</dd></div>
+            <div><dt className="font-medium">{t("wiki.page.conflict.keepMine")}</dt><dd className="text-muted">{t("wiki.page.conflict.keepMineHint")}</dd></div>
           </dl>
           <div className="mt-6 flex flex-wrap justify-end gap-2">
-            <Button variant="secondary" onClick={loadTheirs}>Load their version</Button>
-            <Button onClick={overwrite}>Keep mine</Button>
+            <Button variant="secondary" onClick={loadTheirs}>{t("wiki.page.conflict.loadTheirs")}</Button>
+            <Button onClick={overwrite}>{t("wiki.page.conflict.keepMine")}</Button>
           </div>
         </dialog>
       </div>
 
       {/* The quiet column: who can see it, what links here, who is mentioned. */}
-      <aside className="space-y-8 text-sm xl:pt-12" aria-label="About this page">
+      <aside className="space-y-8 text-sm xl:pt-12" aria-label={t("wiki.page.about")}>
         <section aria-labelledby={`${titleId}-vis-h`}>
-          <h2 id={`${titleId}-vis-h`} className="mb-2 font-semibold">Who can see this</h2>
+          <h2 id={`${titleId}-vis-h`} className="mb-2 font-semibold">{t("wiki.page.whoCanSee")}</h2>
           {page.can.changeVisibility ? (
             <>
-              <label htmlFor={`${titleId}-vis`} className="sr-only">Who can see this</label>
+              <label htmlFor={`${titleId}-vis`} className="sr-only">{t("wiki.page.whoCanSee")}</label>
               <Select id={`${titleId}-vis`} value={page.visibility} disabled={visBusy} aria-describedby={`${titleId}-vis-hint`} className="h-8 text-sm"
                 onChange={(e) => void changeVisibility(e.target.value as Visibility)}>
-                {VISIBILITIES.map((v) => <option key={v} value={v}>{VISIBILITY_LABEL[v]}</option>)}
+                {VISIBILITIES.map((v) => <option key={v} value={v}>{visibilityLabel(t, v, family)}</option>)}
               </Select>
-              <p id={`${titleId}-vis-hint`} className="mt-2 text-muted">{VISIBILITY_HINT[page.visibility]}</p>
+              <p id={`${titleId}-vis-hint`} className="mt-2 text-muted">{visibilityHint(t, page.visibility, family)}</p>
               {visError && <p role="alert" className="mt-2 text-danger">{visError}</p>}
             </>
           ) : (
-            <p className="flex items-start gap-2 text-muted"><VisIcon aria-hidden className="mt-0.5 size-4 shrink-0" />{VISIBILITY_SENTENCE[page.visibility]}</p>
+            <p className="flex items-start gap-2 text-muted"><VisIcon aria-hidden className="mt-0.5 size-4 shrink-0" />{visibilitySentence(t, page.visibility, family)}</p>
           )}
         </section>
         {children}
-        <section className="space-y-1" aria-label="More">
+        <section className="space-y-1" aria-label={t("wiki.page.more")}>
           <Link href={historyHref} className="-ml-2 flex h-8 items-center gap-2 rounded-md px-2 text-muted transition-colors hover:bg-surface-2 hover:text-fg">
-            <History aria-hidden className="size-4" />Every saved version
+            <History aria-hidden className="size-4" />{t("wiki.page.everyVersion")}
           </Link>
           {page.nodeId && (
             <Link href={`/node/${page.nodeId}`} className="-ml-2 flex h-8 items-center gap-2 rounded-md px-2 text-muted transition-colors hover:bg-surface-2 hover:text-fg">
-              <Waypoints aria-hidden className="size-4" />Show in the graph
+              <Waypoints aria-hidden className="size-4" />{t("wiki.page.showInGraph")}
             </Link>
           )}
           {page.can.delete && <DeleteButton slug={page.slug} title={page.title} />}
@@ -358,16 +363,17 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
 }
 
 function SaveIndicator({ state, onRetry }: { state: SaveState; onRetry: () => void }) {
+  const t = useT();
   return (
     <span role="status" aria-live="polite" className="inline-flex items-center gap-1.5 whitespace-nowrap text-sm">
-      {state.kind === "saved" && <><Check aria-hidden className="size-4 text-muted" /><span className="text-muted">Saved</span></>}
-      {state.kind === "saving" && <><LoaderCircle aria-hidden className="size-4 animate-spin text-muted" /><span className="text-muted">Saving</span></>}
-      {state.kind === "conflict" && <><AlertTriangle aria-hidden className="size-4 text-warn" /><span className="text-warn">Not saved<span className="hidden sm:inline">: someone else edited</span></span></>}
+      {state.kind === "saved" && <><Check aria-hidden className="size-4 text-muted" /><span className="text-muted">{t("wiki.page.save.saved")}</span></>}
+      {state.kind === "saving" && <><LoaderCircle aria-hidden className="size-4 animate-spin text-muted" /><span className="text-muted">{t("wiki.page.save.saving")}</span></>}
+      {state.kind === "conflict" && <><AlertTriangle aria-hidden className="size-4 text-warn" /><span className="text-warn">{t("wiki.page.save.notSaved")}<span className="hidden sm:inline">{t("wiki.page.save.someoneElse")}</span></span></>}
       {state.kind === "error" && (
         <>
           <CloudOff aria-hidden className="size-4 text-danger" />
-          <span className="hidden text-danger sm:inline" title={state.message}>Not saved</span>
-          <button type="button" onClick={onRetry} className="rounded font-medium text-danger underline underline-offset-2">Retry</button>
+          <span className="hidden text-danger sm:inline" title={state.message}>{t("wiki.page.save.notSaved")}</span>
+          <button type="button" onClick={onRetry} className="rounded font-medium text-danger underline underline-offset-2">{t("wiki.page.save.retry")}</button>
           <span className="sr-only">{state.message}</span>
         </>
       )}
@@ -377,6 +383,7 @@ function SaveIndicator({ state, onRetry }: { state: SaveState; onRetry: () => vo
 
 function DeleteButton({ slug, title }: { slug: string; title: string }) {
   const router = useRouter();
+  const t = useT();
   const ref = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -386,28 +393,28 @@ function DeleteButton({ slug, title }: { slug: string; title: string }) {
     try {
       const res = await fetch(`/api/wiki/${encodeURIComponent(slug)}`, { method: "DELETE" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Couldn't delete the page.");
+      if (!res.ok) throw new Error(data.error ?? t("wiki.page.delete.failed"));
       ref.current?.close();
       router.push("/wiki");
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't delete the page.");
+      setError(e instanceof Error ? e.message : t("wiki.page.delete.failed"));
       setBusy(false);
     }
   };
   return (
     <>
       <button type="button" className="-ml-2 flex h-8 items-center gap-2 rounded-md px-2 text-muted transition-colors hover:bg-danger-tint hover:text-danger" onClick={() => ref.current?.showModal()}>
-        <Trash2 aria-hidden className="size-4" />Delete page
+        <Trash2 aria-hidden className="size-4" />{t("wiki.page.delete.button")}
       </button>
       <dialog ref={ref} aria-labelledby={id}
         className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-lg bg-surface p-6 text-fg shadow-float backdrop:bg-fg/30">
-        <h2 id={id} className="text-lg font-semibold">Delete “{title}”?</h2>
-        <p className="mt-2 text-sm text-muted">The page and its whole history are removed for everyone. Links to it from other pages will stop working. This can&apos;t be undone.</p>
+        <h2 id={id} className="text-lg font-semibold">{t("wiki.page.delete.title", { title })}</h2>
+        <p className="mt-2 text-sm text-muted">{t("wiki.page.delete.body")}</p>
         {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
         <div className="mt-6 flex justify-end gap-2">
-          <Button variant="secondary" onClick={() => ref.current?.close()} disabled={busy}>Cancel</Button>
-          <Button variant="danger" onClick={() => void remove()} disabled={busy}>{busy ? "Deleting…" : "Delete page"}</Button>
+          <Button variant="secondary" onClick={() => ref.current?.close()} disabled={busy}>{t("wiki.page.delete.cancel")}</Button>
+          <Button variant="danger" onClick={() => void remove()} disabled={busy}>{busy ? t("wiki.page.delete.deleting") : t("wiki.page.delete.button")}</Button>
         </div>
       </dialog>
     </>

@@ -5,21 +5,21 @@ import { users } from "@/db/schema";
 import { AuthFrame } from "../login/auth-frame";
 import { Mark } from "@/components/shell";
 import { SetupForm } from "./setup-form";
+import { getT } from "@/lib/i18n";
 
-export const metadata: Metadata = { title: "Set up My Graph" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("auth.setup.meta") };
+}
 export const dynamic = "force-dynamic";
 
 /** First run only: once anyone has an account, this page sends people to sign in. */
 export default async function SetupPage() {
   const [anyUser] = await db.select({ id: users.id }).from(users).limit(1);
   if (anyUser) redirect("/login");
+  const t = await getT();
   return (
-    <AuthFrame title="Let's set up your family"
-      lead="Two short steps. It takes about a minute."
-      welcome={{
-        title: "A private place for everything your family knows.",
-        body: "Start with your household and your own account. Then add the others: each person gets their own private brain, and children's new devices wait for a parent's approval.",
-      }}>
+    <AuthFrame title={t("auth.setup.title")} lead={t("auth.setup.lead")}
+      welcome={{ title: t("auth.setup.welcomeTitle"), body: t("auth.setup.welcomeBody") }}>
       <SetupForm mark={<Mark size={28} />} />
     </AuthFrame>
   );

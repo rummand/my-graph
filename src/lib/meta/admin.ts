@@ -6,7 +6,7 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { metaAttributes, metaKinds, metaRelations, nodes, edges } from "@/db/schema";
-import { ATTR_TYPES, CIRCLES, META_NODE_TYPES, RELATION_CATEGORIES } from "./types";
+import { ALL_CIRCLES, ATTR_TYPES, META_NODE_TYPES, RELATION_CATEGORIES } from "./types";
 import { ensureBuiltins, getHouseholdRow, type MetaTableName } from "./index";
 
 const keyRe = /^[a-z][a-z0-9_]{0,47}$/;
@@ -18,7 +18,7 @@ export const kindInput = z.object({
   nodeType, key: metaKey, label,
   pluralLabel: z.string().trim().max(80).nullish(),
   description: z.string().trim().max(500).nullish(),
-  circle: z.enum(CIRCLES as [string, ...string[]]).nullish(),
+  circle: z.enum(ALL_CIRCLES as [string, ...string[]]).nullish(),
   parentKey: metaKey.nullish(),
   icon: z.string().trim().max(40).nullish(),
   color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).nullish(),

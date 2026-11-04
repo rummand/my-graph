@@ -1,61 +1,66 @@
 "use client";
 import { useRef, useState } from "react";
 import { clsx } from "clsx";
-import { Button, Select, Tabs, Textarea } from "@/components/ui";
+import { Button, Select, Tabs } from "@/components/ui";
 import { personStyle } from "@/lib/ui/person-color";
+import { useT } from "@/lib/i18n/client";
 import type { MemoryView, PersonOption } from "@/lib/memory/types";
 import { MEMORY_MAX_CHARS, type MemoryKind, type MemoryVisibility } from "@/lib/memory/pure";
 import { memoryApi } from "./api";
+import { MentionField, storedFrom, type MentionDraft } from "./mention-field";
+import { variantOf } from "./variant";
 
 type ComposerKind = Extract<MemoryKind, "rule" | "preference" | "note">;
 
-const TEMPLATES: { label: string; kind: ComposerKind; text: string }[] = [
-  { label: "Protected time", kind: "rule", text: "Sunday dinner 17:00–19:00 is family time. Don't suggest plans then." },
-  { label: "Who can book the kids", kind: "rule", text: "Grandma can always book the kids on Wednesday afternoons." },
-  { label: "Always…", kind: "preference", text: "Always remind us about Aula letters the same evening." },
-  { label: "Never…", kind: "preference", text: "Never suggest plans before 9:00 on weekends." },
+const TEMPLATES: { id: string; kind: ComposerKind }[] = [
+  { id: "t1", kind: "rule" }, { id: "t2", kind: "rule" }, { id: "t3", kind: "preference" }, { id: "t4", kind: "preference" },
 ];
 
-const PLACEHOLDER: Record<ComposerKind, string> = {
-  rule: "For example: Bedtime for the kids is 19:30 on school nights.",
-  preference: "For example: Keep answers short on weekdays.",
-  note: "For example: Emma is allergic to hazelnuts.",
-};
+const EMPTY: MentionDraft = { text: "", mentions: [] };
 
-/** Add a memory by hand: what kind, the words, who it applies to, who may see it. Templates fill in a starting point. */
-export function MemoryComposer({ people, fixedAboutId, onAdded, onCancel, autoFocus }: {
+/**
+ * Add a memory by hand: what kind, the words (with @mentions), who it applies to, who may see it. Templates fill in a
+ * starting point; family examples only in a family graph. People and things @mentioned are added to "applies to".
+ */
+export function MemoryComposer({ people, fixedAboutId, onAdded, onCancel, autoFocus, graphKind }: {
   people: PersonOption[];
   /** On a person's page: the memory is always about them. */
   fixedAboutId?: string;
   onAdded: (m: MemoryView) => void;
   onCancel?: () => void;
   autoFocus?: boolean;
+  /** The current graph's kind; family wording and examples only in a family graph. */
+  graphKind?: string | null;
 }) {
+  const t = useT();
+  const vr = variantOf(graphKind);
   const [kind, setKind] = useState<ComposerKind>("rule");
-  const [text, setText] = useState("");
+  const [draft, setDraft] = useState<MentionDraft>(EMPTY);
   const [about, setAbout] = useState<string[]>(fixedAboutId ? [fixedAboutId] : []);
   const [visibility, setVisibility] = useState<MemoryVisibility>("household");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ref = useRef<HTMLFormElement>(null);
 
-  function applyTemplate(t: (typeof TEMPLATES)[number]) {
-    setKind(t.kind);
-    setText(t.text);
-    requestAnimationFrame(() => { const t = ref.current?.querySelector("textarea"); t?.focus(); t?.select(); });
+  function applyTemplate(x: (typeof TEMPLATES)[number]) {
+    setKind(x.kind);
+    setDraft({ text: t(`memory.composer.templates.${vr}.${x.id}.text`), mentions: [] });
+    requestAnimationFrame(() => { const el = ref.current?.querySelector("textarea"); el?.focus(); el?.select(); });
   }
 
   async function submit() {
-    const body = text.trim();
-    if (body.length < 2) { setError("Write what the assistant should remember."); return; }
+    const body = storedFrom({ ...draft, text: draft.text.trim() });
+    if (draft.text.trim().length < 2) { setError(t("memory.item.writeSomething")); return; }
     setBusy(true); setError(null);
+    // Whoever is @mentioned is also what the memory is about.
+    const aboutIds = [...new Set([...about, ...draft.mentions.map((m) => m.nodeId)])];
     try {
-      const m = await memoryApi.add({ kind, text: body, aboutNodeIds: about, visibility });
+      const m = await memoryApi.add({ kind, text: body, aboutNodeIds: aboutIds, visibility });
       onAdded(m);
-      setText("");
+      setDraft(EMPTY);
       if (!fixedAboutId) setAbout([]);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "That didn't go through. Try again.");
+      setError(e instanceof Error ? e.message : t("memory.failed"));
     } finally {
       setBusy(false);
     }
@@ -67,25 +72,28 @@ export function MemoryComposer({ people, fixedAboutId, onAdded, onCancel, autoFo
     <form ref={ref} className="space-y-3" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Tabs<ComposerKind> value={kind} onSelect={setKind}
-          items={[{ value: "rule", label: "Rule" }, { value: "preference", label: "Preference" }, { value: "note", label: "Note" }]} />
+          items={[{ value: "rule", label: t("memory.kind.rule") }, { value: "preference", label: t("memory.kind.preference") }, { value: "note", label: t("memory.kind.note") }]} />
         <div className="flex flex-wrap gap-1.5">
-          {TEMPLATES.map((t) => (
-            <button key={t.label} type="button" onClick={() => applyTemplate(t)}
+          {TEMPLATES.map((x) => (
+            <button key={x.id} type="button" onClick={() => applyTemplate(x)}
               className="rounded-full bg-surface-2 px-2.5 py-1 text-xs text-fg transition-colors hover:bg-line focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-              {t.label}
+              {t(`memory.composer.templates.${vr}.${x.id}.label`)}
             </button>
           ))}
         </div>
       </div>
-      <Textarea autoFocus={autoFocus} rows={2} maxLength={MEMORY_MAX_CHARS} value={text} placeholder={PLACEHOLDER[kind]}
-        aria-label="What the assistant should remember" onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void submit(); } }} />
+      <div>
+        <MentionField autoFocus={autoFocus} rows={2} maxLength={MEMORY_MAX_CHARS} draft={draft} onDraft={setDraft}
+          placeholder={t(`memory.composer.placeholder.${kind}.${vr}`)} aria-label={t("memory.item.textLabel")}
+          onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void submit(); } }} />
+        <p className="mt-1 text-xs text-muted">{t("memory.composer.mentionHint")}</p>
+      </div>
       {choosable.length > 0 && (
         <div>
-          <p className="mb-1.5 text-sm text-muted">{fixedAboutId ? "Also applies to" : "Applies to"}</p>
+          <p className="mb-1.5 text-sm text-muted">{fixedAboutId ? t("memory.composer.alsoAppliesTo") : t("memory.composer.appliesTo")}</p>
           <div className="flex flex-wrap gap-1.5">
             {!fixedAboutId && (
-              <ToggleChip on={about.length === 0} onClick={() => setAbout([])}>Everyone</ToggleChip>
+              <ToggleChip on={about.length === 0} onClick={() => setAbout([])}>{t("memory.everyone")}</ToggleChip>
             )}
             {choosable.map((p) => (
               <ToggleChip key={p.id} personId={p.id} on={about.includes(p.id)}
@@ -97,16 +105,16 @@ export function MemoryComposer({ people, fixedAboutId, onAdded, onCancel, autoFo
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" disabled={busy}>{busy ? "Saving…" : kind === "rule" ? "Save rule" : kind === "preference" ? "Save preference" : "Save note"}</Button>
+        <Button type="submit" disabled={busy}>{busy ? t("memory.item.saving") : t(`memory.composer.save.${kind}`)}</Button>
         <label className="flex items-center gap-2 text-sm text-muted">
-          <span className="sr-only">Who can see this</span>
+          <span className="sr-only">{t("memory.visibility.who")}</span>
           <Select value={visibility} onChange={(e) => setVisibility(e.target.value as MemoryVisibility)} className="h-8 w-auto text-sm">
-            <option value="household">Everyone in this graph</option>
-            <option value="parents">Parents only</option>
-            <option value="private">Only me</option>
+            <option value="household">{t("memory.visibility.household")}</option>
+            <option value="parents">{t(`memory.visibility.parents.${vr}`)}</option>
+            <option value="private">{t("memory.visibility.private")}</option>
           </Select>
         </label>
-        {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>}
+        {onCancel && <Button type="button" variant="ghost" onClick={onCancel}>{t("memory.item.cancel")}</Button>}
         {error && <span role="alert" className="text-sm text-danger">{error}</span>}
       </div>
     </form>

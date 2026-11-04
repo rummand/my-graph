@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { clsx } from "clsx";
+import { useT } from "@/lib/i18n/client";
 
 /** A small floating note at the bottom: "Forgotten. Undo". Leaves after a few seconds. */
 export function UndoToast({ toast, onUndo, onClose, canUndo }: {
@@ -10,6 +11,7 @@ export function UndoToast({ toast, onUndo, onClose, canUndo }: {
   onClose: () => void;
   canUndo: (id: string) => boolean;
 }) {
+  const t = useT();
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(onClose, 6000);
@@ -28,7 +30,7 @@ export function UndoToast({ toast, onUndo, onClose, canUndo }: {
             <span>{toast.text}</span>
             {!toast.error && canUndo(toast.id) && (
               <button type="button" onClick={() => onUndo(toast.id)} className="rounded font-medium underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-                Undo
+                {t("memory.undo")}
               </button>
             )}
           </motion.div>

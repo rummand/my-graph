@@ -78,7 +78,8 @@ export const Cowrite = Extension.create({
                 const el = document.createElement("span");
                 el.className = "cowrite-caret";
                 el.setAttribute("aria-hidden", "true");
-                el.dataset.label = "Assistant";
+                // The caret's name tag follows the page language (<html lang> is set from the reader's setting).
+                el.dataset.label = document.documentElement.lang === "da" ? "Assistent" : "Assistant";
                 return el;
               }, { side: 1, key: "cowrite-caret", ignoreSelection: true }));
             }

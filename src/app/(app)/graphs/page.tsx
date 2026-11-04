@@ -1,10 +1,14 @@
 import type { Metadata } from "next";
 import { requireUser } from "@/lib/auth";
+import { getT } from "@/lib/i18n";
 import { listMembers } from "@/lib/graphs";
 import { loadGraphViews } from "@/components/graphs/data";
 import { GraphsManager, type SelectedDetail } from "@/components/graphs/graphs-manager";
 
-export const metadata: Metadata = { title: "Graphs · My Graph" };
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return { title: `${t("graphs.page.metaTitle")} · My Graph` };
+}
 export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

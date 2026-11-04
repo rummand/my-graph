@@ -3,11 +3,14 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { MoreHorizontal } from "lucide-react";
 import { clsx } from "clsx";
+import { useT } from "@/lib/i18n/client";
 
 export type MenuItem = { label: string; icon: ReactNode; onSelect: () => void; danger?: boolean; disabled?: boolean; hint?: string };
 
 /** A small menu of conversation actions (pin, mark unread, compact, rename, delete). */
-export function ThreadMenu({ items, label = "Conversation actions" }: { items: MenuItem[]; label?: string }) {
+export function ThreadMenu({ items, label: given }: { items: MenuItem[]; label?: string }) {
+  const t = useT();
+  const label = given ?? t("chat.thread.actions");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);

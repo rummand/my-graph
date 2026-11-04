@@ -7,8 +7,5 @@ export type GraphEdgeData = {
 };
 export type GraphData = { nodes: GraphNodeData[]; edges: GraphEdgeData[] };
 
-export const NODE_TYPES = ["person", "place", "event", "topic", "document", "source"] as const;
-
-export const TYPE_PLURAL: Record<string, string> = {
-  person: "People", place: "Places", event: "Events", topic: "Topics", document: "Documents", source: "Sources",
-};
+/** Filter and list order on the graph view. */
+export const NODE_TYPES = ["person", "organization", "project", "place", "event", "topic", "thing", "document", "source"] as const;

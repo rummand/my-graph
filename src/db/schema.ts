@@ -1,6 +1,7 @@
 import {
   pgTable, pgEnum, uuid, text, timestamp, integer, real, boolean, jsonb, index, uniqueIndex, vector, customType,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 /**
  * My Graph's data model. Content lives in graphs (see `graphs`): every content row carries a `graphId`, and a
@@ -811,3 +812,31 @@ export const connectionRuns = pgTable("connection_runs", {
   changeSetId: uuid("change_set_id"),
   error: text("error"),
 }, (t) => [index("connection_runs_conn_idx").on(t.connectionId, t.startedAt)]);
+
+/* ── The Brain Keeper (after mux's keeper): curates memory per person per graph, every write journalled ──── */
+
+/** One keeper run for one person in one graph: what it read, what it changed (with why) and its short report. */
+export const keeperRuns = pgTable("keeper_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** It runs as this person: it reads only their material and what they may see, and writes memories as theirs. */
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** schedule | person */
+  trigger: text("trigger").notNull().default("schedule"),
+  /** running | done | failed | skipped */
+  status: text("status").notNull().default("running"),
+  /** Material newer than this was read. */
+  since: timestamp("since", { withTimezone: true }).notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  /** { conversations, proposals, sources, activity, changeSets } */
+  read: jsonb("read").$type<Record<string, number>>().notNull().default({}),
+  /** The journal: every write with what, why, the memory's text before/after, and its evidence links. */
+  actions: jsonb("actions").$type<Record<string, unknown>[]>().notNull().default([]),
+  report: text("report"),
+  model: text("model"),
+  error: text("error"),
+}, (t) => [
+  index("keeper_runs_graph_user_idx").on(t.graphId, t.userId, t.startedAt),
+  uniqueIndex("keeper_runs_one_running_uq").on(t.graphId, t.userId).where(sql`status = 'running'`),
+]);

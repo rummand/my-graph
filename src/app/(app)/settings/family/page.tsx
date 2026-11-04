@@ -7,14 +7,18 @@ import { MemberList } from "../_components/member-list";
 import { PendingApprovals } from "../_components/pending-approvals";
 import { Row } from "../_components/section";
 import { plural } from "../_components/format";
+import { getT } from "@/lib/i18n";
 
-export const metadata: Metadata = { title: "Family" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("settings.family.title") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function FamilyPage({ searchParams }: { searchParams: Promise<{ welcome?: string }> }) {
   const v = await requireUser();
+  const t = await getT();
   if (!isParent(v)) {
-    return <EmptyState title="Only parents can manage the family">Ask a parent if something about your account needs changing.</EmptyState>;
+    return <EmptyState title={t("settings.family.onlyParents")}>{t("settings.family.onlyParentsHint")}</EmptyState>;
   }
   const sp = await searchParams;
   const members = await familyMembers(v);
@@ -27,7 +31,7 @@ export default async function FamilyPage({ searchParams }: { searchParams: Promi
   const summary = [plural(adults, "parent"), kids ? plural(kids, "child", "children") : null, guests ? plural(guests, "guest") : null].filter(Boolean).join(", ");
   return (
     <>
-      <PageHeader title="Family" lead={`${summary}. Each person has their own private brain; what they share is up to them.`} />
+      <PageHeader title={t("settings.family.title")} lead={`${summary}. Each person has their own private brain; what they share is up to them.`} />
       {sp.welcome && (
         <div role="status" className="mb-8 rounded-lg bg-accent-tint px-5 py-4 text-accent">
           <p className="font-medium">Your household is ready.</p>
@@ -36,13 +40,13 @@ export default async function FamilyPage({ searchParams }: { searchParams: Promi
       )}
       {pending.length > 0 && (
         <Row id="approvals" tone="warn" flush
-          title={<span className="flex items-center gap-2">Waiting for your OK <Badge tone="warn">{pending.length}</Badge></span>}
-          lead="Children and guests need a parent's approval the first time they sign in on a new device. Only approve devices you recognise.">
+          title={<span className="flex items-center gap-2">{t("settings.family.approvals")} <Badge tone="warn">{pending.length}</Badge></span>}
+          lead={t("settings.family.approvalsLead")}>
           <PendingApprovals pending={pending} />
         </Row>
       )}
-      <Row id="members" title="Members" flush
-        lead="Everyone with an account in your household. Open a person to change their details, reset their password or see their devices.">
+      <Row id="members" title={t("settings.family.members")} flush
+        lead={t("settings.family.membersLead")}>
         <MemberList members={members} viewerRole={v.role} />
       </Row>
       <AddMemberForm canAddParent={v.role === "owner"} />

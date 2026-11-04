@@ -1,7 +1,11 @@
 /**
  * Time-zone aware date helpers for the Today page and briefs. Pure (no server imports) so client components and tests
- * can use them. Built on Intl, so they work the same whatever time zone the server runs in.
+ * can use them. Built on Intl, so they work the same whatever time zone the server runs in. Every label takes the
+ * reader's locale (English by default); day and month names come from the "today" messages, so server and browser
+ * spell them the same (their Intl punctuation differs, which would break hydration).
  */
+import { INTL_TAG, type Locale } from "@/lib/i18n/core";
+import { todayT } from "./words";
 
 /** The household's time zone. Danish family context; override with APP_TIME_ZONE. */
 export const DEFAULT_TIME_ZONE = "Europe/Copenhagen";
@@ -95,13 +99,10 @@ export type Bucket = "overdue" | "today" | "tomorrow" | "week" | "later";
 
 export const BUCKET_ORDER: Bucket[] = ["overdue", "today", "tomorrow", "week", "later"];
 
-export const BUCKET_LABEL: Record<Bucket, string> = {
-  overdue: "Overdue",
-  today: "Today",
-  tomorrow: "Tomorrow",
-  week: "This week",
-  later: "Later",
-};
+/** "Overdue", "Today", "Tomorrow", "This week", "Later" in the reader's language. */
+export function bucketLabel(b: Bucket, locale: Locale = "en"): string {
+  return todayT(locale)(`today.bucket.${b}`);
+}
 
 /**
  * Which list a date belongs in, seen from `now` in `tz`.
@@ -120,7 +121,7 @@ export function bucketFor(date: Date, now: Date, tz: string): Bucket {
 export type BucketGroup<T> = { bucket: Bucket; label: string; items: T[] };
 
 /** Group items into day buckets (in display order, empty buckets dropped), each sorted by date ascending. */
-export function groupByBucket<T>(items: T[], getDate: (item: T) => Date, now: Date, tz: string): BucketGroup<T>[] {
+export function groupByBucket<T>(items: T[], getDate: (item: T) => Date, now: Date, tz: string, locale: Locale = "en"): BucketGroup<T>[] {
   const map = new Map<Bucket, T[]>();
   for (const item of items) {
     const b = bucketFor(getDate(item), now, tz);
@@ -130,7 +131,7 @@ export function groupByBucket<T>(items: T[], getDate: (item: T) => Date, now: Da
   }
   return BUCKET_ORDER.filter((b) => map.has(b)).map((b) => ({
     bucket: b,
-    label: BUCKET_LABEL[b],
+    label: bucketLabel(b, locale),
     items: map.get(b)!.slice().sort((x, y) => getDate(x).getTime() - getDate(y).getTime()),
   }));
 }
@@ -147,35 +148,62 @@ export function ageThisYear(birthYear: number | null | undefined, now: Date, tz:
   return age < 0 || age > 130 ? null : age;
 }
 
-export function ageLabel(age: number | null): string | null {
+export function ageLabel(age: number | null, locale: Locale = "en"): string | null {
   if (age === null) return null;
-  if (age === 0) return "Born this year";
-  return `${age} this year`;
+  const t = todayT(locale);
+  return age === 0 ? t("today.age.born") : t("today.age.years", { n: age });
 }
 
 /* ── Formatting ───────────────────────────────────────────────────────────────────────────────────────── */
 
-const LOCALE = "en-GB";
-
-export function formatTime(date: Date, tz: string): string {
-  return new Intl.DateTimeFormat(LOCALE, { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
+export function formatTime(date: Date, tz: string, locale: Locale = "en"): string {
+  return new Intl.DateTimeFormat(INTL_TAG[locale], { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
 }
 
-/** "Wed 5 Nov" */
-export function formatShortDay(date: Date, tz: string): string {
-  return new Intl.DateTimeFormat(LOCALE, { timeZone: tz, weekday: "short", day: "numeric", month: "short" }).format(date);
+/** "Mon", "man" (weekday: Monday = 1 … Sunday = 7). */
+export function weekdayShort(weekday: number, locale: Locale = "en"): string {
+  return todayT(locale)(`today.days.short.${weekday}`);
 }
 
-/** "Tuesday, 3 November 2026" */
-export function formatLongDate(date: Date, tz: string): string {
-  return new Intl.DateTimeFormat(LOCALE, { timeZone: tz, weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(date);
+/** "Monday", "mandag". */
+export function weekdayLong(weekday: number, locale: Locale = "en"): string {
+  return todayT(locale)(`today.days.long.${weekday}`);
+}
+
+/** "Nov", "nov" (month: 1 … 12). */
+export function monthShort(month: number, locale: Locale = "en"): string {
+  return todayT(locale)(`today.months.short.${month}`);
+}
+
+/** "Wed 5 Nov" / "ons 5. nov" */
+export function formatShortDay(date: Date, tz: string, locale: Locale = "en"): string {
+  const p = zonedParts(date, tz);
+  return todayT(locale)("today.format.shortDay", { wd: weekdayShort(p.weekday, locale), d: p.day, mon: monthShort(p.month, locale) });
+}
+
+/** "5 Nov" / "5. nov" */
+export function formatDayMonth(date: Date, tz: string, locale: Locale = "en"): string {
+  const p = zonedParts(date, tz);
+  return todayT(locale)("today.format.dayMonth", { d: p.day, mon: monthShort(p.month, locale) });
+}
+
+/** "Tuesday 3 November 2026" / "Tirsdag den 3. november 2026" (server-rendered only). */
+export function formatLongDate(date: Date, tz: string, locale: Locale = "en"): string {
+  const s = new Intl.DateTimeFormat(INTL_TAG[locale], { timeZone: tz, weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(date);
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** "Today", "Tomorrow", "Yesterday" or "Wed 5 Nov". */
+export function relativeDayLabel(date: Date, now: Date, tz: string, locale: Locale = "en"): string {
+  const diff = calendarDayDiff(date, now, tz);
+  const t = todayT(locale);
+  return diff === 0 ? t("today.when.today") : diff === 1 ? t("today.when.tomorrow") : diff === -1 ? t("today.when.yesterday") : formatShortDay(date, tz, locale);
 }
 
 /** "Today 14:30", "Tomorrow", "Wed 5 Nov 08:00" — `withTime` false for all-day items. */
-export function formatWhen(date: Date, now: Date, tz: string, withTime = true): string {
-  const diff = calendarDayDiff(date, now, tz);
-  const day = diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : diff === -1 ? "Yesterday" : formatShortDay(date, tz);
-  return withTime ? `${day} ${formatTime(date, tz)}` : day;
+export function formatWhen(date: Date, now: Date, tz: string, withTime = true, locale: Locale = "en"): string {
+  const day = relativeDayLabel(date, now, tz, locale);
+  return withTime ? todayT(locale)("today.when.withTime", { day, time: formatTime(date, tz, locale) }) : day;
 }
 
 /** Whether an event's time of day is meaningful (minute precision, or unknown precision and not midnight). */
@@ -186,12 +214,13 @@ export function hasTimeOfDay(date: Date, precision: string | null | undefined, t
   return p.hour !== 0 || p.minute !== 0;
 }
 
-export function greetingFor(now: Date, tz: string): string {
+export function greetingFor(now: Date, tz: string, locale: Locale = "en"): string {
   const h = zonedParts(now, tz).hour;
-  if (h < 5) return "Good evening";
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
+  const t = todayT(locale);
+  if (h < 5) return t("today.greeting.evening");
+  if (h < 12) return t("today.greeting.morning");
+  if (h < 18) return t("today.greeting.afternoon");
+  return t("today.greeting.evening");
 }
 
 /** Value for <input type="datetime-local"> in the browser's own time zone. */

@@ -7,7 +7,8 @@ import { Check, ChevronDown, X } from "lucide-react";
 import { Button } from "@/components/ui";
 import { NodePill } from "@/components/graph/node-mark";
 import { ProvenancePanel } from "./provenance-panel";
-import { percentSure, relationLabel, STATUS_LABEL, type ProvenanceView } from "./labels";
+import { useLocale, useT } from "@/lib/i18n/client";
+import { percentSure, relationLabel, statusLabel, type ProvenanceView } from "./labels";
 
 export type FactEdge = { id: string; relation: string; status: string; confidence: number };
 export type FactEnd = { id: string; label: string; type: string };
@@ -34,6 +35,8 @@ export function FactRow({
   label?: string;
 }) {
   const router = useRouter();
+  const t = useT();
+  const locale = useLocale();
   const panelId = useId();
   const [status, setStatus] = useState(edge.status);
   const [confidence, setConfidence] = useState(edge.confidence);
@@ -50,13 +53,13 @@ export function FactRow({
         method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? "Couldn't save. Please try again.");
+      if (!res.ok) throw new Error(data.error ?? t("graph.fact.couldNotSave"));
       setStatus(data.edge.status);
       setConfidence(data.edge.confidence);
       onChange?.(data.edge);
       startTransition(() => router.refresh());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't save. Please try again.");
+      setError(e instanceof Error ? e.message : t("graph.fact.couldNotSave"));
     } finally {
       setBusy(null);
     }
@@ -92,19 +95,19 @@ export function FactRow({
           {canEdit && needsCheck && (
             <>
               <Button variant="secondary" size="sm" disabled={!!busy} onClick={() => act("confirm")}>
-                <Check className="size-3.5" /> {busy === "confirm" ? "Saving…" : "Confirm"}
+                <Check className="size-3.5" /> {busy === "confirm" ? t("graph.fact.saving") : t("graph.fact.confirm")}
               </Button>
               <Button variant="ghost" size="sm" disabled={!!busy} onClick={() => act("reject")}>
-                {busy === "reject" ? "Saving…" : "Wrong"}
+                {busy === "reject" ? t("graph.fact.saving") : t("graph.fact.wrong")}
               </Button>
             </>
           )}
           <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls={panelId}
-            title={`Why do we believe this? ${percentSure(confidence)}`}
+            title={`${t("graph.fact.why")} ${percentSure(confidence, t)}`}
             className="ml-1 inline-flex h-8 items-center gap-2 rounded-md px-2 text-xs transition-colors hover:bg-surface-2">
-            {confidence < 0.9 && <span className={clsx("tabular-nums", low ? "font-medium text-warn" : "text-muted")}>{percentSure(confidence)}</span>}
+            {confidence < 0.9 && <span className={clsx("tabular-nums", low ? "font-medium text-warn" : "text-muted")}>{percentSure(confidence, t)}</span>}
             {provenance.length > 0 ? (
-              <span className="flex gap-0.5" aria-label={`${provenance.length} ${provenance.length === 1 ? "source" : "sources"}`}>
+              <span className="flex gap-0.5" aria-label={t("graph.fact.sourceCount", { count: provenance.length })}>
                 {provenance.slice(0, 4).map((p, i) => (
                   <span key={p.id} className={clsx("min-w-[18px] rounded-[4px] px-1 py-px text-center font-medium tabular-nums",
                     p.confidence < 0.6 ? "bg-warn-tint text-warn" : "bg-accent-tint text-accent")}>{i + 1}</span>
@@ -112,7 +115,7 @@ export function FactRow({
                 {provenance.length > 4 && <span className="px-0.5 text-accent">+{provenance.length - 4}</span>}
               </span>
             ) : (
-              <span className="text-muted">No source</span>
+              <span className="text-muted">{t("graph.fact.noSource")}</span>
             )}
             <ChevronDown aria-hidden className={clsx("size-3.5 text-muted transition-transform duration-200", open && "rotate-180")} />
           </button>
@@ -124,19 +127,19 @@ export function FactRow({
           <motion.div id={panelId} key="why" initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }} className="overflow-hidden">
             <div className="mt-3 rounded-md bg-surface-2/55 p-3.5">
-              <ProvenancePanel items={provenance} agents={agents} title="Why do we believe this?" headingLevel={4}
-                emptyText="Nothing recorded behind this fact yet." />
+              <ProvenancePanel items={provenance} agents={agents} title={t("graph.fact.why")} headingLevel={4}
+                emptyText={t("graph.fact.nothingBehind")} t={t} locale={locale} />
               {canEdit && status === "confirmed" && (
                 <div className="mt-3 flex justify-end">
                   <Button variant="ghost" size="sm" disabled={!!busy} onClick={() => act("reject")}>
-                    <X className="size-3.5" /> {busy === "reject" ? "Saving…" : "This is wrong"}
+                    <X className="size-3.5" /> {busy === "reject" ? t("graph.fact.saving") : t("graph.fact.thisIsWrong")}
                   </Button>
                 </div>
               )}
               {canEdit && rejected && (
                 <div className="mt-3 flex justify-end">
                   <Button variant="secondary" size="sm" disabled={!!busy} onClick={() => act("confirm")}>
-                    {busy === "confirm" ? "Saving…" : "It's right after all"}
+                    {busy === "confirm" ? t("graph.fact.saving") : t("graph.fact.rightAfterAll")}
                   </Button>
                 </div>
               )}
@@ -150,13 +153,14 @@ export function FactRow({
 }
 
 export function StatusBadge({ status }: { status: string }) {
+  const t = useT();
   return (
     <span className={clsx("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
       status === "confirmed" && "bg-accent-tint text-accent",
       status === "unconfirmed" && "bg-warn-tint text-warn",
       status === "inferred" && "bg-inferred-tint text-inferred",
       (status === "rejected" || status === "superseded") && "bg-danger-tint text-danger")}>
-      {STATUS_LABEL[status] ?? status}
+      {statusLabel(status, t)}
     </span>
   );
 }

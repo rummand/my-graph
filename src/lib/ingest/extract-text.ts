@@ -7,7 +7,9 @@ import path from "node:path";
 import * as mux from "@/lib/mux";
 import { uploadDir } from "@/lib/storage";
 import type { TextSegment } from "./chunk";
+import { letterDate, parsePdfDate, type DateCandidate } from "./document-date";
 import { emailToText, parseEmail } from "./email";
+import { participantsOf, threadKeyFor } from "./mail";
 import type { FileKind } from "./mime";
 
 export type ExtractedText = {
@@ -20,6 +22,11 @@ export type ExtractedText = {
   occurredAt?: Date;
   /** How the text was obtained, for provenance. */
   activity: "upload" | "ocr" | "transcription";
+  /** Dates the file gives itself (sent, taken, created, printed); the pipeline picks the document date from these. */
+  dates?: DateCandidate[];
+  /** Email only: the conversation it belongs to. */
+  threadKey?: string | null;
+  externalId?: string | null;
 };
 
 const MAX_CAPTION_BYTES = 8 * 1024 * 1024;
@@ -39,16 +46,23 @@ export async function extractText(opts: {
   bytes: Buffer; mime: string; kind: FileKind; filename: string; sensitive: boolean; muxUp: boolean; muxMeta: mux.MuxCallMeta;
 }): Promise<ExtractedText> {
   switch (opts.kind) {
-    case "pdf": return extractPdf(opts.bytes);
-    case "docx": return extractDocx(opts.bytes);
-    case "text": return plain(decodeText(opts.bytes));
+    case "pdf": return withLetterDate(await extractPdf(opts.bytes));
+    case "docx": return withLetterDate(await extractDocx(opts.bytes));
+    case "text": return withLetterDate(plain(decodeText(opts.bytes)));
     case "email": return extractEmail(opts.bytes);
     case "image": return extractImage(opts);
     case "audio": return extractAudio(opts);
+    case "mailbox": case "archive": throw new Error("A mail import is split into messages, not read as one document.");
   }
 }
 
-function decodeText(bytes: Buffer): string {
+/** Add the letterhead / "Dato:" date of a text to what a reader found. */
+function withLetterDate(x: ExtractedText, text = x.textContent): ExtractedText {
+  const d = letterDate(text);
+  return d ? { ...x, dates: [...(x.dates ?? []), d] } : x;
+}
+
+export function decodeText(bytes: Buffer): string {
   // Strip a UTF-8 BOM; fall back to latin1 for old Windows exports that aren't valid UTF-8.
   try {
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^﻿/, "");
@@ -64,8 +78,15 @@ function plain(text: string, extra: Partial<ExtractedText> = {}): ExtractedText 
 
 async function extractPdf(bytes: Buffer): Promise<ExtractedText> {
   const { getDocumentProxy, extractText: pdfText } = await import("unpdf");
+  const { getMeta } = await import("unpdf");
   const pdf = await getDocumentProxy(new Uint8Array(bytes));
   const { totalPages, text } = await pdfText(pdf, { mergePages: false });
+  const dates: DateCandidate[] = [];
+  try {
+    const { info } = await getMeta(pdf);
+    const created = parsePdfDate(info?.CreationDate) ?? parsePdfDate(info?.ModDate);
+    if (created) dates.push({ at: created, precision: "minute", origin: "pdf" });
+  } catch { /* no metadata */ }
   const pages = text.map((t) => t.replace(/\r\n/g, "\n").replace(/[ \t]+\n/g, "\n").trim());
   const warnings: string[] = [];
   const chars = pages.reduce((n, p) => n + p.length, 0);
@@ -78,6 +99,7 @@ async function extractPdf(bytes: Buffer): Promise<ExtractedText> {
     meta: { pages: totalPages },
     warnings,
     activity: "upload",
+    dates,
   };
 }
 
@@ -90,8 +112,17 @@ async function extractDocx(bytes: Buffer): Promise<ExtractedText> {
 function extractEmail(bytes: Buffer): ExtractedText {
   const e = parseEmail(decodeText(bytes));
   return plain(emailToText(e), {
-    meta: { email: { subject: e.subject ?? null, from: e.from ?? null, to: e.to ?? null, date: e.date?.toISOString() ?? null, attachments: e.attachments } },
+    meta: {
+      email: {
+        subject: e.subject ?? null, from: e.from ?? null, to: e.to ?? null, cc: e.cc ?? null, date: e.date?.toISOString() ?? null,
+        attachments: e.attachments, messageId: e.messageId ?? null, inReplyTo: e.inReplyTo ?? null, references: e.references.slice(0, 50),
+        participants: participantsOf(e).slice(0, 60),
+      },
+    },
     occurredAt: e.date,
+    dates: e.date ? [{ at: e.date, precision: "minute", origin: "email" }] : [],
+    threadKey: threadKeyFor(e),
+    externalId: e.messageId ?? null,
   });
 }
 
@@ -135,7 +166,7 @@ async function caption(bytes: Buffer, mime: string, meta: mux.MuxCallMeta): Prom
     messages: [{
       role: "user",
       content: [
-        { type: "text", text: "Describe this family photo or scan in 1–3 plain sentences for a searchable archive: who/what is visible (no guesses at names), the setting, any visible text, dates or event. If it is a document or letter, say what kind and its subject." },
+        { type: "text", text: "Describe this photo or scan in 1–3 plain sentences for a searchable archive: who/what is visible (no guesses at names), the setting, any visible text, dates or event. If it is a document or letter, say what kind and its subject." },
         { type: "image_url", image_url: { url } },
       ],
     }],
@@ -190,6 +221,10 @@ async function extractImage(opts: { bytes: Buffer; mime: string; sensitive: bool
     warnings,
     occurredAt: exif?.takenAt,
     activity: ocrText ? "ocr" : "upload",
+    dates: [
+      ...(exif?.takenAt ? [{ at: exif.takenAt, precision: "minute" as const, origin: "exif" as const }] : []),
+      ...(ocrText ? [letterDate(ocrText)].filter((d): d is DateCandidate => !!d) : []),
+    ],
   };
 }
 

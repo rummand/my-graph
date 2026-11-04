@@ -14,14 +14,7 @@ export function TodaySection({ id, title, action, children, className }: { id: s
   );
 }
 
-/** Shown when one part of the page couldn't load; the rest of the page keeps working. */
-export function SectionError({ what, className }: { what: string; className?: string }) {
-  return (
-    <p role="status" className={clsx("rounded-lg bg-warn-tint px-3 py-2.5 text-sm text-warn", className)}>
-      <span className="font-medium">Couldn&apos;t load {what}.</span> The rest of the page still works, so try reloading in a moment.
-    </p>
-  );
-}
+export { SectionError } from "./section-error";
 
 /** Href helpers. The target pages belong to other workstreams. */
 export const hrefs = {
@@ -37,4 +30,5 @@ export const hrefs = {
   timeline: "/timeline",
   ask: (q: string) => `/chat?q=${encodeURIComponent(q)}`,
   merges: "/graph?view=merge",
+  changeSet: (id: string) => `/changes/${encodeURIComponent(id)}`,
 };

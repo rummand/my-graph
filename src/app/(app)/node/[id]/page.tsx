@@ -7,7 +7,10 @@ import { getNode, isUuid, type GEdge, type GNode } from "@/lib/gbrain";
 import { loadNodeDetail } from "@/lib/gbrain/detail";
 import { getMeta } from "@/lib/meta";
 import { Avatar, Badge, buttonClass } from "@/components/ui";
-import { FactRow, ProvenancePanel, formatWhen, sentenceCase, TYPE_LABEL } from "@/components/provenance";
+import { FactRow, ProvenancePanel, formatWhen, sentenceCase, typeLabel } from "@/components/provenance";
+import { HistoryPanel, WhoSaid } from "@/components/history";
+import { scopeOf } from "@/lib/graphs/pure";
+import { getLocale, getT } from "@/lib/i18n";
 import { MergeSuggestions, NodeEditor, NodeMark } from "@/components/graph";
 import { MemoryPanel } from "@/components/memory/memory-panel";
 import { memoryAllowed } from "@/lib/memory";
@@ -18,17 +21,19 @@ type Props = { params: Promise<{ id: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
-  if (!isUuid(id)) return { title: "Not found · My Graph" };
+  const t = await getT();
+  if (!isUuid(id)) return { title: `${t("graph.node.notFound")} · My Graph` };
   const v = await requireUser();
   const n = await getNode(v, id);
-  return { title: n ? `${n.label} · My Graph` : "Not found · My Graph" };
+  return { title: n ? `${n.label} · My Graph` : `${t("graph.node.notFound")} · My Graph` };
 }
 
 export default async function NodePage({ params }: Props) {
   const { id } = await params;
   if (!isUuid(id)) notFound();
   const v = await requireUser();
-  const [d, meta] = await Promise.all([loadNodeDetail(v, id), getMeta(v)]);
+  const [d, meta, t, locale] = await Promise.all([loadNodeDetail(v, id), getMeta(v), getT(), getLocale()]);
+  const family = scopeOf(v).family;
   if (!d) notFound();
   if (d.redirectedFrom) redirect(`/node/${d.node.id}`);
 
@@ -50,18 +55,21 @@ export default async function NodePage({ params }: Props) {
   const toCheck = d.edges.filter((e) => e.status === "unconfirmed" || e.status === "inferred").length;
   const sourceCount = new Set(Object.values(d.provenance.edges).flat().concat(d.provenance.node).map((p) => p.sourceId).filter(Boolean)).size;
 
-  const when = formatWhen(node.startAt, node.endAt, node.timePrecision);
+  const when = formatWhen(node.startAt, node.endAt, node.timePrecision, locale);
   const end = (n: GNode) => ({ id: n.id, label: n.label, type: n.type });
   const kindLabel = meta.kind(node.type, node.kind)?.label;
-  const typeLine = kindLabel ? sentenceCase(kindLabel) : TYPE_LABEL[node.type] ?? node.type;
+  const typeLine = kindLabel ? sentenceCase(kindLabel) : typeLabel(node.type, t);
   const seenBy = node.visibility === "private"
-    ? { icon: Lock, text: node.ownerId === v.id ? "Only you can see this" : "Private to the person who added it" }
-    : node.visibility === "parents" ? { icon: Eye, text: "Parents can see this" } : { icon: Users, text: "The whole household can see this" };
+    ? { icon: Lock, text: node.ownerId === v.id ? t("graph.seenBy.youOnly") : t("graph.seenBy.privateOther") }
+    : node.visibility === "parents"
+      ? { icon: Eye, text: family ? t("graph.seenBy.parents") : t("graph.seenBy.editors") }
+      : { icon: Users, text: family ? t("graph.seenBy.household") : t("graph.seenBy.everyone") };
+  const allProvenance = [...d.provenance.node, ...Object.values(d.provenance.edges).flat()];
 
   return (
     <article>
       <Link href={`/graph?center=${node.id}`} className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg">
-        <ArrowLeft className="size-4" /> Connections
+        <ArrowLeft className="size-4" /> {t("graph.title")}
       </Link>
 
       <header className="mb-10 grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-5">
@@ -73,23 +81,23 @@ export default async function NodePage({ params }: Props) {
           <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
             <span className="text-fg">{typeLine}</span>
             <span className="inline-flex items-center gap-1.5"><seenBy.icon className="size-3.5" />{seenBy.text}</span>
-            {node.sensitive && <Badge tone="warn">Sensitive</Badge>}
+            {node.sensitive && <Badge tone="warn">{t("graph.node.sensitive")}</Badge>}
           </div>
         </div>
         <div className="col-span-2 flex flex-wrap items-start gap-2 sm:col-span-1 sm:justify-end">
-          <Link href={`/graph?center=${node.id}`} className={buttonClass("secondary")}><Crosshair className="size-4" /> Show connections</Link>
-          {d.canEdit && <NodeEditor node={{ id: node.id, label: node.label, aliases: node.aliases, summary: node.summary, visibility: node.visibility, sensitive: node.sensitive }} />}
+          <Link href={`/graph?center=${node.id}`} className={buttonClass("secondary")}><Crosshair className="size-4" /> {t("graph.node.showConnections")}</Link>
+          {d.canEdit && <NodeEditor node={{ id: node.id, label: node.label, aliases: node.aliases, summary: node.summary, visibility: node.visibility, sensitive: node.sensitive }} family={family} />}
         </div>
 
         <div className="col-span-2 space-y-2 sm:col-span-3 sm:col-start-1 lg:col-span-2 lg:col-start-2">
-          {node.aliases.length > 0 && <p className="text-sm text-muted">Also known as {node.aliases.join(", ")}</p>}
+          {node.aliases.length > 0 && <p className="text-sm text-muted">{t("graph.explorer.alsoKnownAs", { names: node.aliases.join(", ") })}</p>}
           {node.summary
             ? <p className="max-w-[65ch] text-base/7">{node.summary}</p>
-            : <p className="text-sm text-muted">No summary yet.{d.canEdit ? " Use Edit to write one." : ""}</p>}
+            : <p className="text-sm text-muted">{d.canEdit ? t("graph.node.noSummaryEdit") : t("graph.node.noSummary")}</p>}
           {when && (
             <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
               <span className="inline-flex items-center gap-1.5"><CalendarDays className="size-4 text-muted" /><time dateTime={node.startAt!.toISOString()}>{when}</time></span>
-              <Link href={`/timeline?at=${node.startAt!.toISOString().slice(0, 10)}`} className="text-accent hover:underline">See it on the timeline</Link>
+              <Link href={`/timeline?at=${node.startAt!.toISOString().slice(0, 10)}`} className="text-accent hover:underline">{t("graph.node.onTimeline")}</Link>
             </p>
           )}
         </div>
@@ -98,20 +106,19 @@ export default async function NodePage({ params }: Props) {
       <div className="grid gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,1fr)_340px]">
         <section aria-labelledby="facts-h" className="min-w-0">
           <div className="mb-4 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <h2 id="facts-h" className="text-lg font-semibold tracking-[-0.01em]">What we know</h2>
+            <h2 id="facts-h" className="text-lg font-semibold tracking-[-0.01em]">{t("graph.node.whatWeKnow")}</h2>
             {d.edges.length > 0 && (
               <p className="text-sm text-muted">
-                <span className="tabular-nums">{d.edges.length}</span> {d.edges.length === 1 ? "fact" : "facts"} from{" "}
-                <span className="tabular-nums">{sourceCount}</span> {sourceCount === 1 ? "source" : "sources"}
-                {toCheck > 0 && <>, <span className="font-medium text-warn"><span className="tabular-nums">{toCheck}</span> to check</span></>}
+                <span className="tabular-nums">{t("graph.node.factsFrom", { facts: t("graph.node.facts", { count: d.edges.length }), sources: t("graph.node.sources", { count: sourceCount }) })}</span>
+                {toCheck > 0 && <>, <span className="font-medium tabular-nums text-warn">{t("graph.node.toCheck", { count: toCheck })}</span></>}
               </p>
             )}
           </div>
           {ordered.length === 0 ? (
             <div className="rounded-lg bg-surface-2/60 px-6 py-10 text-center">
-              <p className="font-medium">Nothing connects to {node.label} yet</p>
+              <p className="font-medium">{t("graph.node.nothingConnects", { name: node.label })}</p>
               <p className="mx-auto mt-1.5 max-w-[48ch] text-sm text-muted">
-                Facts appear here as documents, wiki pages and conversations mention {node.label}.
+                {t("graph.node.nothingConnectsBody", { name: node.label })}
               </p>
             </div>
           ) : (
@@ -136,9 +143,11 @@ export default async function NodePage({ params }: Props) {
         </section>
 
         <aside className="min-w-0 space-y-6 lg:sticky lg:top-8 lg:self-start">
-          <ProvenancePanel items={d.provenance.node} agents={d.agents} title={`Where ${node.label} came from`}
-            className="rounded-lg bg-surface p-5" emptyText="No records yet. This was added without a source." />
-          {memoryAllowed(v) && <MemoryPanel title="Memory" aboutNodeId={node.id} aboutName={node.type === "person" ? node.label.split(" ")[0] : node.label} />}
+          <ProvenancePanel items={d.provenance.node} agents={d.agents} title={t("graph.node.whereFrom", { name: node.label })}
+            className="rounded-lg bg-surface p-5" emptyText={t("graph.node.noRecords")} t={t} locale={locale} />
+          <WhoSaid name={node.label} items={allProvenance} agents={d.agents} t={t} locale={locale} className="px-1" />
+          <HistoryPanel v={v} subjectId={node.id} name={node.label} className="px-1" />
+          {memoryAllowed(v) && <MemoryPanel title={t("graph.node.memory")} aboutNodeId={node.id} aboutName={node.type === "person" ? node.label.split(" ")[0] : node.label} />}
           {d.mergeSuggestions.length > 0 && (
             <MergeSuggestions nodeId={node.id} nodeLabel={node.label}
               suggestions={d.mergeSuggestions.map((s) => ({ other: { id: s.other.id, type: s.other.type, label: s.other.label, summary: s.other.summary }, reason: s.reason, score: s.score }))} />

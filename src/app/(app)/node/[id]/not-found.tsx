@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { EmptyState } from "@/components/ui";
+import { getT } from "@/lib/i18n";
 
-export default function NodeNotFound() {
+export default async function NodeNotFound() {
+  const t = await getT();
   return (
-    <EmptyState title="We couldn't find that"
-      action={<Link href="/graph" className="text-sm text-accent hover:underline">Back to the graph</Link>}>
-      It may have been merged into something else or removed, or it hasn&rsquo;t been shared with you.
+    <EmptyState title={t("graph.node.notFoundTitle")}
+      action={<Link href="/graph" className="text-sm text-accent hover:underline">{t("graph.node.backToGraph")}</Link>}>
+      {t("graph.node.notFoundBody")}
     </EmptyState>
   );
 }

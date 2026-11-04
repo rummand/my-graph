@@ -1,23 +1,29 @@
 "use client";
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { Button, Tabs } from "@/components/ui";
 import type { AssistantSettings } from "@/lib/automations";
 import { ACTION_LABEL } from "@/lib/automations/policy";
+import { Brain } from "lucide-react";
 import type { Usage } from "@/lib/automations/overview";
-import { api, Toggle } from "./bits";
+import { api, Toggle, useCopy } from "./bits";
 
 type SettingsView = Omit<AssistantSettings, "onboardedAt"> & { onboardedAt: string | null };
 
-const CAPS: { key: string; label: string; hint: string }[] = [
-  { key: "library", label: "Read the library", hint: "Letters, photos and files" },
-  { key: "timeline", label: "Read the timeline", hint: "Events and dates" },
-  { key: "people", label: "Read about people", hint: "Birthdays, how people are, who you see" },
-  { key: "reminders", label: "Suggest reminders", hint: "Always asks first" },
-  { key: "wiki_write", label: "Suggest wiki notes", hint: "Always asks first" },
+/** Capabilities, and whether their hint differs between a family graph and other graphs. */
+const CAPS: { key: string; varied?: boolean }[] = [
+  { key: "library", varied: true }, { key: "timeline" }, { key: "people", varied: true }, { key: "reminders" }, { key: "wiki_write" },
 ];
+/** Action keys whose label differs in a family graph. */
+const VARIED_ACTIONS = new Set(["rule.save"]);
 
 /** How the assistant behaves for me in this graph. Every change saves straight away. */
 export function SettingsPanel({ initial, usage }: { initial: SettingsView; usage: Usage }) {
+  const { t, vr } = useCopy();
+  const actionLabel = (k: string) => {
+    const key = `automations.settings.actions.${k.replace(/\./g, "_")}${VARIED_ACTIONS.has(k) ? `.${vr}` : ""}`;
+    return t(key, undefined, ACTION_LABEL[k] ?? k);
+  };
   const [s, setS] = useState(initial);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -31,7 +37,7 @@ export function SettingsPanel({ initial, usage }: { initial: SettingsView; usage
       setS(r.settings); setSaved(true);
     } catch (e) {
       setS(before);
-      setError(e instanceof Error ? e.message : "Couldn't save.");
+      setError(e instanceof Error ? e.message : t("automations.settings.couldNotSave"));
     }
   }
 
@@ -39,53 +45,65 @@ export function SettingsPanel({ initial, usage }: { initial: SettingsView; usage
   return (
     <div className="space-y-5 rounded-lg bg-surface p-4">
       <p className="text-sm text-muted">
-        This week: {usage.runs} run{usage.runs === 1 ? "" : "s"} and {usage.suggestions} suggestion{usage.suggestions === 1 ? "" : "s"}
-        {acceptance !== null ? `, you approved ${acceptance}%` : ""}.
+        {t("automations.settings.usage", {
+          runs: t("automations.settings.runs", { count: usage.runs }),
+          suggestions: t("automations.settings.suggestions", { count: usage.suggestions }),
+          approved: acceptance !== null ? t("automations.settings.approved", { pct: acceptance }) : "",
+        })}
       </p>
 
-      <Row label="Save memories without asking" hint="Preferences and notes from your chats. Facts always need your approval.">
-        <Toggle checked={s.autoSaveMemories} label="Save memories without asking" onChange={(v) => patch({ autoSaveMemories: v }, { autoSaveMemories: v })} />
-      </Row>
+      {/* Memory is the Brain Keeper's job: it keeps what you mention in chat without asking. No switch for that here. */}
+      <div className="flex items-start gap-2.5">
+        <Brain className="mt-0.5 size-4 shrink-0 text-muted" aria-hidden />
+        <div className="min-w-0">
+          <p className="text-sm font-medium">{t("automations.settings.memoryTitle")}</p>
+          <p className="text-sm text-muted">{t("automations.settings.memory")}</p>
+          <Link href="/memory" className="text-sm text-accent hover:underline">{t("automations.settings.memoryLink")}</Link>
+        </div>
+      </div>
 
       <div>
-        <p className="text-sm font-medium">Always allowed</p>
+        <p className="text-sm font-medium">{t("automations.settings.alwaysAllowed")}</p>
         {s.alwaysAllow.length === 0 ? (
-          <p className="mt-0.5 text-sm text-muted">Nothing. The assistant asks every time. Choose “Always allow” on a suggestion to skip asking for that kind.</p>
+          <p className="mt-0.5 text-sm text-muted">{t("automations.settings.nothingAllowed")}</p>
         ) : (
           <ul className="mt-1.5 space-y-1">
             {s.alwaysAllow.map((k) => (
               <li key={k} className="flex items-center justify-between gap-2 text-sm">
-                <span>{ACTION_LABEL[k] ?? k}</span>
-                <Button size="sm" variant="ghost" onClick={() => patch({ alwaysAllow: s.alwaysAllow.filter((x) => x !== k) }, { alwaysAllow: s.alwaysAllow.filter((x) => x !== k) })}>Revoke</Button>
+                <span>{actionLabel(k)}</span>
+                <Button size="sm" variant="ghost" onClick={() => patch({ alwaysAllow: s.alwaysAllow.filter((x) => x !== k) }, { alwaysAllow: s.alwaysAllow.filter((x) => x !== k) })}>{t("automations.settings.revoke")}</Button>
               </li>
             ))}
           </ul>
         )}
-        <p className="mt-1 text-xs text-muted">Check-ins and automations still ask before adding facts, merging or editing the wiki.</p>
+        <p className="mt-1 text-xs text-muted">{t("automations.settings.stillAsks")}</p>
       </div>
 
       <div>
-        <p className="mb-1 text-sm font-medium">What it may use</p>
+        <p className="mb-1 text-sm font-medium">{t("automations.settings.mayUse")}</p>
         <ul className="space-y-2">
-          {CAPS.map((c) => (
+          {CAPS.map((c) => {
+            const label = t(`automations.settings.caps.${c.key}.label`);
+            return (
             <li key={c.key}>
-              <Row label={c.label} hint={c.hint} small>
-                <Toggle checked={s.capabilities[c.key] !== false} label={c.label}
+              <Row label={label} hint={t(`automations.settings.caps.${c.key}.hint${c.varied ? `.${vr}` : ""}`)} small>
+                <Toggle checked={s.capabilities[c.key] !== false} label={label}
                   onChange={(v) => patch({ capabilities: { [c.key]: v } }, { capabilities: { ...s.capabilities, [c.key]: v } })} />
               </Row>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </div>
 
       <div>
-        <p className="mb-1.5 text-sm font-medium">How it writes</p>
-        <Tabs value={s.tone} onSelect={(t) => patch({ tone: t }, { tone: t })}
-          items={[{ value: "warm", label: "Warm" }, { value: "brief", label: "Brief" }, { value: "detailed", label: "Detailed" }]} />
+        <p className="mb-1.5 text-sm font-medium">{t("automations.settings.howItWrites")}</p>
+        <Tabs value={s.tone} onSelect={(tone) => patch({ tone }, { tone })}
+          items={[{ value: "warm", label: t("automations.settings.tone.warm") }, { value: "brief", label: t("automations.settings.tone.brief") }, { value: "detailed", label: t("automations.settings.tone.detailed") }]} />
       </div>
 
-      <Row label="Suggestions a day, at most" hint="From check-ins and automations. Answers in chat don't count.">
-        <input type="number" min={0} max={50} value={s.dailySuggestionCap} aria-label="Suggestions a day, at most"
+      <Row label={t("automations.settings.cap")} hint={t("automations.settings.capHint")}>
+        <input type="number" min={0} max={50} value={s.dailySuggestionCap} aria-label={t("automations.settings.cap")}
           onChange={(e) => {
             const n = Math.max(0, Math.min(50, Number(e.target.value) || 0));
             setS({ ...s, dailySuggestionCap: n });
@@ -96,7 +114,7 @@ export function SettingsPanel({ initial, usage }: { initial: SettingsView; usage
       </Row>
 
       <p aria-live="polite" className="min-h-5 text-sm">
-        {error ? <span className="text-danger">{error}</span> : saved ? <span className="text-muted">Saved.</span> : null}
+        {error ? <span className="text-danger">{error}</span> : saved ? <span className="text-muted">{t("automations.settings.saved")}</span> : null}
       </p>
     </div>
   );

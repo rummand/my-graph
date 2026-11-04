@@ -18,7 +18,7 @@ import { addMemory, deleteMemory, updateMemory } from "@/lib/memory";
 import { allowAlways, logActivity } from "@/lib/automations";
 import { citationsAnyOutside, citationsOnlyOutside } from "./context";
 import { actionKindOf, inferBasis } from "./policy";
-import { describeProposal, parseProposals, type Proposal, type ProposalResult, type ProposalView } from "./proposals";
+import { describeProposal, parseProposals, type Proposal, type ProposalAuto, type ProposalResult, type ProposalView } from "./proposals";
 import { isSensitivity, memoryVisibilityFor, narrower, wideningWarning, type Sensitivity, type Visibility } from "./sensitivity";
 import { decisionKey, foldState } from "./state";
 import { addState, conversationRows, ownConversation } from "./store";
@@ -217,8 +217,8 @@ async function undoResult(v: Viewer, r: ProposalResult): Promise<void> {
   }
 }
 
-function activityFor(p: Proposal, r: ProposalResult, auto: "always" | "setting" | null): { action: string; summary: string; subjectType?: string; subjectId?: string } {
-  const how = auto === "always" ? " (always allowed)" : auto === "setting" ? " (auto-save is on)" : "";
+function activityFor(p: Proposal, r: ProposalResult, auto: ProposalAuto | null): { action: string; summary: string; subjectType?: string; subjectId?: string } {
+  const how = auto === "always" ? " (always allowed)" : auto === "setting" ? " (auto-save is on)" : auto === "asked" ? " (you asked to remember it)" : "";
   if (p.type === "propose_memory") return { action: "saved_memory", summary: `Remembered "${p.text}"${how}`, subjectType: "memory", subjectId: r.undo?.id };
   const subjectType = r.undo?.type === "edge" ? "edge" : r.undo?.type === "wiki" ? "wiki_page" : r.undo?.type;
   return { action: "applied_proposal", summary: `${r.label}${how}`, subjectType, subjectId: r.undo?.id };
@@ -228,9 +228,9 @@ function activityFor(p: Proposal, r: ProposalResult, auto: "always" | "setting" 
 const inFlight = new Set<string>();
 
 export type DecideAction = "approve" | "always" | "dismiss" | "undo";
-export type DecideOutcome = { status: "approved" | "dismissed" | "undone"; result: ProposalResult | null; auto?: "always" | "setting" | null };
+export type DecideOutcome = { status: "approved" | "dismissed" | "undone"; result: ProposalResult | null; auto?: ProposalAuto | null };
 
-export async function decideProposal(v: Viewer, input: { conversationId: string; messageId: string; n: number; action: DecideAction; auto?: "always" | "setting"; basis?: "user" | "document" }): Promise<DecideOutcome> {
+export async function decideProposal(v: Viewer, input: { conversationId: string; messageId: string; n: number; action: DecideAction; auto?: "always" | "setting" | "asked"; basis?: "user" | "document" }): Promise<DecideOutcome> {
   const key = decisionKey(input.messageId, input.n);
   if (inFlight.has(key)) throw new ProposalError(409, "This suggestion is already being handled.");
   inFlight.add(key);
@@ -241,7 +241,7 @@ export async function decideProposal(v: Viewer, input: { conversationId: string;
   }
 }
 
-async function decide(v: Viewer, input: { conversationId: string; messageId: string; n: number; action: DecideAction; auto?: "always" | "setting"; basis?: "user" | "document" }): Promise<DecideOutcome> {
+async function decide(v: Viewer, input: { conversationId: string; messageId: string; n: number; action: DecideAction; auto?: "always" | "setting" | "asked"; basis?: "user" | "document" }): Promise<DecideOutcome> {
   const f = await findProposal(v, input.conversationId, input.messageId, input.n);
   const cid = f.conv.id;
   if (input.action === "undo") {
@@ -251,7 +251,7 @@ async function decide(v: Viewer, input: { conversationId: string; messageId: str
     void logActivity({ graphId: v.graphId, userId: v.id, actor: "chat", action: "undid_proposal", summary: `Undid: ${f.decided.result.label}`, conversationId: cid, visibility: "private" }).catch(() => {});
     return { status: "undone", result: f.decided.result, auto: f.decided.auto ?? null };
   }
-  if (f.decided && f.decided.status !== "undone") {
+  if (f.decided && f.decided.status !== "undone" && f.decided.status !== "queued") {
     throw new ProposalError(409, f.decided.status === "approved" ? "This suggestion was already approved." : "This suggestion was already dismissed.");
   }
   if (input.action === "dismiss") {

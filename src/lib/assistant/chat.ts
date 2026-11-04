@@ -259,9 +259,13 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
             const view: ProposalView = { ...p, basis, n, status: "pending", result: null, auto: null, ...note };
             const d = autoApplyDecision(p, {
               mode: "interactive", canWrite, alwaysAllow: settings.alwaysAllow ?? [], autoSaveMemories: settings.autoSaveMemories,
-              basis, widens: !!note.widens, capabilities: settings.capabilities ?? {},
+              basis, widens: !!note.widens, capabilities: settings.capabilities ?? {}, question,
             });
-            if (d.mode === "auto") {
+            if (d.mode === "keeper") {
+              // Memory is the Brain Keeper's: hand it over for its next run instead of asking now.
+              await addState(turn.conversationId, { type: "proposal", messageId: saved.id, n, status: "queued", auto: null, why: d.why });
+              view.status = "queued"; view.keeperNote = d.why;
+            } else if (d.mode === "auto") {
               try {
                 const out = await decideProposal(v, { conversationId: turn.conversationId, messageId: saved.id, n, action: "approve", auto: d.reason, basis });
                 view.status = "approved"; view.result = out.result; view.auto = d.reason;

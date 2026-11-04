@@ -192,7 +192,7 @@ export function toViews(rows: Row[]): { messages: MessageView[]; sensitive: bool
       feedback: r.feedback === 1 ? 1 : r.feedback === -1 ? -1 : null,
       proposals: proposals.map((p, i) => {
         const d = decisions.get(decisionKey(r.id, i + 1));
-        return { ...p, n: i + 1, status: d?.status ?? "pending", result: d?.result ?? null, auto: d?.auto ?? null };
+        return { ...p, n: i + 1, status: d?.status ?? "pending", result: d?.result ?? null, auto: d?.auto ?? null, keeperNote: d?.why ?? null };
       }),
     });
   }

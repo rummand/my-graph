@@ -13,13 +13,14 @@ import { metaAttributes, metaKinds, metaRelations } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 
 /** Whose meta model: the graph's household when the viewer carries one, else their own household. */
-export type MetaScope = Pick<Viewer, "householdId"> & { graphHouseholdId?: string };
+export type MetaScope = Pick<Viewer, "householdId"> & { graphHouseholdId?: string; graphId?: string | null; graphKind?: string | null };
 import { BUILTIN_ATTRIBUTES, BUILTIN_KINDS, BUILTIN_RELATIONS } from "./builtins";
 import {
   attributesFor as _attributesFor, findKind, kindsFor as _kindsFor, mergeMetaModel, relationLabel as _relationLabel,
   relationsBetween, suggestKind as _suggestKind, validateProps as _validateProps, type KindSuggestion,
 } from "./model";
-import type { MetaModel, MetaNodeType } from "./types";
+import type { MetaModel, MetaNodeType, MetaSource, MetaStatus } from "./types";
+import { ensureTemplateSeeded, lensFor } from "@/lib/templates";
 
 export * from "./types";
 export { mergeMetaModel, isTombstone, findKind, findRelation, relationsBetween, attributeSchema } from "./model";
@@ -84,20 +85,28 @@ function differs(have: Record<string, unknown>, want: Record<string, unknown>): 
 
 /* ── Reading ──────────────────────────────────────────────────────────────────────────────────────────── */
 
-/** The meta model of the household whose graph the viewer is working in (a shared graph uses its owner's). */
+/**
+ * The meta model of the graph the viewer is working in: built-ins its template uses, the household's rows that are
+ * household-wide (graphId null) and this graph's own rows (template, manual, accepted emergent ones). Rows of the
+ * household's other graphs never show. Candidates (proposed from evidence) come back in `candidates`, never mixed in.
+ * The graph's template is seeded on first read.
+ */
 export async function getMetaModel(viewer: MetaScope): Promise<MetaModel> {
   await ensureBuiltins();
   const hh = viewer.graphHouseholdId ?? viewer.householdId;
+  if (viewer.graphId) await ensureTemplateSeeded(viewer).catch((e) => console.error("[meta] template seed failed", e));
   const [kinds, relations, attributes] = await Promise.all([
     db.select().from(metaKinds).where(or(isNull(metaKinds.householdId), eq(metaKinds.householdId, hh))),
     db.select().from(metaRelations).where(or(isNull(metaRelations.householdId), eq(metaRelations.householdId, hh))),
     db.select().from(metaAttributes).where(or(isNull(metaAttributes.householdId), eq(metaAttributes.householdId, hh))),
   ]);
+  const em = (r: { status: string; origin: string; householdId: string | null }) => ({ status: r.status as MetaStatus, source: (r.householdId === null ? "builtin" : r.origin) as MetaSource });
+  const lens = viewer.graphId ? lensFor({ ...viewer, householdId: viewer.householdId }) : {};
   return mergeMetaModel(hh, {
-    kinds: kinds.map(({ createdAt: _c, ...k }) => ({ ...k, nodeType: k.nodeType as MetaNodeType })),
-    relations: relations.map(({ createdAt: _c, ...r }) => r),
-    attributes: attributes.map(({ createdAt: _c, ...a }) => ({ ...a, nodeType: a.nodeType as MetaNodeType })),
-  });
+    kinds: kinds.map(({ origin: _o, ...k }) => ({ ...k, ...em({ status: k.status, origin: _o, householdId: k.householdId }), nodeType: k.nodeType as MetaNodeType })),
+    relations: relations.map(({ origin: _o, ...r }) => ({ ...r, ...em({ status: r.status, origin: _o, householdId: r.householdId }) })),
+    attributes: attributes.map(({ origin: _o, ...a }) => ({ ...a, ...em({ status: a.status, origin: _o, householdId: a.householdId }), nodeType: a.nodeType as MetaNodeType })),
+  }, lens);
 }
 
 /** Meta model bound to helpers — the convenient form for server code. */

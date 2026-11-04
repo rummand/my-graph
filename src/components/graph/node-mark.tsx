@@ -2,6 +2,7 @@ import Link from "next/link";
 import { clsx } from "clsx";
 import type { CSSProperties } from "react";
 import { personStyle } from "@/lib/ui/person-color";
+import { typeColor } from "@/components/mention/colors";
 
 /**
  * The small mark that stands for a node everywhere in the graph screens: the same shape and colour it has on the
@@ -11,7 +12,7 @@ import { personStyle } from "@/lib/ui/person-color";
 export function NodeMark({ id, type, size = 10, className }: { id: string; type: string; size?: number; className?: string }) {
   const style: CSSProperties = type === "person"
     ? { ...personStyle(id), background: "var(--person)", width: size, height: size } as CSSProperties
-    : { background: `var(--t-${type}, var(--muted))`, width: type === "document" || type === "source" ? size * 0.8 : size, height: size };
+    : { background: typeColor(type), width: type === "document" || type === "source" ? size * 0.8 : size, height: size };
   return (
     <span aria-hidden style={style} className={clsx("inline-block shrink-0",
       type === "person" || type === "topic" ? "rounded-full" : "rounded-[2px]",

@@ -51,7 +51,7 @@ function lane(p: LaneCandidate, kind: Lane["kind"]): Lane {
   return { id: p.id, label: p.label, kind, birthYear: p.birthYear };
 }
 
-export const familyLane = (): Lane => ({ id: FAMILY_LANE, label: "Family", kind: "family", birthYear: null });
+export const familyLane = (label = "Family"): Lane => ({ id: FAMILY_LANE, label, kind: "family", birthYear: null });
 
 /** The lanes an item belongs in: each involved person that has a lane, else the Family lane. */
 export function laneIdsFor(personIds: string[], laneIds: ReadonlySet<string>): string[] {

@@ -4,38 +4,16 @@
  * lists only the kinds on screen.
  */
 import type { CSSProperties } from "react";
+import { useT } from "@/lib/i18n/client";
 import { personStyle } from "@/lib/ui/person-color";
 import type { ItemStatus, TimelineItem } from "@/lib/timeline/types";
 
-export const STATUS_LABEL: Record<ItemStatus, string> = {
-  confirmed: "Confirmed",
-  unconfirmed: "Not yet confirmed",
-  inferred: "Inferred by the assistant",
-};
+import { MARK_LABEL, type MarkKind } from "./labels";
+export { KIND_LABEL, MARK_LABEL, STATUS_LABEL, type MarkKind } from "./labels";
 
-export const KIND_LABEL: Record<TimelineItem["kind"], string> = {
-  event: "Event",
-  reminder: "Reminder",
-  source: "Added to the library",
-};
+export const MARK_ORDER: MarkKind[] = ["confirmed", "unconfirmed", "inferred", "span", "fuzzy", "reminder", "overdue", "document", "mail", "upload"];
 
-/** Every mark the screen can draw. */
-export type MarkKind = "confirmed" | "unconfirmed" | "inferred" | "span" | "fuzzy" | "reminder" | "overdue" | "upload";
-
-export const MARK_LABEL: Record<MarkKind, string> = {
-  confirmed: "Confirmed",
-  unconfirmed: "Not yet confirmed",
-  inferred: "Inferred",
-  span: "Lasts a while",
-  fuzzy: "Month or year only",
-  reminder: "Reminder",
-  overdue: "Overdue reminder",
-  upload: "Upload",
-};
-
-export const MARK_ORDER: MarkKind[] = ["confirmed", "unconfirmed", "inferred", "span", "fuzzy", "reminder", "overdue", "upload"];
-
-/** Lane colours for a person, or quiet ink for the Family lane. */
+/** Lane colours for a person, or quiet ink for the shared lane ("Family" or "Everyone"). */
 export function laneStyle(laneId: string | null): CSSProperties {
   if (!laneId || laneId === "family") return { "--person": "var(--muted)", "--person-tint": "var(--surface-2)" } as CSSProperties;
   return personStyle(laneId) as CSSProperties;
@@ -95,6 +73,33 @@ export function UploadMark({ cx, cy, size = 9 }: { cx: number; cy: number; size?
   return <rect x={cx - size / 2} y={cy - size / 2} width={size} height={size} rx={2} fill="var(--muted)" />;
 }
 
+/** A dated document (letter, scan, photo): a small page with a folded corner, outlined in the person's colour. */
+export function DocumentMark({ cx, cy, size = 13 }: { cx: number; cy: number; size?: number }) {
+  const w = size * 0.78, h = size, x = cx - w / 2, y = cy - h / 2, f = w * 0.38;
+  return (
+    <g>
+      <path d={`M${x},${y + 1.5}Q${x},${y} ${x + 1.5},${y}L${x + w - f},${y}L${x + w},${y + f}L${x + w},${y + h - 1.5}Q${x + w},${y + h} ${x + w - 1.5},${y + h}L${x + 1.5},${y + h}Q${x},${y + h} ${x},${y + h - 1.5}Z`}
+        fill="var(--person-tint)" stroke="var(--person)" strokeWidth={1.4} strokeLinejoin="round" />
+      <path d={`M${x + w - f},${y}L${x + w - f},${y + f}L${x + w},${y + f}`} fill="none" stroke="var(--person)" strokeWidth={1.1} strokeLinejoin="round" />
+    </g>
+  );
+}
+
+/** One email: an open dot in the person's colour. */
+export function MailDot({ cx, cy, r = 4 }: { cx: number; cy: number; r?: number }) {
+  return <circle cx={cx} cy={cy} r={r} fill="var(--surface)" stroke="var(--person)" strokeWidth={1.8} />;
+}
+
+/** A conversation: a thin line from the first message to the last, a dot per message. */
+export function ThreadMark({ x0, x1, cy, dots }: { x0: number; x1: number; cy: number; dots: number[] }) {
+  return (
+    <g>
+      <line x1={x0} x2={Math.max(x0, x1)} y1={cy} y2={cy} stroke="var(--person)" strokeOpacity={0.55} strokeWidth={2} strokeLinecap="round" />
+      {dots.map((d, i) => <circle key={i} cx={d} cy={cy} r={3.2} fill="var(--person)" stroke="var(--surface)" strokeWidth={1.2} />)}
+    </g>
+  );
+}
+
 /** Several things on (nearly) the same day: a disc in the person's colour with the count. */
 export function ClusterMark({ cx, cy, count }: { cx: number; cy: number; count: number }) {
   return (
@@ -109,6 +114,8 @@ export function ClusterMark({ cx, cy, count }: { cx: number; cy: number; count: 
 export function markKindOf(item: Pick<TimelineItem, "kind" | "status" | "end" | "overdue" | "precision">): MarkKind {
   if (item.kind === "reminder") return item.overdue ? "overdue" : "reminder";
   if (item.kind === "source") return "upload";
+  if (item.kind === "document") return "document";
+  if (item.kind === "thread") return "mail";
   if (item.end) return item.status === "confirmed" ? "span" : item.status;
   if (item.precision === "month" || item.precision === "year") return "fuzzy";
   return item.status;
@@ -118,12 +125,14 @@ export function markKindOf(item: Pick<TimelineItem, "kind" | "status" | "end" | 
 export function MarkSwatch({ kind, size = 16 }: { kind: MarkKind; size?: number }) {
   const c = size / 2;
   return (
-    <svg width={kind === "span" || kind === "fuzzy" ? size * 1.5 : size} height={size} aria-hidden="true" className="shrink-0 overflow-visible">
+    <svg width={kind === "span" || kind === "fuzzy" || kind === "mail" ? size * 1.5 : size} height={size} aria-hidden="true" className="shrink-0 overflow-visible">
       {kind === "confirmed" || kind === "unconfirmed" || kind === "inferred" ? <PointMark cx={c} cy={c} r={c - 2} status={kind} />
         : kind === "span" ? <BarMark x0={0.5} x1={size * 1.5 - 0.5} cy={c} h={size - 4} status="confirmed" hatchId="" />
           : kind === "fuzzy" ? <BarMark x0={0.5} x1={size * 1.5 - 0.5} cy={c} h={size - 4} status="confirmed" fuzzy hatchId="" />
             : kind === "reminder" || kind === "overdue" ? <ReminderMark cx={c} cy={c} size={size - 1} overdue={kind === "overdue"} />
-              : <UploadMark cx={c} cy={c} size={size * 0.56} />}
+              : kind === "document" ? <DocumentMark cx={c} cy={c} size={size - 3} />
+                : kind === "mail" ? <ThreadMark x0={2} x1={size * 1.5 - 2} cy={c} dots={[3, size * 0.75, size * 1.5 - 3]} />
+                  : <UploadMark cx={c} cy={c} size={size * 0.56} />}
     </svg>
   );
 }
@@ -135,13 +144,14 @@ export function ItemGlyph({ item, personId, size = 16 }: { item: Pick<TimelineIt
 
 /** Legend: each swatch is the mark itself, in neutral ink, listing only the kinds on screen. */
 export function Legend({ kinds }: { kinds: Set<MarkKind> }) {
+  const t = useT();
   const shown = MARK_ORDER.filter((k) => kinds.has(k));
   if (!shown.length) return null;
   return (
-    <ul className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted" aria-label="What the marks mean"
+    <ul className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted" aria-label={t("timeline.marks.legend")}
       style={{ "--person": "var(--fg)", "--person-tint": "var(--surface-2)" } as CSSProperties}>
       {shown.map((k) => (
-        <li key={k} className="inline-flex items-center gap-2"><MarkSwatch kind={k} size={14} />{MARK_LABEL[k]}</li>
+        <li key={k} className="inline-flex items-center gap-2"><MarkSwatch kind={k} size={14} />{t(MARK_LABEL[k])}</li>
       ))}
     </ul>
   );

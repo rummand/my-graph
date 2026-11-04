@@ -8,57 +8,101 @@
  */
 import { z } from "zod";
 import type {
-  AttrType, MetaAttribute, MetaKind, MetaModel, MetaNodeType, MetaOrigin, MetaRelation, PropError, ValidateResult,
+  AttrType, EmergentFields, MetaAttribute, MetaKind, MetaModel, MetaNodeType, MetaOrigin, MetaRelation, PropError, ValidateResult,
 } from "./types";
 
-type Row = { householdId: string | null; builtin: boolean };
+type Row = { householdId: string | null; builtin: boolean } & EmergentFields;
 
-type MergedKeys = "origin" | "hidden" | "householdRowId";
+type MergedKeys = "origin" | "hidden" | "householdRowId" | "offTemplate";
 export type KindRow = Omit<MetaKind, MergedKeys>;
 export type RelationRow = Omit<MetaRelation, MergedKeys>;
 export type AttributeRow = Omit<MetaAttribute, MergedKeys>;
 
 /** A household row that hides the built-in with the same key. */
-export function isTombstone(r: Row): boolean {
+export function isTombstone(r: { householdId: string | null; builtin: boolean }): boolean {
   return r.householdId !== null && r.builtin;
 }
 
+/**
+ * How one graph reads the household's rows (see src/lib/templates): which graph it is, and which built-ins its
+ * template uses. Built-ins the template doesn't use are flagged hidden + offTemplate (they still label old data).
+ */
+export type GraphLens = {
+  graphId?: string | null;
+  keepBuiltin?: (table: "kinds" | "relations" | "attributes", row: { key: string; nodeType?: string; kindKey?: string | null; category?: string }) => boolean;
+  /** Household rows shared between graphs (template rows with graphId null): does this graph show them? */
+  keepShared?: (table: "kinds" | "relations" | "attributes", row: { key: string; nodeType?: string; kindKey?: string | null }) => boolean;
+  /** Template circle for a kind (a colleague is "team" in a Work graph). */
+  circleOf?: (kind: { nodeType: string; key: string; circle: string | null }) => string | null | undefined;
+};
+
+/** Does a household row belong to the graph being read? Household-wide rows (graphId null) belong to every graph. */
+export function inGraph(r: { graphId?: string | null }, graphId: string | null | undefined): boolean {
+  return !r.graphId || (!!graphId && r.graphId === graphId);
+}
+
+type MergeMeta = { origin: MetaOrigin; hidden: boolean; householdRowId: string | null; offTemplate?: boolean };
+
 function mergeRows<R extends Row & { id: string }, O>(rows: R[], keyOf: (r: R) => string, householdId: string | null,
-  wrap: (r: R, m: { origin: MetaOrigin; hidden: boolean; householdRowId: string | null }) => O): O[] {
+  wrap: (r: R, m: MergeMeta) => O, lens: GraphLens = {}, keep: (r: R) => boolean = () => true, keepShared: (r: R) => boolean = () => true): { active: O[]; candidates: O[] } {
   const builtins = new Map<string, R>();
   const own = new Map<string, R>();
+  const candidates: O[] = [];
   for (const r of rows) {
     if (r.householdId === null) builtins.set(keyOf(r), r);
-    else if (r.householdId === householdId) own.set(keyOf(r), r);
+    else if (r.householdId === householdId && inGraph(r, lens.graphId)) {
+      if (!r.graphId && r.source === "template" && !keepShared(r)) continue;
+      if (r.status === "candidate" && !isTombstone(r)) candidates.push(wrap(r, { origin: "household", hidden: false, householdRowId: r.id }));
+      else own.set(keyOf(r), r);
+    }
   }
   const out: O[] = [];
   for (const [k, b] of builtins) {
     const o = own.get(k);
-    if (!o) out.push(wrap(b, { origin: "builtin", hidden: false, householdRowId: null }));
+    const off = !keep(b);
+    if (!o) out.push(wrap(b, { origin: "builtin", hidden: off, householdRowId: null, offTemplate: off || undefined }));
     else if (isTombstone(o)) out.push(wrap(b, { origin: "builtin", hidden: true, householdRowId: o.id }));
-    else out.push(wrap(o, { origin: "override", hidden: false, householdRowId: o.id }));
+    else out.push(wrap(o, { origin: "override", hidden: o.status === "hidden", householdRowId: o.id }));
   }
   for (const [k, o] of own) {
     if (builtins.has(k) || isTombstone(o)) continue; // tombstone for a built-in that no longer exists: ignore
-    out.push(wrap(o, { origin: "household", hidden: false, householdRowId: o.id }));
+    out.push(wrap(o, { origin: "household", hidden: o.status === "hidden", householdRowId: o.id }));
   }
-  return out;
+  return { active: out, candidates };
 }
 
 export const kindId = (r: { nodeType: string; key: string }) => `${r.nodeType}:${r.key}`;
 export const attributeId = (r: { nodeType: string; kindKey: string | null; key: string }) => `${r.nodeType}:${r.kindKey ?? "*"}:${r.key}`;
 
+const emergent = (r: Row, m: MergeMeta) => ({
+  status: (r.status ?? "active") as MetaKind["status"], source: (r.source ?? (r.householdId === null ? "builtin" : "manual")) as MetaKind["source"],
+  graphId: r.graphId ?? null, evidenceCount: r.evidenceCount ?? 0, firstSeenAt: r.firstSeenAt ?? null, changeSetId: r.changeSetId ?? null,
+  createdAt: r.createdAt ?? null, ...m,
+});
+
 /**
- * Merge built-ins (householdId null) with one household's rows. A household row with the same key wins; a tombstone
- * marks the built-in hidden (it stays in the result, flagged, so it can be restored and old data still labels).
+ * Merge built-ins (householdId null) with one household's rows, as seen from one graph (`lens`). A household row with
+ * the same key wins; a tombstone marks the built-in hidden (it stays in the result, flagged, so it can be restored and
+ * old data still labels). Household rows for another graph are left out; candidates come back separately.
  */
-export function mergeMetaModel(householdId: string | null, rows: { kinds: KindRow[]; relations: RelationRow[]; attributes: AttributeRow[] }): MetaModel {
-  const kinds = mergeRows(rows.kinds, kindId, householdId, (r, m): MetaKind => ({ ...r, builtin: m.origin !== "household", ...m }))
-    .sort((a, b) => a.nodeType.localeCompare(b.nodeType) || a.sortOrder - b.sortOrder || a.label.localeCompare(b.label));
-  const relations = mergeRows(rows.relations, (r) => r.key, householdId, (r, m): MetaRelation => ({ ...r, builtin: m.origin !== "household", ...m }));
-  const attributes = mergeRows(rows.attributes, attributeId, householdId, (r, m): MetaAttribute => ({ ...r, builtin: m.origin !== "household", ...m }))
-    .sort((a, b) => a.sortOrder - b.sortOrder);
-  return { kinds, relations, attributes };
+export function mergeMetaModel(householdId: string | null, rows: { kinds: KindRow[]; relations: RelationRow[]; attributes: AttributeRow[] }, lens: GraphLens = {}): MetaModel {
+  const keep = lens.keepBuiltin ?? (() => true);
+  const shared = lens.keepShared ?? (() => true);
+  const k = mergeRows(rows.kinds, kindId, householdId, (r, m): MetaKind => {
+    const circle = lens.circleOf?.(r) ?? r.circle;
+    return { ...r, circle, builtin: m.origin !== "household", ...emergent(r, m) };
+  }, lens, (r) => keep("kinds", r), (r) => shared("kinds", r));
+  const rel = mergeRows(rows.relations, (r) => r.key, householdId, (r, m): MetaRelation => ({ ...r, builtin: m.origin !== "household", ...emergent(r, m) }),
+    lens, (r) => keep("relations", r), (r) => shared("relations", r));
+  const a = mergeRows(rows.attributes, attributeId, householdId, (r, m): MetaAttribute => ({ ...r, builtin: m.origin !== "household", ...emergent(r, m) }),
+    lens, (r) => keep("attributes", r), (r) => shared("attributes", r));
+  const byKind = (x: MetaKind, y: MetaKind) => x.nodeType.localeCompare(y.nodeType) || x.sortOrder - y.sortOrder || x.label.localeCompare(y.label);
+  const kinds = k.active.sort(byKind);
+  const attributes = a.active.sort((x, y) => x.sortOrder - y.sortOrder);
+  return {
+    kinds, relations: rel.active, attributes, graphId: lens.graphId ?? null,
+    candidates: { kinds: k.candidates.sort(byKind), relations: rel.candidates, attributes: a.candidates },
+  };
 }
 
 /* ── Lookups ──────────────────────────────────────────────────────────────────────────────────────────── */

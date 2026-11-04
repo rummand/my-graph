@@ -3,8 +3,13 @@
  * (magic numbers), so a renamed executable never gets through as a "pdf".
  */
 
-export type FileKind = "pdf" | "docx" | "text" | "image" | "audio" | "email";
-export type FileCategory = "pdf" | "document" | "text" | "image" | "audio" | "email" | "other";
+export type FileKind = "pdf" | "docx" | "text" | "image" | "audio" | "email" | "mailbox" | "archive";
+export type FileCategory = "pdf" | "document" | "text" | "image" | "audio" | "email" | "mailbox" | "other";
+
+/** Containers are split into messages (each its own source); they are not read as one document. */
+export const CONTAINER_KINDS: ReadonlySet<FileKind> = new Set(["mailbox", "archive"]);
+export const MBOX_MIME = "application/mbox";
+export const ZIP_MIME = "application/zip";
 
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
@@ -13,14 +18,14 @@ export type DetectResult =
   | { ok: false; reason: string };
 
 /** Plain-English list of what the library accepts, for error messages and the upload zone. */
-export const ACCEPTED_DESCRIPTION = "PDF, Word (.docx), text (.txt, .md, .csv), email (.eml), photos (JPG, PNG, HEIC, WebP) and audio (MP3, M4A, WAV, OGG, WebM)";
+export const ACCEPTED_DESCRIPTION = "PDF, Word (.docx), text (.txt, .md, .csv), email (.eml, a mailbox .mbox, or a .zip of .eml files), photos (JPG, PNG, HEIC, WebP) and audio (MP3, M4A, WAV, OGG, WebM)";
 
 /** The `accept` attribute for the file picker. */
 export const ACCEPT_ATTR = [
-  ".pdf", ".docx", ".txt", ".md", ".markdown", ".csv", ".eml",
+  ".pdf", ".docx", ".txt", ".md", ".markdown", ".csv", ".eml", ".mbox", ".zip",
   ".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp",
   ".mp3", ".m4a", ".wav", ".ogg", ".oga", ".opus", ".webm",
-  "application/pdf", "image/*", "audio/*", "text/plain", "text/markdown", "text/csv", "message/rfc822",
+  "application/pdf", "image/*", "audio/*", "text/plain", "text/markdown", "text/csv", "message/rfc822", "application/mbox", "application/zip",
 ].join(",");
 
 const TEXT_EXT: Record<string, string> = { txt: "text/plain", md: "text/markdown", markdown: "text/markdown", csv: "text/csv" };
@@ -91,13 +96,17 @@ export function detectFileType(name: string, declaredMime: string, head: Uint8Ar
     if (ext === "docx" || declared === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
       return { ok: true, mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", kind: "docx", ext: "docx" };
     }
+    if (ext === "zip" || declared === "application/zip" || declared === "application/x-zip-compressed") return { ok: true, mime: ZIP_MIME, kind: "archive", ext: "zip" };
     if (["xlsx", "pptx"].includes(ext)) return { ok: false, reason: `"${name}" is a ${ext === "xlsx" ? "spreadsheet" : "presentation"}. Save it as PDF (or CSV for a spreadsheet) and upload that.` };
-    return { ok: false, reason: `"${name}" is a zip archive. Unpack it and upload the files inside.` };
+    return { ok: false, reason: `"${name}" is a zip archive. Name it .zip to import the emails inside, or unpack it and upload the files.` };
   }
   if (startsWith(head, [0xd0, 0xcf, 0x11, 0xe0])) return { ok: false, reason: `"${name}" is an old Word/Office file (.doc). Save it as .docx or PDF and upload that.` };
 
   // Text formats — decided by extension (or declared type), then checked to really be text.
   const isText = looksLikeText(head);
+  if (ext === "mbox" || declared === "application/mbox") {
+    return isText ? { ok: true, mime: MBOX_MIME, kind: "mailbox", ext: "mbox" } : { ok: false, reason: `"${name}" doesn't look like a mailbox file.` };
+  }
   if (ext === "eml" || declared === "message/rfc822") {
     return isText ? { ok: true, mime: "message/rfc822", kind: "email", ext: "eml" } : { ok: false, reason: `"${name}" doesn't look like an email file.` };
   }
@@ -118,6 +127,7 @@ export function mimeCategory(mime: string | null | undefined): FileCategory {
   if (m === "application/pdf") return "pdf";
   if (m.includes("wordprocessingml")) return "document";
   if (m === "message/rfc822") return "email";
+  if (m === MBOX_MIME || m === ZIP_MIME) return "mailbox";
   if (m.startsWith("image/")) return "image";
   if (m.startsWith("audio/")) return "audio";
   if (m.startsWith("text/")) return "text";
@@ -125,7 +135,7 @@ export function mimeCategory(mime: string | null | undefined): FileCategory {
 }
 
 export const CATEGORY_LABEL: Record<FileCategory, string> = {
-  pdf: "PDF", document: "Word document", text: "Text", image: "Photo", audio: "Audio", email: "Email", other: "Note",
+  pdf: "PDF", document: "Word document", text: "Text", image: "Photo", audio: "Audio", email: "Email", mailbox: "Mail import", other: "Note",
 };
 
 /** The processing kind for a stored mime type (inverse of detectFileType's result). */
@@ -134,6 +144,8 @@ export function kindFromMime(mime: string | null | undefined): FileKind | null {
   if (m === "application/pdf") return "pdf";
   if (m.includes("wordprocessingml")) return "docx";
   if (m === "message/rfc822") return "email";
+  if (m === MBOX_MIME) return "mailbox";
+  if (m === ZIP_MIME) return "archive";
   if (m.startsWith("image/")) return "image";
   if (m.startsWith("audio/")) return "audio";
   if (m.startsWith("text/")) return "text";

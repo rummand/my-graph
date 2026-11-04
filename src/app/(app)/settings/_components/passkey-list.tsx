@@ -7,13 +7,16 @@ import { Button, IconButton, Input } from "@/components/ui";
 import { api, errorMessage } from "@/lib/auth/client/api";
 import { addPasskey, guessDeviceName, passkeysSupported } from "@/lib/auth/client/passkeys";
 import { ErrorNote, Notice } from "@/app/login/notes";
-import { fmtDate } from "./format";
+import { useT } from "@/lib/i18n/client";
+import { useWhen } from "./use-when";
 import { PanelFooter } from "./section";
 
 type Pk = { id: string; name: string; createdAt: string };
 
 export function PasskeyList({ passkeys }: { passkeys: Pk[] }) {
   const router = useRouter();
+  const t = useT();
+  const w = useWhen();
   const [supported, setSupported] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,8 +46,8 @@ export function PasskeyList({ passkeys }: { passkeys: Pk[] }) {
         <div className="flex items-start gap-3 px-5 pt-5">
           <Fingerprint size={20} strokeWidth={1.75} className="mt-0.5 shrink-0 text-muted" aria-hidden />
           <div>
-            <p className="font-medium">No passkeys yet</p>
-            <p className="mt-0.5 text-sm text-muted">Add one and next time you can sign in on this device with a touch or a glance.</p>
+            <p className="font-medium">{t("settings.passkeys.none")}</p>
+            <p className="mt-0.5 text-sm text-muted">{t("settings.passkeys.noneHint")}</p>
           </div>
         </div>
       ) : (
@@ -55,24 +58,24 @@ export function PasskeyList({ passkeys }: { passkeys: Pk[] }) {
                 <KeyRound size={16} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden />
                 {editing === p.id ? (
                   <form className="flex min-w-0 flex-1 flex-wrap items-center gap-2"
-                    onSubmit={(e) => { e.preventDefault(); run(p.id, () => api(`/api/auth/passkeys/${p.id}`, { method: "PATCH", json: { name: draft } }), "Passkey renamed."); }}>
-                    <label htmlFor={`pk-${p.id}`} className="sr-only">Passkey name</label>
+                    onSubmit={(e) => { e.preventDefault(); run(p.id, () => api(`/api/auth/passkeys/${p.id}`, { method: "PATCH", json: { name: draft } }), t("settings.passkeys.renamed")); }}>
+                    <label htmlFor={`pk-${p.id}`} className="sr-only">{t("settings.passkeys.name")}</label>
                     <Input id={`pk-${p.id}`} value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={60} className="min-w-0 flex-1 basis-40" autoFocus
                       onKeyDown={(e) => { if (e.key === "Escape") setEditing(null); }} />
-                    <Button type="submit" size="sm" disabled={busy !== null || !draft.trim()}>Save</Button>
-                    <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(null)}>Cancel</Button>
+                    <Button type="submit" size="sm" disabled={busy !== null || !draft.trim()}>{t("common.save")}</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(null)}>{t("common.cancel")}</Button>
                   </form>
                 ) : (
                   <>
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{p.name}</p>
-                      <p className="text-sm text-muted">Added {fmtDate(p.createdAt)}</p>
+                      <p className="text-sm text-muted">{t("settings.passkeys.added", { date: w.date(p.createdAt) })}</p>
                     </div>
-                    <IconButton label={`Rename ${p.name}`} onClick={() => { setEditing(p.id); setDraft(p.name); }}>
+                    <IconButton label={t("settings.passkeys.rename", { name: p.name })} onClick={() => { setEditing(p.id); setDraft(p.name); }}>
                       <Pencil size={15} aria-hidden />
                     </IconButton>
-                    <IconButton label={`Remove ${p.name}`} disabled={busy !== null} className="hover:text-danger"
-                      onClick={() => { if (confirm(`Remove the passkey “${p.name}”? You won't be able to sign in with it any more.`)) run(p.id, () => api(`/api/auth/passkeys/${p.id}`, { method: "DELETE" }), "Passkey removed."); }}>
+                    <IconButton label={t("settings.passkeys.remove", { name: p.name })} disabled={busy !== null} className="hover:text-danger"
+                      onClick={() => { if (confirm(t("settings.passkeys.confirmRemove", { name: p.name }))) run(p.id, () => api(`/api/auth/passkeys/${p.id}`, { method: "DELETE" }), t("settings.passkeys.removed")); }}>
                       <Trash2 size={15} aria-hidden />
                     </IconButton>
                   </>
@@ -86,11 +89,11 @@ export function PasskeyList({ passkeys }: { passkeys: Pk[] }) {
         <ErrorNote message={error} className="mt-4" />
         <PanelFooter className={passkeys.length ? "mt-3" : undefined} status={supported
           ? <Notice message={notice} />
-          : <p className="text-sm text-muted">This browser can&apos;t use passkeys. Try a recent Safari, Chrome, Edge or Firefox.</p>}>
+          : <p className="text-sm text-muted">{t("settings.passkeys.unsupported")}</p>}>
           {supported && (
             <Button variant={passkeys.length ? "secondary" : "primary"} disabled={busy !== null}
-              onClick={() => run("add", () => addPasskey(guessDeviceName()), "Passkey added. Use it next time you sign in.")}>
-              <Fingerprint size={16} aria-hidden />{busy === "add" ? "Follow your device's prompt…" : "Add a passkey on this device"}
+              onClick={() => run("add", () => addPasskey(guessDeviceName()), t("settings.passkeys.addDone"))}>
+              <Fingerprint size={16} aria-hidden />{busy === "add" ? t("settings.passkeys.addBusy") : t("settings.passkeys.add")}
             </Button>
           )}
         </PanelFooter>

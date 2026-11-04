@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { EmptyState, buttonClass } from "@/components/ui";
+import { getT } from "@/lib/i18n";
 
-export default function ConversationNotFound() {
+export default async function ConversationNotFound() {
+  const t = await getT();
   return (
     <div className="mx-auto max-w-xl py-16">
-      <EmptyState title="That conversation isn't here"
-        action={<Link href="/chat" className={buttonClass("primary")}>Start a new conversation</Link>}>
-        <p>It may have been deleted, or it was started by someone else in the family. Conversations are private to the person who asked.</p>
+      <EmptyState title={t("chat.notFound.title")}
+        action={<Link href="/chat" className={buttonClass("primary")}>{t("chat.notFound.start")}</Link>}>
+        <p>{t("chat.notFound.body")}</p>
       </EmptyState>
     </div>
   );

@@ -3,7 +3,9 @@ import { useState } from "react";
 import { motion } from "motion/react";
 import { Check, Copy, Lock, ThumbsDown, ThumbsUp } from "lucide-react";
 import { clsx } from "clsx";
-import { format } from "date-fns";
+import { useFormatDate, useT } from "@/lib/i18n/client";
+import { MentionText } from "@/components/mention/mention-text";
+import { parseMentions } from "@/lib/mentions/markup";
 import type { Citation } from "@/db/schema";
 import type { MessageView } from "@/lib/assistant/store";
 import type { ProposalView } from "@/lib/assistant/proposals";
@@ -18,9 +20,6 @@ export type UiMessage = MessageView & { uid: string; streaming?: boolean; live?:
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
-const ROUTE_LABEL: Record<string, string> = {
-  fast: "Quick answer", smart: "Careful answer", agent: "Answered on a local model", auto: "Answer",
-};
 
 /** A question reads as the heading of the answer under it: the thread is a document you read top to bottom. */
 export function Question({ m, first }: { m: UiMessage; first: boolean }) {
@@ -28,7 +27,7 @@ export function Question({ m, first }: { m: UiMessage; first: boolean }) {
     <motion.h2
       initial={m.fresh ? { opacity: 0, y: 8 } : false} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.22, ease: EASE }}
       className={`${first ? "" : "mt-16"} whitespace-pre-wrap break-words text-[21px]/[1.35] font-semibold tracking-[-0.015em]`}>
-      {m.content}
+      {parseMentions(m.content).length ? <MentionText text={m.content} /> : m.content}
     </motion.h2>
   );
 }
@@ -74,8 +73,11 @@ export function Answer({ m, conversationId, onDecided, canClarify, onClarify, on
 }
 
 function AnswerMeta({ m, onFeedback }: { m: UiMessage; onFeedback?: (messageId: string, value: 1 | -1 | null) => void }) {
+  const t = useT();
+  const fmt = useFormatDate();
   const [copied, setCopied] = useState(false);
   const model = shortModel(m.model);
+  const route = t(`chat.message.route.${m.route ?? "auto"}`, undefined, t("chat.message.answer"));
   const when = new Date(m.createdAt);
   async function copy() {
     try {
@@ -89,21 +91,21 @@ function AnswerMeta({ m, onFeedback }: { m: UiMessage; onFeedback?: (messageId: 
       <button type="button" onClick={copy}
         className="-ml-1.5 inline-flex h-7 items-center gap-1.5 rounded-md px-1.5 transition-colors hover:bg-surface-2 hover:text-fg">
         {copied ? <Check aria-hidden className="size-3.5 text-accent" /> : <Copy aria-hidden className="size-3.5" />}
-        {copied ? "Copied" : "Copy answer"}
+        {copied ? t("chat.message.copied") : t("chat.message.copy")}
       </button>
       {onFeedback && (
-        <span className="inline-flex items-center" role="group" aria-label="Was this answer helpful?">
-          <FeedbackButton label="Good answer" pressed={m.feedback === 1} onClick={() => onFeedback(m.id, m.feedback === 1 ? null : 1)}><ThumbsUp className="size-3.5" /></FeedbackButton>
-          <FeedbackButton label="Not a good answer" pressed={m.feedback === -1} onClick={() => onFeedback(m.id, m.feedback === -1 ? null : -1)}><ThumbsDown className="size-3.5" /></FeedbackButton>
+        <span className="inline-flex items-center" role="group" aria-label={t("chat.message.helpful")}>
+          <FeedbackButton label={t("chat.message.good")} pressed={m.feedback === 1} onClick={() => onFeedback(m.id, m.feedback === 1 ? null : 1)}><ThumbsUp className="size-3.5" /></FeedbackButton>
+          <FeedbackButton label={t("chat.message.bad")} pressed={m.feedback === -1} onClick={() => onFeedback(m.id, m.feedback === -1 ? null : -1)}><ThumbsDown className="size-3.5" /></FeedbackButton>
         </span>
       )}
       {(m.route || model) && (
         <span className="inline-flex items-center gap-1" title={m.model ?? undefined}>
           {m.route === "agent" && <Lock aria-hidden className="size-3" />}
-          {ROUTE_LABEL[m.route ?? ""] ?? "Answer"}{model ? ` from ${model}` : ""}
+          {model ? t("chat.message.from", { route, model }) : route}
         </span>
       )}
-      {!Number.isNaN(when.getTime()) && <time dateTime={m.createdAt}>{format(when, "EEE d MMM, HH:mm")}</time>}
+      {!Number.isNaN(when.getTime()) && <time dateTime={m.createdAt} suppressHydrationWarning>{fmt(when, "weekday")}, {fmt(when, "time")}</time>}
     </div>
   );
 }

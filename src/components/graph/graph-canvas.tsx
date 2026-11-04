@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import type { Core, ElementDefinition, LayoutOptions, NodeSingular, StylesheetJson } from "cytoscape";
 import { Maximize2, Minus, Plus } from "lucide-react";
 import { personHue } from "@/lib/ui/person-color";
+import { useT } from "@/lib/i18n/client";
+import { typeColor } from "@/components/mention/colors";
 import type { GraphData } from "./types";
 
 /** Reads the design tokens from CSS so the graph follows light and dark mode. Re-read on every theme change. */
@@ -14,7 +16,7 @@ function tokens() {
     accent: v("--accent", "#2f4bb0"), inferred: v("--inferred", "#7a4fa0"),
     personS: v("--person-s", "62%"), personL: v("--person-l", "42%"),
     font: getComputedStyle(document.body).fontFamily || "system-ui, sans-serif",
-    type: (t: string) => v(`--t-${t}`, v("--muted", "#5b6660")),
+    type: (t: string) => v(`--t-${t}`, typeColor(t).match(/#[0-9a-f]{6}/i)?.[0] ?? v("--muted", "#5b6660")),
   };
 }
 
@@ -186,13 +188,14 @@ export default function GraphCanvas({
   };
   const fit = () => cyRef.current?.animate({ fit: { eles: cyRef.current.elements(":visible"), padding: 56 } }, { duration: 220, easing: "ease-out-cubic" });
 
+  const t = useT();
   return (
     <>
       <div ref={el} role="img" aria-label={label} className="h-full w-full" />
-      <div className="absolute bottom-3 right-3 flex flex-col rounded-md bg-surface-2/90 p-0.5" role="group" aria-label="Zoom">
-        <CanvasButton label="Zoom in" onClick={() => zoomBy(1.3)}><Plus className="size-4" /></CanvasButton>
-        <CanvasButton label="Zoom out" onClick={() => zoomBy(1 / 1.3)}><Minus className="size-4" /></CanvasButton>
-        <CanvasButton label="Fit everything in view" onClick={fit}><Maximize2 className="size-3.5" /></CanvasButton>
+      <div className="absolute bottom-3 right-3 flex flex-col rounded-md bg-surface-2/90 p-0.5" role="group" aria-label={t("graph.explorer.zoom")}>
+        <CanvasButton label={t("graph.explorer.zoomIn")} onClick={() => zoomBy(1.3)}><Plus className="size-4" /></CanvasButton>
+        <CanvasButton label={t("graph.explorer.zoomOut")} onClick={() => zoomBy(1 / 1.3)}><Minus className="size-4" /></CanvasButton>
+        <CanvasButton label={t("graph.explorer.fit")} onClick={fit}><Maximize2 className="size-3.5" /></CanvasButton>
       </div>
     </>
   );

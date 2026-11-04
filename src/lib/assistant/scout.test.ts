@@ -68,12 +68,21 @@ describe("interactive auto-apply (approval cards, always allow)", () => {
     expect(autoApplyDecision(reminder, { ...base, alwaysAllow: ["reminder.create"] })).toEqual({ mode: "auto", reason: "always" });
     expect(autoApplyDecision(fact, { ...base, alwaysAllow: ["reminder.create"] }).mode).toBe("ask");
   });
-  it("auto-saves memories the user said when the setting is on", () => {
-    expect(autoApplyDecision(memory, { ...base, autoSaveMemories: true })).toEqual({ mode: "auto", reason: "setting" });
+  it("hands memories to the Brain Keeper instead of asking, and keeps one at once when the person said remember", () => {
+    expect(autoApplyDecision(memory, base).mode).toBe("keeper");
+    expect(autoApplyDecision(memory, { ...base, autoSaveMemories: true }).mode).toBe("keeper");
+    expect(autoApplyDecision(memory, { ...base, question: "Remember that Sunday dinner is family time" })).toEqual({ mode: "auto", reason: "asked" });
+    expect(autoApplyDecision(memory, { ...base, question: "Husk at søndagsmiddag er familietid" })).toEqual({ mode: "auto", reason: "asked" });
+    // Asking whether it remembers is not asking it to remember.
+    expect(autoApplyDecision(memory, { ...base, question: "Do you remember when Sunday dinner is?" }).mode).toBe("keeper");
+    // Outside content or a wider audience: never kept at once, even when asked; the keeper keeps it pending.
+    expect(autoApplyDecision(memory, { ...base, basis: "document", question: "remember this" }).mode).toBe("keeper");
+    expect(autoApplyDecision(memory, { ...base, widens: true, question: "remember this" }).mode).toBe("keeper");
+    expect(autoApplyDecision(memory, { ...base, canWrite: false, question: "remember this" }).mode).toBe("ask");
   });
   it("always asks for outside content, widening writes, read-only members and capabilities that are off", () => {
     const always = { ...base, alwaysAllow: ["reminder.create", "memory.save"], autoSaveMemories: true };
-    expect(autoApplyDecision(memory, { ...always, basis: "document" }).mode).toBe("ask");
+    expect(autoApplyDecision(memory, { ...always, basis: "document" }).mode).toBe("keeper");
     expect(autoApplyDecision(reminder, { ...always, basis: "document" }).mode).toBe("ask");
     expect(autoApplyDecision(reminder, { ...always, widens: true }).mode).toBe("ask");
     expect(autoApplyDecision(reminder, { ...always, canWrite: false }).mode).toBe("ask");

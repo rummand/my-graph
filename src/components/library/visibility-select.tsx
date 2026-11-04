@@ -2,14 +2,19 @@
 import { useId, type KeyboardEvent } from "react";
 import { clsx } from "clsx";
 import { Lock, ShieldAlert, Users, UsersRound } from "lucide-react";
-import { VISIBILITY_OPTIONS, type Visibility } from "./source-meta";
+import { visibilityOptions, type Visibility } from "./i18n";
+import { useLx } from "./use-lx";
 
 const ICON: Record<Visibility, typeof Lock> = { private: Lock, parents: UsersRound, household: Users };
 
 /** Who can see a file: three choices side by side, the current one raised. A real radio group for keyboards. */
-export function VisibilitySelect({ value, onChange, label = "Who can see this", disabled, compact = false }: {
+export function VisibilitySelect({ value, onChange, label, disabled, compact = false, family = false }: {
   value: Visibility; onChange: (v: Visibility) => void; label?: string; disabled?: boolean; compact?: boolean;
+  /** Family words ("Parents", "Whole family") only in a family graph; graph roles elsewhere. */
+  family?: boolean;
 }) {
+  const L = useLx(family);
+  const VISIBILITY_OPTIONS = visibilityOptions(L);
   const id = useId();
   const hint = VISIBILITY_OPTIONS.find((o) => o.value === value)?.hint;
   const move = (e: KeyboardEvent, dir: 1 | -1) => {
@@ -21,9 +26,9 @@ export function VisibilitySelect({ value, onChange, label = "Who can see this", 
   };
   return (
     <div>
-      <p id={`${id}-label`} className={clsx("mb-1.5 text-sm font-medium", compact && "sr-only")}>{label}</p>
+      <p id={`${id}-label`} className={clsx("mb-1.5 text-sm font-medium", compact && "sr-only")}>{label ?? L.t("library.visibility.label")}</p>
       <div role="radiogroup" aria-labelledby={`${id}-label`} aria-describedby={compact ? undefined : `${id}-hint`}
-        className={clsx("inline-flex max-w-full rounded-md bg-surface-2 p-0.5", disabled && "opacity-60")}>
+        className={clsx("flex w-full rounded-md bg-surface-2 p-0.5 sm:inline-flex sm:w-auto sm:max-w-full", disabled && "opacity-60")}>
         {VISIBILITY_OPTIONS.map((o) => {
           const on = o.value === value;
           const Icon = ICON[o.value];
@@ -35,9 +40,9 @@ export function VisibilitySelect({ value, onChange, label = "Who can see this", 
                 if (e.key === "ArrowRight" || e.key === "ArrowDown") move(e, 1);
                 if (e.key === "ArrowLeft" || e.key === "ArrowUp") move(e, -1);
               }}
-              className={clsx("inline-flex h-8 min-w-0 items-center gap-1.5 rounded-[5px] px-2.5 text-sm transition-colors duration-150",
+              className={clsx("inline-flex h-8 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[5px] px-2 text-sm transition-colors duration-150 sm:flex-none sm:px-2.5",
                 on ? "bg-surface font-medium text-fg shadow-[0_1px_2px_rgb(0_0_0/0.08)]" : "text-muted hover:text-fg")}>
-              <Icon aria-hidden className="size-3.5 shrink-0" />
+              <Icon aria-hidden className="hidden size-3.5 shrink-0 min-[400px]:block" />
               <span className="truncate">{o.label}</span>
             </button>
           );
@@ -48,8 +53,9 @@ export function VisibilitySelect({ value, onChange, label = "Who can see this", 
   );
 }
 
-/** An on/off switch for "sensitive": health, money and legal papers stay on local models. */
-export function SensitiveToggle({ checked, onChange, disabled, compact = false }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; compact?: boolean }) {
+/** An on/off switch for "sensitive": health, money and legal papers stay on local models (and, in a family graph, away from children). */
+export function SensitiveToggle({ checked, onChange, disabled, compact = false, family = false }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; compact?: boolean; family?: boolean }) {
+  const { t } = useLx(family);
   const id = useId();
   return (
     <div className="flex items-start gap-3">
@@ -62,10 +68,10 @@ export function SensitiveToggle({ checked, onChange, disabled, compact = false }
       </button>
       <div className="min-w-0">
         <label htmlFor={id} className="flex cursor-pointer items-center gap-1.5 text-sm font-medium">
-          Sensitive{checked && <ShieldAlert aria-hidden className="size-3.5 text-warn" />}
+          {t("library.sensitive.label")}{checked && <ShieldAlert aria-hidden className="size-3.5 text-warn" />}
         </label>
         {!compact && (
-          <p id={`${id}-hint`} className="mt-0.5 text-sm text-muted">Health, money or legal papers. Read only by models in the house, never sent to cloud AI, and hidden from children.</p>
+          <p id={`${id}-hint`} className="mt-0.5 text-sm text-muted">{t(family ? "library.sensitive.hintFamily" : "library.sensitive.hintGraph")}</p>
         )}
       </div>
     </div>

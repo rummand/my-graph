@@ -1,7 +1,12 @@
 /**
  * Pure helpers for showing graphs: colour, grouping and the plain sentences that say who sees what.
- * No React, no DB, so the tests can cover them.
+ * No React, no DB, so the tests can cover them. Every sentence takes the reader's translator (`t`); without one it is
+ * English, from the same message file.
  */
+import { makeT, type TFn } from "@/lib/i18n/core";
+import enGraphs from "@/lib/i18n/messages/en/graphs";
+
+const EN: TFn = makeT("en", { graphs: enGraphs });
 
 export type GraphRole = "owner" | "editor" | "viewer";
 
@@ -52,17 +57,21 @@ export const ROLE_LABEL: Record<GraphRole, string> = {
   owner: "Owner", editor: "Can add and edit", viewer: "Can only look",
 };
 
+export const kindLabel = (kind: GraphView["kind"], t: TFn = EN) => t(`graphs.kinds.${kind}`, undefined, KIND_LABEL[kind]);
+export const roleLabel = (role: GraphRole, t: TFn = EN) => t(`graphs.roles.${role}`, undefined, ROLE_LABEL[role]);
+
 export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || name;
 }
 
 /** "Sara", "Sara and Mikkel", "Sara, Mikkel and Emma", "Sara and 3 others". */
-export function joinNames(names: string[], max = 3): string {
+export function joinNames(names: string[], max = 3, t: TFn = EN): string {
   if (names.length === 0) return "";
   if (names.length === 1) return names[0];
-  if (names.length <= max) return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  if (names.length === 2 && max >= 2) return t("graphs.list.two", { a: names[0], b: names[1] });
+  if (names.length <= max) return t("graphs.list.many", { list: names.slice(0, -1).join(", "), last: names[names.length - 1] });
   const rest = names.length - (max - 1);
-  return `${names.slice(0, max - 1).join(", ")} and ${rest} others`;
+  return t("graphs.list.andOthers", { list: names.slice(0, max - 1).join(", "), count: rest });
 }
 
 export function others(g: Pick<GraphView, "members">, youId: string): GraphPerson[] {
@@ -82,33 +91,27 @@ export function groupGraphs<T extends Pick<GraphView, "myRole" | "isFamily">>(gr
 }
 
 /** The short line under a graph's name: who else is in it. Null when it is only you. */
-export function sharingLine(g: Pick<GraphView, "members" | "ownerId" | "isFamily" | "myRole">, youId: string): string | null {
+export function sharingLine(g: Pick<GraphView, "members" | "ownerId" | "isFamily" | "myRole">, youId: string, t: TFn = EN): string | null {
   const rest = others(g, youId).map((m) => firstName(m.name));
-  if (g.isFamily) return rest.length ? `The family, ${rest.length + 1} people` : "The family";
+  if (g.isFamily) return rest.length ? t("graphs.sharing.familyWith", { count: rest.length + 1 }) : t("graphs.sharing.family");
   if (g.myRole !== "owner") {
     const owner = ownerOf(g);
-    return owner ? `Shared by ${firstName(owner.name)}` : "Shared with you";
+    return owner ? t("graphs.sharing.sharedBy", { name: firstName(owner.name) }) : t("graphs.sharing.sharedWithYou");
   }
   if (!rest.length) return null;
-  return `Shared with ${joinNames(rest, 2)}`;
+  return t("graphs.sharing.sharedWith", { names: joinNames(rest, 2, t) });
 }
 
 /** One plain sentence on what the people in this graph can and cannot see. */
-export function whoSeesWhat(g: Pick<GraphView, "id" | "members" | "ownerId" | "isFamily" | "myRole">, all: Pick<GraphView, "id" | "name" | "myRole" | "isFamily">[], youId: string): string {
+export function whoSeesWhat(g: Pick<GraphView, "id" | "members" | "ownerId" | "isFamily" | "myRole">, all: Pick<GraphView, "id" | "name" | "myRole" | "isFamily">[], youId: string, t: TFn = EN): string {
   const mineElsewhere = all.filter((x) => x.id !== g.id && (x.myRole === "owner" || x.isFamily)).map((x) => x.name);
-  const elsewhere = mineElsewhere.length ? `Your ${joinNames(mineElsewhere, 4)} ${mineElsewhere.length === 1 ? "graph stays" : "graphs stay"} private.` : "";
-  if (g.isFamily) {
-    return "Everyone in the household works in this graph, and their private things stay their own. Graphs you share with other people never show up here.";
-  }
+  const elsewhere = mineElsewhere.length ? t("graphs.sees.elsewhere", { names: joinNames(mineElsewhere, 4, t), count: mineElsewhere.length }) : "";
+  if (g.isFamily) return t("graphs.sees.family");
   if (g.myRole !== "owner") {
     const owner = ownerOf(g);
-    const who = owner ? firstName(owner.name) : "The owner";
-    return `You see only what is in this graph. ${who}'s other graphs stay private, and nothing from your own graphs is shared with ${owner ? who : "them"}.`;
+    return owner ? t("graphs.sees.sharedOwner", { owner: firstName(owner.name) }) : t("graphs.sees.sharedNoOwner");
   }
   const rest = others(g, youId).map((m) => firstName(m.name));
-  if (!rest.length) {
-    return `Only you can see this graph. When you share it, people see what is in it and nothing else. ${elsewhere}`.trim();
-  }
-  const verb = rest.length === 1 ? "sees" : "see";
-  return `${joinNames(rest, 3)} ${verb} only what is in this graph. ${elsewhere}`.trim();
+  if (!rest.length) return `${t("graphs.sees.onlyYou")} ${elsewhere}`.trim();
+  return `${t("graphs.sees.others", { names: joinNames(rest, 3, t), count: rest.length })} ${elsewhere}`.trim();
 }

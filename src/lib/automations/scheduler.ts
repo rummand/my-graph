@@ -11,7 +11,7 @@ import { executeAutomation } from "./runner";
 import { CLAIM_BATCH, CLAIM_LEASE_MS, TICK_MS } from "./schedule";
 
 type AutomationRow = typeof automations.$inferSelect;
-type State = { timer?: ReturnType<typeof setInterval>; ticking: boolean; started: boolean };
+type State = { timer?: ReturnType<typeof setInterval>; keeperTimer?: ReturnType<typeof setInterval>; keeperTicking?: boolean; ticking: boolean; started: boolean };
 const g = globalThis as unknown as { __mgScheduler?: State };
 const state: State = g.__mgScheduler ?? (g.__mgScheduler = { ticking: false, started: false });
 
@@ -69,11 +69,23 @@ export function start(): void {
   // Don't keep a process alive (scripts, tests) just for the scheduler.
   (state.timer as { unref?: () => void }).unref?.();
   setTimeout(() => { void tick(); }, 10_000).unref?.();
-  console.log("[scheduler] started (every 60s)");
+  // The Brain Keeper: every 15 minutes, for each person with new material since its last run (src/lib/keeper).
+  const keep = () => {
+    if (state.keeperTicking) return;
+    state.keeperTicking = true;
+    void import("@/lib/keeper").then((k) => k.keeperTick()).catch((e) => console.error("[scheduler] keeper tick failed:", e instanceof Error ? e.message : e))
+      .finally(() => { state.keeperTicking = false; });
+  };
+  state.keeperTimer = setInterval(keep, 15 * 60_000);
+  (state.keeperTimer as { unref?: () => void }).unref?.();
+  setTimeout(keep, 5 * 60_000).unref?.();
+  console.log("[scheduler] started (every 60s; Brain Keeper every 15 min)");
 }
 
 export function stop(): void {
   if (state.timer) clearInterval(state.timer);
+  if (state.keeperTimer) clearInterval(state.keeperTimer);
   state.timer = undefined;
+  state.keeperTimer = undefined;
   state.started = false;
 }

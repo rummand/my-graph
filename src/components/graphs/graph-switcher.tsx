@@ -7,10 +7,25 @@ import { clsx } from "clsx";
 import { Check, ChevronsUpDown, Plus, Settings2 } from "lucide-react";
 import { Mark } from "@/components/mark";
 import { GraphDot, MemberStack } from "./bits";
-import { graphStyle, groupGraphs, others, sharingLine, type GraphView } from "./describe";
+import { firstName, graphStyle, groupGraphs, others, ownerOf, type GraphView } from "./describe";
 import { pathAfterSwitch, switchGraph } from "./client-api";
+import { useT, type TFn } from "@/lib/i18n/client";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
+
+/** Who else is in a graph, in the reader's language (the same rules as `sharingLine` in ./describe). */
+function sharing(g: GraphView, youId: string, t: TFn): string | null {
+  const rest = others(g, youId).map((m) => firstName(m.name));
+  if (g.isFamily) return rest.length ? t("graphs.sharing.familyWith", { count: rest.length + 1 }) : t("graphs.sharing.family");
+  if (g.myRole !== "owner") {
+    const owner = ownerOf(g);
+    return owner ? t("graphs.sharing.sharedBy", { name: firstName(owner.name) }) : t("graphs.sharing.sharedWithYou");
+  }
+  if (!rest.length) return null;
+  const names = rest.length === 1 ? rest[0] : rest.length === 2 ? t("graphs.sharing.and", { a: rest[0], b: rest[1] })
+    : t("graphs.sharing.andOthers", { name: rest[0], count: rest.length - 1 });
+  return t("graphs.sharing.sharedWith", { names });
+}
 
 /**
  * Which graph you are working in. In the rail it is the product block itself: the mark (with the graph's colour on
@@ -25,6 +40,7 @@ export function GraphSwitcher({ graphs, youId, compact = false }: { graphs: Grap
   const box = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const t = useT();
   const current = graphs.find((g) => g.isCurrent) ?? graphs[0];
 
   useEffect(() => {
@@ -42,7 +58,7 @@ export function GraphSwitcher({ graphs, youId, compact = false }: { graphs: Grap
 
   if (!current) return null;
   const { mine, shared } = groupGraphs(graphs);
-  const hint = sharingLine(current, youId);
+  const hint = sharing(current, youId, t);
 
   async function choose(id: string) {
     if (id === current.id) { setOpen(false); return; }
@@ -77,7 +93,7 @@ export function GraphSwitcher({ graphs, youId, compact = false }: { graphs: Grap
     <div ref={box} className="relative" style={style}>
       {compact ? (
         <button ref={trigger} type="button" data-graph-switcher onClick={() => setOpen((o) => !o)}
-          aria-expanded={open} aria-haspopup="dialog" aria-label={`Working in ${current.name}. Switch graph`}
+          aria-expanded={open} aria-haspopup="dialog" aria-label={t("graphs.switcher.triggerCompact", { name: current.name })}
           className="flex h-9 max-w-[148px] items-center gap-1.5 rounded-full bg-[var(--g-tint)] pl-2.5 pr-2 text-sm font-medium transition-colors hover:brightness-[0.97] active:scale-[0.98]">
           <GraphDot hue={current.color} size={8} />
           <span className="min-w-0 truncate">{current.name}</span>
@@ -85,14 +101,14 @@ export function GraphSwitcher({ graphs, youId, compact = false }: { graphs: Grap
         </button>
       ) : (
         <button ref={trigger} type="button" data-graph-switcher onClick={() => setOpen((o) => !o)}
-          aria-expanded={open} aria-haspopup="dialog" aria-label={`My Graph. Working in ${current.name}. Switch graph`}
+          aria-expanded={open} aria-haspopup="dialog" aria-label={t("graphs.switcher.trigger", { name: current.name })}
           className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/70">
           <span className="relative shrink-0">
             <Mark size={30} />
             <span aria-hidden className="absolute -bottom-1 -right-1 size-3.5 rounded-full bg-[var(--g)] ring-[2.5px] ring-bg" />
           </span>
           <span className="min-w-0 flex-1 leading-tight">
-            <span className="block text-xs text-muted">My Graph</span>
+            <span className="block text-xs text-muted">{t("graphs.switcher.product")}</span>
             <span className="block truncate text-[15px] font-semibold">{current.name}</span>
             {hint && <span className="mt-0.5 block truncate text-xs text-muted">{hint}</span>}
           </span>
@@ -104,7 +120,7 @@ export function GraphSwitcher({ graphs, youId, compact = false }: { graphs: Grap
         {open && (
           <motion.div
             role="dialog"
-            aria-label="Switch graph"
+            aria-label={t("graphs.switcher.dialog")}
             initial={{ opacity: 0, scale: 0.96, y: -4 }}
             animate={{ opacity: 1, scale: 1, y: 0, transition: { duration: 0.18, ease: EASE } }}
             exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.12, ease: EASE } }}
@@ -115,25 +131,25 @@ export function GraphSwitcher({ graphs, youId, compact = false }: { graphs: Grap
             )}
           >
             <div ref={list} onKeyDown={onListKey} className="max-h-[min(60vh,440px)] overflow-y-auto">
-              <Group title={shared.length ? "Mine" : null}>
+              <Group title={shared.length ? t("graphs.switcher.mine") : null}>
                 {mine.map((g) => <Row key={g.id} g={g} youId={youId} busy={busyId === g.id} disabled={!!busyId} onChoose={choose} />)}
               </Group>
               {shared.length > 0 && (
-                <Group title="Shared with me">
+                <Group title={t("graphs.switcher.sharedWithMe")}>
                   {shared.map((g) => <Row key={g.id} g={g} youId={youId} busy={busyId === g.id} disabled={!!busyId} onChoose={choose} />)}
                 </Group>
               )}
             </div>
             {error && <p role="alert" className="px-2.5 pb-1 pt-1.5 text-sm text-danger">{error}</p>}
-            <p className="px-2.5 pb-2 pt-2 text-xs text-muted">Each graph is separate. Someone you share one with sees nothing from the others.</p>
+            <p className="px-2.5 pb-2 pt-2 text-xs text-muted">{t("graphs.switcher.separate")}</p>
             <div className="flex justify-between gap-1 border-t border-line pt-1.5">
               <Link href="/graphs?new=1" onClick={() => setOpen(false)}
                 className="flex items-center gap-2 rounded-md px-2.5 py-2 text-sm font-medium hover:bg-surface-2">
-                <Plus size={15} aria-hidden /> New graph
+                <Plus size={15} aria-hidden /> {t("graphs.switcher.newGraph")}
               </Link>
               <Link href="/graphs" onClick={() => setOpen(false)}
                 className="flex items-center gap-2 rounded-md px-2.5 py-2 text-sm text-muted hover:bg-surface-2 hover:text-fg">
-                <Settings2 size={15} aria-hidden /> Manage graphs
+                <Settings2 size={15} aria-hidden /> {t("graphs.switcher.manage")}
               </Link>
             </div>
           </motion.div>
@@ -153,7 +169,8 @@ function Group({ title, children }: { title: string | null; children: React.Reac
 }
 
 function Row({ g, youId, busy, disabled, onChoose }: { g: GraphView; youId: string; busy: boolean; disabled: boolean; onChoose: (id: string) => void }) {
-  const line = busy ? "Opening…" : sharingLine(g, youId) ?? "Only you";
+  const t = useT();
+  const line = busy ? t("graphs.switcher.opening") : sharing(g, youId, t) ?? t("graphs.switcher.onlyYou");
   return (
     <li>
       <button type="button" data-item data-current={g.isCurrent} disabled={disabled} onClick={() => onChoose(g.id)}
@@ -168,7 +185,7 @@ function Row({ g, youId, busy, disabled, onChoose }: { g: GraphView; youId: stri
         </span>
         <MemberStack people={others(g, youId).length ? g.members : []} max={g.members.length > 3 ? 2 : 3} size={20} />
         <span className="flex w-4 shrink-0 justify-end">
-          {g.isCurrent && <Check size={15} className="text-fg" aria-label="You're working in this graph" />}
+          {g.isCurrent && <Check size={15} className="text-fg" aria-label={t("graphs.switcher.current")} />}
         </span>
       </button>
     </li>

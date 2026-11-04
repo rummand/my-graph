@@ -63,3 +63,17 @@ describe("graphStyle", () => {
     expect(graphStyle(-20)["--g"]).toBe("oklch(0.64 0.14 340)");
   });
 });
+
+describe("in Danish", () => {
+  // Imported lazily so the English tests above stay independent of the Danish file.
+  it("reads naturally", async () => {
+    const { makeT } = await import("@/lib/i18n/core");
+    const da = (await import("@/lib/i18n/messages/da/graphs")).default;
+    const en = (await import("@/lib/i18n/messages/en/graphs")).default;
+    const t = makeT("da", { graphs: da }, { graphs: en });
+    expect(sharingLine(forSara, "a", t)).toBe("Delt med Sara");
+    expect(sharingLine(family, "a", t)).toBe("Familien, 2 personer");
+    expect(joinNames(["A", "B", "C", "D"], 3, t)).toBe("A, B og 2 andre");
+    expect(whoSeesWhat(forSara, [family, work, forSara], "a", t)).toBe("Sara ser kun det, der er i denne graf. Dine grafer Family og Work forbliver private.");
+  });
+});

@@ -2,8 +2,10 @@
  * Pure layout helpers for the timeline screen: the range presets, the opening window, lane packing with labels that
  * never collide, and the one-line summary under the page title. No DOM, no React: covered by layout.test.ts.
  */
-import { format } from "date-fns";
+import { makeT, type TFn } from "@/lib/i18n/core";
+import en from "@/lib/i18n/messages/en";
 import type { TimelineItem } from "@/lib/timeline/types";
+import { makeWhen, type When } from "./when";
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -12,15 +14,16 @@ const DAY = 24 * HOUR;
 
 export type RangeKey = "week" | "month" | "quarter" | "year" | "all";
 
-export const RANGES: { key: RangeKey; label: string }[] = [
-  { key: "week", label: "Week" },
-  { key: "month", label: "Month" },
-  { key: "quarter", label: "3 months" },
-  { key: "year", label: "Year" },
-  { key: "all", label: "Everything" },
+/** The range presets; `labelKey` is the message for the control (timeline.ranges.*). */
+export const RANGES: { key: RangeKey; labelKey: string }[] = [
+  { key: "week", labelKey: "timeline.ranges.week" },
+  { key: "month", labelKey: "timeline.ranges.month" },
+  { key: "quarter", labelKey: "timeline.ranges.quarter" },
+  { key: "year", labelKey: "timeline.ranges.year" },
+  { key: "all", labelKey: "timeline.ranges.all" },
 ];
 
-/** The window for a range, weighted towards what is coming (a family plans forward). */
+/** The window for a range, weighted towards what is coming (people plan forward). */
 export function rangeDomain(key: RangeKey, now: number, extent: [number, number] | null): [number, number] {
   switch (key) {
     case "week": return [now - 2 * DAY, now + 6 * DAY];
@@ -203,14 +206,18 @@ function cmp(a: string, b: string) { return a < b ? -1 : a > b ? 1 : 0; }
 
 /* ── Summary line ───────────────────────────────────────────────────────────────────────────────────── */
 
-/** One sentence about what's coming, for under the page title. */
-export function upcomingSummary(items: Pick<TimelineItem, "kind" | "title" | "start">[], now: number): string {
+const englishT = makeT("en", en);
+const englishWhen = makeWhen("en");
+
+/** One sentence about what's coming, for under the page title, in the reader's language (English by default). */
+export function upcomingSummary(items: Pick<TimelineItem, "kind" | "title" | "start">[], now: number, opts: { t?: TFn; when?: When } = {}): string {
+  const t = opts.t ?? englishT, w = opts.when ?? englishWhen;
   const ahead = items.filter((i) => i.kind !== "source" && Date.parse(i.start) >= now).sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-  if (!ahead.length) return items.length ? "Nothing coming up yet. Everything here has already happened." : "What happened and what's coming, one lane for each person.";
+  if (!ahead.length) return items.length ? t("timeline.summary.allPast") : t("timeline.summary.empty");
   const soon = ahead.filter((i) => Date.parse(i.start) <= now + 30 * DAY).length;
   // Name the next event rather than a reminder about it, when one is coming within the month.
   const next = ahead.find((i) => i.kind === "event" && Date.parse(i.start) <= now + 30 * DAY) ?? ahead[0];
-  const when = format(new Date(next.start), "EEE d MMM");
-  const lead = soon > 1 ? `${soon} things in the next 30 days.` : soon === 1 ? "One thing in the next 30 days." : "Nothing in the next 30 days.";
-  return `${lead} Next up: ${next.title} on ${when}.`;
+  const lead = t("timeline.summary.soon", { count: soon });
+  // Danish short months end in a full stop ("26. nov."); don't double it at the end of the sentence.
+  return t("timeline.summary.next", { lead, title: next.title, when: w.fmt(next.start, "short") }).replace(/\.\.$/, ".");
 }

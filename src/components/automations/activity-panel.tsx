@@ -1,19 +1,18 @@
 "use client";
 import { useState } from "react";
 import Link from "next/link";
-import { format, isToday, isYesterday } from "date-fns";
 import { BellRing, FileText, MessageCircle, NotebookText, Workflow, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui";
 import type { Activity } from "@/lib/automations";
+import { dayKey } from "@/lib/i18n/dates";
+import { useFormatDate, useLocale, useT, useTimeZone } from "@/lib/i18n/client";
+import { longDay } from "./describe";
 import { api } from "./bits";
 
 export type ActivityView = Omit<Activity, "createdAt"> & { createdAt: string };
 
 const ICON: Record<string, LucideIcon> = { heartbeat: BellRing, automation: Workflow, chat: MessageCircle, ingest: FileText, wiki: NotebookText };
 
-function dayLabel(d: Date) {
-  return isToday(d) ? "Today" : isYesterday(d) ? "Yesterday" : format(d, "EEEE d MMMM");
-}
 
 function hrefFor(a: ActivityView): string | null {
   if (a.conversationId) return `/chat/${a.conversationId}`;
@@ -28,6 +27,16 @@ function hrefFor(a: ActivityView): string | null {
 
 /** What the assistant did and when; entries from a run open the run. */
 export function ActivityPanel({ initial, onOpenRun }: { initial: ActivityView[]; onOpenRun: (id: string) => void }) {
+  const t = useT();
+  const fmt = useFormatDate();
+  const tz = useTimeZone();
+  const locale = useLocale();
+  const today = dayKey(new Date(), tz);
+  const yesterday = dayKey(new Date(Date.now() - 864e5), tz);
+  const dayLabel = (d: Date) => {
+    const k = dayKey(d, tz);
+    return k === today ? t("common.today") : k === yesterday ? t("common.yesterday") : longDay(d, locale, tz);
+  };
   const [items, setItems] = useState(initial);
   const [more, setMore] = useState(initial.length >= 40);
   const [busy, setBusy] = useState(false);
@@ -44,7 +53,7 @@ export function ActivityPanel({ initial, onOpenRun }: { initial: ActivityView[];
   }
 
   if (!items.length) {
-    return <p className="text-sm text-muted">Nothing yet. Each check-in, automation run, recipe and suggestion shows here with the time, so you can always see what the assistant did.</p>;
+    return <p className="text-sm text-muted">{t("automations.activity.empty")}</p>;
   }
   const groups: { day: string; items: ActivityView[] }[] = [];
   for (const a of items) {
@@ -65,7 +74,7 @@ export function ActivityPanel({ initial, onOpenRun }: { initial: ActivityView[];
                 <>
                   <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />
                   <span className="min-w-0 flex-1 text-sm"><span className="line-clamp-2">{a.summary}</span></span>
-                  <time dateTime={a.createdAt} className="shrink-0 text-sm tabular-nums text-muted">{format(new Date(a.createdAt), "HH:mm")}</time>
+                  <time dateTime={a.createdAt} className="shrink-0 text-sm tabular-nums text-muted">{fmt(a.createdAt, "time")}</time>
                 </>
               );
               const cls = "-mx-2 flex w-[calc(100%+1rem)] items-start gap-2.5 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface-2";
@@ -80,7 +89,7 @@ export function ActivityPanel({ initial, onOpenRun }: { initial: ActivityView[];
           </ul>
         </div>
       ))}
-      {more && <Button size="sm" variant="ghost" onClick={loadMore} disabled={busy}>{busy ? "Loading…" : "Show more"}</Button>}
+      {more && <Button size="sm" variant="ghost" onClick={loadMore} disabled={busy}>{busy ? t("automations.activity.loading") : t("automations.activity.more")}</Button>}
     </div>
   );
 }

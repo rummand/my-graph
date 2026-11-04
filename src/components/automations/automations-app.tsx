@@ -4,6 +4,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { PageHeader, Section } from "@/components/ui";
 import type { AutomationsPageData } from "@/lib/automations/overview";
+import type { CopyVariant } from "@/components/memory/variant";
+import { useT } from "@/lib/i18n/client";
+import { VariantContext } from "./bits";
 import { ActivityPanel } from "./activity-panel";
 import { AutomationList } from "./automation-list";
 import type { FormSeed } from "./automation-form";
@@ -14,7 +17,8 @@ import { SettingsPanel } from "./settings-panel";
 import { SuggestionCard } from "./suggestion-card";
 
 /** Scout's Automations, Heartbeat and log for one graph: check-ins, automations, recipes, activity and settings. */
-export function AutomationsApp({ data }: { data: AutomationsPageData }) {
+export function AutomationsApp({ data, variant }: { data: AutomationsPageData; variant: CopyVariant }) {
+  const t = useT();
   const router = useRouter();
   const params = useSearchParams();
   const [runId, setRunId] = useState<string | null>(params.get("run"));
@@ -40,18 +44,18 @@ export function AutomationsApp({ data }: { data: AutomationsPageData }) {
   };
 
   return (
+    <VariantContext.Provider value={variant}>
     <div className="mx-auto max-w-6xl">
-      <PageHeader title="Automations"
-        lead={`What the assistant does on its own in ${data.graphName}: check-ins, work on a schedule, and recipes you run again and again. It runs as you, sees only what you can see, and only suggests.`} />
+      <PageHeader title={t("automations.title")} lead={t("automations.lead", { graph: data.graphName })} />
       {!data.canCreate && (
-        <p className="mb-6 rounded-md bg-surface-2 px-3 py-2 text-sm text-muted">You can look at this graph but not set up automations or recipes in it.</p>
+        <p className="mb-6 rounded-md bg-surface-2 px-3 py-2 text-sm text-muted">{t("automations.viewerOnly")}</p>
       )}
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-10">
-          <Section title="Waiting for you" id="inbox">
+          <Section title={t("automations.sections.inbox")} id="inbox">
             {inbox.length === 0 ? (
-              <p className="text-sm text-muted">Nothing to decide. Suggestions from check-ins, automations and chats wait here until you approve or dismiss them.</p>
+              <p className="text-sm text-muted">{t("automations.inboxEmpty")}</p>
             ) : (
               <motion.ul layout className="space-y-2">
                 <AnimatePresence initial={false}>
@@ -65,30 +69,31 @@ export function AutomationsApp({ data }: { data: AutomationsPageData }) {
             )}
           </Section>
 
-          <Section title="Check-ins" id="checkins">
+          <Section title={t("automations.sections.checkins")} id="checkins">
             <HeartbeatPanel initial={data.heartbeat} canCreate={data.canCreate} cap={data.settings.dailySuggestionCap} onOpenRun={openRun} onChanged={refresh} />
           </Section>
 
-          <Section title="Automations" id="automations">
+          <Section title={t("automations.sections.automations")} id="automations">
             <AutomationList initial={data.automations} recipes={data.recipes} canCreate={data.canCreate} onOpenRun={openRun}
               formSeed={seed} onFormSeedUsed={() => setSeed(null)} />
           </Section>
 
-          <Section title="Recipes" id="recipes">
+          <Section title={t("automations.sections.recipes")} id="recipes">
             <RecipesPanel initial={data.recipes} canCreate={data.canCreate} onMakeAutomation={makeAutomation} onOpenRun={openRun} />
           </Section>
         </div>
 
         <aside className="min-w-0 space-y-10">
-          <Section title="Activity" id="activity">
+          <Section title={t("automations.sections.activity")} id="activity">
             <ActivityPanel initial={data.activity} onOpenRun={openRun} />
           </Section>
-          <Section title="Assistant settings" id="settings">
+          <Section title={t("automations.sections.settings")} id="settings">
             <SettingsPanel initial={data.settings} usage={data.usage} />
           </Section>
         </aside>
       </div>
       <RunDrawer runId={runId} onClose={closeRun} />
     </div>
+    </VariantContext.Provider>
   );
 }

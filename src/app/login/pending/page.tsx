@@ -5,8 +5,11 @@ import { getSession } from "@/lib/auth";
 import { describeUserAgent } from "@/lib/auth/session";
 import { AuthFrame } from "../auth-frame";
 import { PendingWatcher } from "./pending-watcher";
+import { getT } from "@/lib/i18n";
 
-export const metadata: Metadata = { title: "Waiting for approval" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("auth.pending.meta") };
+}
 export const dynamic = "force-dynamic";
 
 export default async function PendingPage() {
@@ -15,18 +18,17 @@ export default async function PendingPage() {
   if (s.status === "none") redirect("/login");
   const device = describeUserAgent((await headers()).get("user-agent"));
   const known = device !== "Unknown device";
+  const t = await getT();
   return (
-    <AuthFrame title="Ask a parent to approve this device"
-      lead={<>Hi {s.viewer.name}. This is the first time you&apos;ve signed in on {known ? device : "this device"}, so a parent needs to say it&apos;s OK.</>}
-      welcome={{ title: "New devices wait for a parent.", body: "It keeps the family's graph safe if a phone or a password ends up in the wrong hands. It only happens once per device." }}>
+    <AuthFrame title={t("auth.pending.title")}
+      lead={known ? t("auth.pending.leadKnown", { name: s.viewer.name, device }) : t("auth.pending.leadUnknown", { name: s.viewer.name })}
+      welcome={{ title: t("auth.pending.welcomeTitle"), body: t("auth.pending.welcomeBody") }}>
       <div className="rounded-lg bg-warn-tint p-4">
         <PendingWatcher />
-        <p className="mt-2 text-sm text-fg/80">
-          A parent can approve it from <span className="font-medium text-fg">Family &amp; settings</span>, then <span className="font-medium text-fg">Family</span>, on their own phone or computer. This page moves on by itself once they have.
-        </p>
+        <p className="mt-2 text-sm text-fg/80">{t("auth.pending.how")}</p>
       </div>
       <form action="/api/auth/logout" method="post" className="mt-6">
-        <button className="text-sm text-muted underline underline-offset-2 hover:text-fg">Sign out</button>
+        <button className="text-sm text-muted underline underline-offset-2 hover:text-fg">{t("auth.pending.signOut")}</button>
       </form>
     </AuthFrame>
   );

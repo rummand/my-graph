@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { FolderOpen, MessageCircle, UserPlus } from "lucide-react";
 import type { Viewer } from "@/lib/auth";
 import { buttonClass } from "@/components/ui";
+import { getT } from "@/lib/i18n";
 import { GraphDot } from "./bits";
 import { isNewGraph, loadGraphViews } from "./data";
 import { firstName, graphStyle, ownerOf } from "./describe";
@@ -15,6 +16,7 @@ import { SwitchButton } from "./switch-button";
  */
 export async function GraphWelcome({ viewer, full = false }: { viewer: Viewer; full?: boolean }) {
   if (viewer.graphKind === "family") return null;
+  const t = await getT();
   const [fresh, graphs] = await Promise.all([isNewGraph(viewer).catch(() => false), loadGraphViews(viewer).catch(() => [])]);
   if (!fresh) return null;
   const current = graphs.find((g) => g.isCurrent);
@@ -27,9 +29,10 @@ export async function GraphWelcome({ viewer, full = false }: { viewer: Viewer; f
   const pointer = elsewhere && (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
       <p className="text-[15px]">
-        <GraphDot hue={elsewhere.color} className="mr-2 align-[1px]" />Looking for <span className="font-medium">{elsewhere.name}</span>? {owner ? `${firstName(owner.name)} shared it with you.` : "It was shared with you."}
+        <GraphDot hue={elsewhere.color} className="mr-2 align-[1px]" />{t("graphs.welcome.lookingFor", { graph: elsewhere.name })}{" "}
+        {owner ? t("graphs.welcome.sharedBy", { name: firstName(owner.name) }) : t("graphs.welcome.sharedWithYou")}
       </p>
-      <SwitchButton graphId={elsewhere.id}>Open {elsewhere.name}</SwitchButton>
+      <SwitchButton graphId={elsewhere.id}>{t("graphs.welcome.open", { graph: elsewhere.name })}</SwitchButton>
     </div>
   );
 
@@ -41,20 +44,18 @@ export async function GraphWelcome({ viewer, full = false }: { viewer: Viewer; f
     <section aria-labelledby="graph-welcome" className="mb-8 rounded-lg bg-[var(--g-tint)] p-5 sm:p-6" style={graphStyle(current.color) as CSSProperties}>
       <div className="flex items-center gap-2.5">
         <GraphDot hue={current.color} size={12} />
-        <h2 id="graph-welcome" className="text-lg font-semibold tracking-[-0.01em]">{current.name} is empty so far</h2>
+        <h2 id="graph-welcome" className="text-lg font-semibold tracking-[-0.01em]">{t("graphs.welcome.empty", { graph: current.name })}</h2>
       </div>
       <p className="mt-1.5 max-w-[62ch] text-muted">
-        {canWrite
-          ? "Start it with a letter or a photo, a person, or a question. Nothing from your other graphs shows up here."
-          : "Nothing has been added yet. What the owner adds will show up here."}
+        {canWrite ? t("graphs.welcome.leadWrite") : t("graphs.welcome.leadRead")}
       </p>
       {canWrite && (
         <div className="mt-4 flex flex-wrap gap-2">
-          <Link href="/library" className={buttonClass("primary")}><FolderOpen size={16} aria-hidden /> Upload a file</Link>
-          <Link href="/people/new" className={buttonClass("secondary")}><UserPlus size={16} aria-hidden /> Add a person</Link>
-          <Link href="/chat" className={buttonClass("secondary")}><MessageCircle size={16} aria-hidden /> Ask a question</Link>
+          <Link href="/library" className={buttonClass("primary")}><FolderOpen size={16} aria-hidden /> {t("graphs.welcome.upload")}</Link>
+          <Link href="/people/new" className={buttonClass("secondary")}><UserPlus size={16} aria-hidden /> {t("graphs.welcome.addPerson")}</Link>
+          <Link href="/chat" className={buttonClass("secondary")}><MessageCircle size={16} aria-hidden /> {t("graphs.welcome.ask")}</Link>
           {current.myRole === "owner" && current.kind === "shared" && current.members.length < 2 && (
-            <Link href={`/graphs?g=${current.id}&invite=1`} className={buttonClass("ghost")}>Invite who it&apos;s for</Link>
+            <Link href={`/graphs?g=${current.id}&invite=1`} className={buttonClass("ghost")}>{t("graphs.welcome.invite")}</Link>
           )}
         </div>
       )}

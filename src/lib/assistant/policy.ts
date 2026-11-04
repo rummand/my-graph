@@ -1,7 +1,9 @@
 /**
- * What the assistant may do on its own (pure, unit-tested). Scout's rules for a family brain:
- *  - Nothing is written without approval, unless the person chose "Always allow" for that kind of action, or turned
- *    on "save memories automatically" (and the memory is something they said themselves).
+ * What the assistant may do on its own (pure, unit-tested). Agents propose, humans decide:
+ *  - Nothing in the graph is written without approval, unless the person chose "Always allow" for that kind of action.
+ *  - Memory is the exception: the Brain Keeper curates it (src/lib/keeper). A memory the chat proposes goes to the
+ *    keeper's inbox for its next run, without asking; when the person explicitly asked to remember something
+ *    ("remember that …", "husk at …") it is saved at once.
  *  - Proposals that rest only on outside content (an uploaded letter, a web page) always ask.
  *  - Proposals that would make chat content visible to more people always ask.
  *  - Unattended runs (automations, heartbeat) never apply anything: every write becomes a suggestion.
@@ -109,24 +111,48 @@ export function inferBasis(p: Proposal, ctx: { userText: string; citedOnlyDocume
   return ctx.citedOnlyDocuments ? "document" : "user";
 }
 
-export type AutoDecision = { mode: "ask"; why?: string } | { mode: "auto"; reason: "always" | "setting" };
+const REMEMBER_ASK = /\b(remember|don'?t forget|do not forget|keep in mind|make a note|note that|save (this|that)|husk|glem ikke|læg mærke til|noter|gem (det|dette))\b/i;
+
+/** The person explicitly asked the assistant to remember something in this message. */
+export function asksToRemember(question: string): boolean {
+  // "Do you remember …?" is a question about memory, not a request to keep something.
+  if (/\b(do|did|can|could) you (still )?remember\b|\bhusker du\b/i.test(question)) return false;
+  return REMEMBER_ASK.test(question);
+}
+
+export type AutoDecision =
+  | { mode: "ask"; why?: string }
+  | { mode: "auto"; reason: "always" | "setting" | "asked" }
+  /** Memory only: handed to the Brain Keeper for its next run. */
+  | { mode: "keeper"; why: string };
 
 export function autoApplyDecision(p: Proposal, ctx: {
   mode: "interactive" | "unattended";
   canWrite: boolean;
   alwaysAllow: string[];
+  /** No longer decides memories (the Brain Keeper does); kept so older callers still type-check. */
   autoSaveMemories: boolean;
   basis: "user" | "document";
+  /** The person's message in this turn (for "remember that …"). */
+  question?: string;
   widens: boolean;
   capabilities: Record<string, boolean>;
 }): AutoDecision {
   if (ctx.mode === "unattended") return { mode: "ask", why: "Nobody is watching: it only proposes." };
   if (!ctx.canWrite) return { mode: "ask", why: "You can't add to this graph." };
+  if (p.type === "propose_memory") {
+    // The person said "remember …" and it is their own words: keep it now, no wider than the chat.
+    if (ctx.basis === "user" && !ctx.widens && asksToRemember(ctx.question ?? "")) return { mode: "auto", reason: "asked" };
+    return {
+      mode: "keeper",
+      why: ctx.basis === "document" ? "It rests on outside content, so the Brain Keeper keeps it waiting for you."
+        : "The Brain Keeper decides on its next run whether this is worth keeping.",
+    };
+  }
   const cap = capabilityOf(p);
   if (cap && ctx.capabilities[cap] === false) return { mode: "ask", why: "That's turned off in Assistant settings." };
   if (ctx.basis === "document") return { mode: "ask", why: "It rests only on outside content." };
   if (ctx.widens) return { mode: "ask", why: "It would make private content more widely visible." };
-  if (p.type === "propose_memory" && ctx.autoSaveMemories) return { mode: "auto", reason: "setting" };
   if (ctx.alwaysAllow.includes(actionKindOf(p))) return { mode: "auto", reason: "always" };
   return { mode: "ask" };
 }

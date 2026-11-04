@@ -1,6 +1,9 @@
-export default function ChatLoading() {
+import { getT } from "@/lib/i18n";
+
+export default async function ChatLoading() {
+  const t = await getT();
   return (
-    <div className="lg:grid lg:grid-cols-[216px_minmax(0,1fr)] lg:gap-10" aria-busy="true" aria-label="Loading conversations">
+    <div className="lg:grid lg:grid-cols-[216px_minmax(0,1fr)] lg:gap-10" aria-busy="true" aria-label={t("chat.loading")}>
       <div className="hidden space-y-2 lg:block">
         <div className="mb-6 h-9 w-40 rounded-md bg-surface-2/70" />
         {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-8 rounded-md bg-surface-2/70" style={{ width: `${88 - i * 7}%` }} />)}

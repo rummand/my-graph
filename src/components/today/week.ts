@@ -2,7 +2,9 @@
  * Pure helpers for the family week strip and the reminder list on Today. No server imports, so they run in the
  * browser and in tests. All day maths goes through the household's time zone.
  */
-import { addDaysInZone, calendarDayDiff, formatTime, startOfDayInZone, zonedParts, zonedTimeToUtc } from "@/lib/briefs/dates";
+import type { Locale } from "@/lib/i18n/core";
+import { addDaysInZone, calendarDayDiff, formatShortDay, formatTime, monthShort, relativeDayLabel, startOfDayInZone, weekdayShort, zonedParts, zonedTimeToUtc } from "@/lib/briefs/dates";
+import { todayT } from "@/lib/briefs/words";
 
 export type Lane = {
   /** Stable key; for a child the user id, for the shared row "family". */
@@ -38,32 +40,28 @@ export type StripItem = {
 
 export type LaneWeek = { lane: Lane; items: StripItem[]; next: { label: string; when: string } | null };
 
-const END_OF_DAY = "23:59";
-const WEEKDAY = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const MONTH = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** "Mon 16 Nov", spelled the same on server and browser (Intl punctuation differs between them). */
-export function shortDay(date: Date, tz: string): string {
-  const p = zonedParts(date, tz);
-  return `${WEEKDAY[p.weekday]} ${p.day} ${MONTH[p.month]}`;
+/** "Mon 16 Nov" / "man 16. nov", spelled the same on server and browser (Intl punctuation differs between them). */
+export function shortDay(date: Date, tz: string, locale: Locale = "en"): string {
+  return formatShortDay(date, tz, locale);
 }
 
-/** "Nov" */
-export function monthName(date: Date, tz: string): string {
-  return MONTH[zonedParts(date, tz).month];
+/** "Nov" / "nov" */
+export function monthName(date: Date, tz: string, locale: Locale = "en"): string {
+  return monthShort(zonedParts(date, tz).month, locale);
 }
+
+const isEndOfDay = (date: Date, tz: string) => { const p = zonedParts(date, tz); return p.hour === 23 && p.minute === 59; };
 
 /** "08:30", or null when the time carries no meaning (all-day, or 23:59 "by the end of the day"). */
-export function timeOfDay(date: Date, precision: string | null | undefined, tz: string): string | null {
+export function timeOfDay(date: Date, precision: string | null | undefined, tz: string, locale: Locale = "en"): string | null {
   if (precision && precision !== "minute") return null;
   const p = zonedParts(date, tz);
   if (!precision && p.hour === 0 && p.minute === 0) return null;
-  const t = formatTime(date, tz);
-  return t === END_OF_DAY ? null : t;
+  return isEndOfDay(date, tz) ? null : formatTime(date, tz, locale);
 }
 
 /** The seven days starting `offset` days from today. */
-export function weekDays(now: Date, tz: string, offset: number): Day[] {
+export function weekDays(now: Date, tz: string, offset: number, locale: Locale = "en"): Day[] {
   const start = addDaysInZone(startOfDayInZone(now, tz), offset, tz);
   return Array.from({ length: 7 }, (_, i) => {
     const date = addDaysInZone(start, i, tz);
@@ -72,7 +70,7 @@ export function weekDays(now: Date, tz: string, offset: number): Day[] {
       key: `${p.year}-${p.month}-${p.day}`,
       date,
       index: i,
-      weekday: WEEKDAY[p.weekday],
+      weekday: weekdayShort(p.weekday, locale),
       dayOfMonth: p.day,
       isToday: offset + i === 0,
       isWeekend: p.weekday >= 6,
@@ -104,16 +102,17 @@ function laneForReminder(r: StripReminder, lanes: Lane[], family: Lane): Lane {
  * next item after the week, if any.
  */
 export function buildWeek(input: {
-  lanes: Lane[]; family: Lane; events: StripEvent[]; reminders: StripReminder[]; now: Date; tz: string; offset: number;
+  lanes: Lane[]; family: Lane; events: StripEvent[]; reminders: StripReminder[]; now: Date; tz: string; offset: number; locale?: Locale;
 }): LaneWeek[] {
   const { lanes, family, events, reminders, now, tz, offset } = input;
+  const locale = input.locale ?? "en";
   const all = [...lanes, family];
   const items = new Map<string, StripItem[]>(all.map((l) => [l.key, []]));
   const later = new Map<string, { at: number; label: string; when: string }>();
 
   const noteLater = (lane: Lane, at: Date, label: string) => {
     const prev = later.get(lane.key);
-    if (!prev || at.getTime() < prev.at) later.set(lane.key, { at: at.getTime(), label, when: shortDay(at, tz) });
+    if (!prev || at.getTime() < prev.at) later.set(lane.key, { at: at.getTime(), label, when: shortDay(at, tz, locale) });
   };
 
   for (const e of events) {
@@ -128,7 +127,7 @@ export function buildWeek(input: {
       if (to < from) continue;
       items.get(lane.key)!.push({
         kind: "event", id: e.id, label: e.label, col: from - offset, span: to - from + 1,
-        time: first === from ? timeOfDay(start, e.timePrecision, tz) : null, overdue: false, sortAt: start.getTime(),
+        time: first === from ? timeOfDay(start, e.timePrecision, tz, locale) : null, overdue: false, sortAt: start.getTime(),
       });
     }
   }
@@ -144,7 +143,7 @@ export function buildWeek(input: {
     if (day < offset) continue;
     items.get(lane.key)!.push({
       kind: "reminder", id: r.id, label: displayTitle(r.title, r.aboutLabel), col: day - offset, span: 1,
-      time: overdue ? null : timeOfDay(due, "minute", tz), overdue, sortAt: due.getTime(),
+      time: overdue ? null : timeOfDay(due, "minute", tz, locale), overdue, sortAt: due.getTime(),
     });
   }
 
@@ -166,24 +165,22 @@ export function displayTitle(title: string, about: string | null): string {
 }
 
 /** Replace raw ISO dates ("2026-11-16") in text with "Mon 16 Nov". */
-export function humanizeDates(text: string, tz: string): string {
+export function humanizeDates(text: string, tz: string, locale: Locale = "en"): string {
   return text.replace(/\b(\d{4})-(\d{2})-(\d{2})\b/g, (m, y: string, mo: string, d: string) => {
     const date = zonedTimeToUtc(Number(y), Number(mo), Number(d), 12, 0, tz);
-    return Number.isNaN(date.getTime()) || Number(mo) > 12 || Number(d) > 31 ? m : shortDay(date, tz);
+    return Number.isNaN(date.getTime()) || Number(mo) > 12 || Number(d) > 31 ? m : shortDay(date, tz, locale);
   });
 }
 
 /** When a reminder is due, as shown under its day heading: the day is left out when the heading already says it. */
-export function dueLabel(due: Date, now: Date, tz: string): string {
+export function dueLabel(due: Date, now: Date, tz: string, locale: Locale = "en"): string {
   const diff = calendarDayDiff(due, now, tz);
-  const time = formatTime(due, tz);
-  const t = time === END_OF_DAY ? "by end of day" : time;
+  const t = isEndOfDay(due, tz) ? todayT(locale)("today.when.endOfDay") : formatTime(due, tz, locale);
   if (diff === 0 || diff === 1) return t;
-  return `${shortDay(due, tz)}, ${t}`;
+  return `${shortDay(due, tz, locale)}, ${t}`;
 }
 
 /** "Today", "Tomorrow", "Yesterday" or "Mon 16 Nov". */
-export function relativeDay(date: Date, now: Date, tz: string): string {
-  const diff = calendarDayDiff(date, now, tz);
-  return diff === 0 ? "Today" : diff === 1 ? "Tomorrow" : diff === -1 ? "Yesterday" : shortDay(date, tz);
+export function relativeDay(date: Date, now: Date, tz: string, locale: Locale = "en"): string {
+  return relativeDayLabel(date, now, tz, locale);
 }

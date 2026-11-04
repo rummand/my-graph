@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { Button, Select } from "@/components/ui";
 import type { AutomationDTO } from "@/lib/automations/automations";
 import { DEFAULT_TZ, previewRuns, safeParseTrigger, WEEKDAYS } from "@/lib/automations/schedule";
-import { api, DaysPicker, Toggle, when, whenInline } from "./bits";
+import { api, DaysPicker, Toggle, useCopy } from "./bits";
 import { useRunNow } from "./run-now";
 
 type Cfg = { everyMinutes: number; days: number[]; from: string; to: string; tz: string };
@@ -17,6 +17,7 @@ function initialCfg(h: AutomationDTO | null): Cfg {
 export function HeartbeatPanel({ initial, canCreate, cap, onOpenRun, onChanged }: {
   initial: AutomationDTO | null; canCreate: boolean; cap: number; onOpenRun: (id: string) => void; onChanged?: () => void;
 }) {
+  const { t, tv, whenInline } = useCopy();
   const [hb, setHb] = useState<AutomationDTO | null>(initial);
   const [cfg, setCfg] = useState<Cfg>(() => initialCfg(initial));
   const [enabled, setEnabled] = useState(initial?.enabled ?? false);
@@ -38,7 +39,7 @@ export function HeartbeatPanel({ initial, canCreate, cap, onOpenRun, onChanged }
         setHb(r.heartbeat);
         onChanged?.();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Couldn't save.");
+        setError(e instanceof Error ? e.message : t("automations.heartbeat.couldNotSave"));
         if (patch.enabled !== undefined) setEnabled(!patch.enabled);
       } finally {
         setSaving(false);
@@ -60,63 +61,58 @@ export function HeartbeatPanel({ initial, canCreate, cap, onOpenRun, onChanged }
     <div className="rounded-lg bg-surface p-4">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="font-medium">Check in on its own</p>
+          <p className="font-medium">{t("automations.heartbeat.title")}</p>
           <p className="mt-0.5 text-sm text-muted">
             {enabled
-              ? next ? `Next check-in ${whenInline(next)}.` : "No check-in times with these settings."
-              : "Off. Switch it on to have the assistant look for what changed and what's coming."}
-            {hb?.lastRunAt ? ` Last checked ${whenInline(hb.lastRunAt)}.` : ""}
+              ? next ? t("automations.heartbeat.next", { when: whenInline(next) }) : t("automations.heartbeat.noTimes")
+              : t("automations.heartbeat.off")}
+            {hb?.lastRunAt ? t("automations.heartbeat.last", { when: whenInline(hb.lastRunAt) }) : ""}
           </p>
         </div>
-        <Toggle checked={enabled} onChange={toggle} label="Check-ins" disabled={!canCreate || saving} />
+        <Toggle checked={enabled} onChange={toggle} label={t("automations.heartbeat.toggle")} disabled={!canCreate || saving} />
       </div>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-[auto_1fr]">
         <label className="block">
-          <span className="mb-1.5 block text-sm font-medium">How often</span>
+          <span className="mb-1.5 block text-sm font-medium">{t("automations.heartbeat.howOften")}</span>
           <Select value={cfg.everyMinutes} disabled={!canCreate} onChange={(e) => change({ everyMinutes: Number(e.target.value) })} className="w-40">
-            <option value={15}>Every 15 minutes</option>
-            <option value={30}>Every 30 minutes</option>
-            <option value={60}>Every hour</option>
-            <option value={120}>Every 2 hours</option>
+            <option value={15}>{t("automations.every.m15")}</option>
+            <option value={30}>{t("automations.every.m30")}</option>
+            <option value={60}>{t("automations.every.h1")}</option>
+            <option value={120}>{t("automations.every.h2")}</option>
           </Select>
         </label>
         <div>
-          <span className="mb-1.5 block text-sm font-medium">Between</span>
+          <span className="mb-1.5 block text-sm font-medium">{t("automations.heartbeat.between")}</span>
           <div className="flex items-center gap-2">
-            <input type="time" aria-label="From" value={cfg.from} disabled={!canCreate} onChange={(e) => change({ from: e.target.value })}
+            <input type="time" aria-label={t("automations.heartbeat.from")} value={cfg.from} disabled={!canCreate} onChange={(e) => change({ from: e.target.value })}
               className="h-9 rounded-md bg-surface px-2 text-[15px] tabular-nums ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-accent" />
-            <span className="text-muted">and</span>
-            <input type="time" aria-label="To" value={cfg.to} disabled={!canCreate} onChange={(e) => change({ to: e.target.value })}
+            <span className="text-muted">{t("automations.heartbeat.and")}</span>
+            <input type="time" aria-label={t("automations.heartbeat.to")} value={cfg.to} disabled={!canCreate} onChange={(e) => change({ to: e.target.value })}
               className="h-9 rounded-md bg-surface px-2 text-[15px] tabular-nums ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-accent" />
           </div>
-          {hoursBad && <p className="mt-1.5 text-sm text-danger">The end has to be after the start.</p>}
+          {hoursBad && <p className="mt-1.5 text-sm text-danger">{t("automations.heartbeat.endBeforeStart")}</p>}
         </div>
       </div>
       <div className="mt-4">
-        <span className="mb-1.5 block text-sm font-medium">On these days</span>
+        <span className="mb-1.5 block text-sm font-medium">{t("automations.heartbeat.onDays")}</span>
         <DaysPicker value={cfg.days} disabled={!canCreate} onChange={(days) => days.length && change({ days })} />
       </div>
 
       <div className="mt-4 rounded-md bg-surface-2 px-3 py-2.5 text-sm">
-        <p className="font-medium">Stricter when nobody is watching</p>
-        <p className="mt-1 text-muted">
-          A check-in looks at new files, reminders due in the next two days, overdue ones, birthdays this week, people you
-          haven&apos;t been in touch with, and facts waiting to be checked. It only suggests: it never adds facts, shares
-          anything, changes who can see something or messages anyone. Anything like that is skipped and listed in the run.
-          Tentative plans count as busy. At most {cap} suggestion{cap === 1 ? "" : "s"} a day.
-        </p>
+        <p className="font-medium">{t("automations.heartbeat.strictTitle")}</p>
+        <p className="mt-1 text-muted">{tv("automations.heartbeat.strict")} {t("automations.heartbeat.cap", { count: cap })}</p>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        {hb && <Button size="sm" variant="secondary" onClick={run.start} disabled={!canCreate || run.busy}>{run.busy ? "Checking…" : "Check in now"}</Button>}
+        {hb && <Button size="sm" variant="secondary" onClick={run.start} disabled={!canCreate || run.busy}>{run.busy ? t("automations.heartbeat.checking") : t("automations.heartbeat.checkNow")}</Button>}
         {run.result && (
           <button className="text-left text-sm text-muted hover:text-fg" onClick={() => onOpenRun(run.result!.id)}>
-            {run.result.summary ?? "Done."} <span className="text-accent">See the run</span>
+            {run.result.summary ?? t("automations.heartbeat.done")} <span className="text-accent">{t("automations.heartbeat.seeRun")}</span>
           </button>
         )}
         {(error || run.error) && <span role="alert" className="text-sm text-danger">{error ?? run.error}</span>}
-        {saving && <span className="text-sm text-muted">Saving…</span>}
+        {saving && <span className="text-sm text-muted">{t("automations.heartbeat.saving")}</span>}
       </div>
     </div>
   );

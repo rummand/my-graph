@@ -3,7 +3,9 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEv
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { Archive, ChevronRight, Lock, MailOpen, Mail, PanelLeft, Pencil, Pin, PinOff, SquarePen, Trash2, X } from "lucide-react";
-import { format } from "date-fns";
+import { useFormatDate, useT } from "@/lib/i18n/client";
+import type { TFn } from "@/lib/i18n/core";
+import { GraphKindContext } from "./graph-kind";
 import type { AssistantStep, Citation } from "@/db/schema";
 import { IconButton } from "@/components/ui";
 import type { ConversationSummary, ConversationView } from "@/lib/assistant/store";
@@ -13,7 +15,8 @@ import { sensitivityBadge, type Sensitivity } from "@/lib/assistant/sensitivity"
 import { readSse } from "@/lib/mux/sse";
 import { MuxBanner, type MuxStatus } from "./mux-banner";
 import { ConversationList } from "./conversation-list";
-import { Composer } from "./composer";
+import { Composer, type ComposerSend } from "./composer";
+import { linkFirstOccurrences } from "@/lib/mentions/markup";
 import { ChatEmpty } from "./empty";
 import { Answer, Question, type UiMessage } from "./message";
 import { ThreadMenu } from "./thread-menu";
@@ -28,18 +31,21 @@ async function errorOf(res: Response, fallback: string): Promise<string> {
   return typeof body.error === "string" ? body.error : fallback;
 }
 
-export function ChatApp({ conversations: initialList, conversation, mux, canFix, starters, initialQuestion }: {
+export function ChatApp({ conversations: initialList, conversation, mux, canFix, starters, graphKind = "other", initialQuestion }: {
   conversations: ConversationSummary[];
   conversation: ConversationView | null;
   mux: MuxStatus;
   canFix: boolean;
   starters: Starter[];
+  /** The current graph's kind: family-only wording shows only in family graphs. */
+  graphKind?: string;
   /** From /chat?q=…: asked once, as a new conversation, then removed from the URL. */
   initialQuestion?: string | null;
 }) {
+  const t = useT();
   const [list, setList] = useState(initialList);
   const [conversationId, setConversationId] = useState<string | null>(conversation?.id ?? null);
-  const [title, setTitle] = useState(conversation?.title ?? "New conversation");
+  const [title, setTitle] = useState(conversation?.title ?? t("chat.thread.newConversation"));
   const [startedAt, setStartedAt] = useState<string | null>(conversation?.createdAt ?? null);
   const [messages, setMessages] = useState<UiMessage[]>(() => (conversation?.messages ?? []).map((m) => ({ ...m, uid: m.id })));
   const [sensitive, setSensitive] = useState(conversation?.sensitive ?? false);
@@ -52,6 +58,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
   const [queue, setQueue] = useState<Queued[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [noticeHref, setNoticeHref] = useState<string | null>(null);
   const [drawer, setDrawer] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const streamingRef = useRef(false);
@@ -93,9 +100,9 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
 
   useEffect(() => {
     if (!notice) return;
-    const t = window.setTimeout(() => setNotice(null), 5000);
-    return () => window.clearTimeout(t);
-  }, [notice]);
+    const timer = window.setTimeout(() => { setNotice(null); setNoticeHref(null); }, noticeHref ? 9000 : 5000);
+    return () => window.clearTimeout(timer);
+  }, [notice, noticeHref]);
 
   const patchLast = useCallback((fn: (m: UiMessage) => UiMessage) => {
     setMessages((ms) => (ms.length ? [...ms.slice(0, -1), fn(ms[ms.length - 1])] : ms));
@@ -111,6 +118,37 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
       return;
     }
     void ask(question);
+  }
+
+  /**
+   * Send from the live-highlighting composer: first add what the person kept in the "Will add" strip (a change set,
+   * delivered because Send is their decision), then ask the question with mention markup for what was added.
+   */
+  async function sendFromComposer(p: ComposerSend) {
+    setInput("");
+    let text = p.text;
+    if (p.plan) {
+      try {
+        const res = await fetch("/api/annotate/commit", {
+          method: "POST", headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: p.text, conversationId: activeIdRef.current, plan: p.plan }),
+        });
+        const body = await res.json().catch(() => ({}));
+        if (res.ok) {
+          const nodes = (body.nodes ?? []) as { label: string; nodeId: string }[];
+          text = linkFirstOccurrences(text, nodes);
+          if (body.applied) {
+            setNotice(addedNotice(p.plan, t));
+            setNoticeHref(typeof body.changeSetId === "string" && body.via === "change_set" ? `/changes/${body.changeSetId}` : null);
+          }
+        } else {
+          setNotice(typeof body.error === "string" ? `${body.error} ${t("chat.notice.sentAnyway")}` : t("chat.notice.addFailed"));
+        }
+      } catch {
+        setNotice(t("chat.notice.addFailedNow"));
+      }
+    }
+    submit(text);
   }
 
   async function ask(question: string) {
@@ -137,7 +175,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
-        throw new Error(res.status === 401 ? "You've been signed out. Sign in again to keep asking." : await errorOf(res, "The assistant couldn't answer. Try again in a moment."));
+        throw new Error(res.status === 401 ? t("chat.errors.signedOut") : await errorOf(res, t("chat.errors.couldntAnswer")));
       }
       for await (const ev of readSse(res.body)) {
         let data: Record<string, unknown>;
@@ -147,10 +185,10 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
           activeIdRef.current = id;
           setConversationId(id);
           if (data.isNew) {
-            const t = String(data.title ?? "New conversation");
-            setTitle(t);
+            const nt = String(data.title ?? t("chat.thread.newConversation"));
+            setTitle(nt);
             setStartedAt(now);
-            setList((l) => [{ id, title: t, createdAt: now, updatedAt: now, pinned: false, unread: false, sensitivity: "normal" }, ...l.filter((c) => c.id !== id)]);
+            setList((l) => [{ id, title: nt, createdAt: now, updatedAt: now, pinned: false, unread: false, sensitivity: "normal" }, ...l.filter((c) => c.id !== id)]);
             window.history.replaceState(null, "", `/chat/${id}`);
           }
         } else if (ev.event === "step") {
@@ -164,8 +202,8 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
           setLevel(lv);
           setList((l) => l.map((c) => (c.id === activeIdRef.current ? { ...c, sensitivity: lv } : c)));
         } else if (ev.event === "delta") {
-          const t = String(data.text ?? "");
-          patchLast((m) => ({ ...m, content: m.content + t }));
+          const delta = String(data.text ?? "");
+          patchLast((m) => ({ ...m, content: m.content + delta }));
         } else if (ev.event === "done") {
           gotDone = true;
           patchLast((m) => ({
@@ -183,20 +221,20 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
             content: typeof data.text === "string" ? data.text : m.content,
           }));
           if (typeof data.title === "string" && data.title) {
-            const t = data.title;
-            setTitle(t);
-            setList((l) => l.map((c) => (c.id === activeIdRef.current ? { ...c, title: t } : c)));
+            const nt = data.title;
+            setTitle(nt);
+            setList((l) => l.map((c) => (c.id === activeIdRef.current ? { ...c, title: nt } : c)));
           }
         } else if (ev.event === "error") {
-          setError(String(data.message ?? "Something went wrong while answering."));
+          setError(String(data.message ?? t("chat.errors.whileAnswering")));
         }
       }
       if (!gotDone) patchLast((m) => ({ ...m, streaming: false, live: undefined }));
     } catch (e) {
       if (ac.signal.aborted) {
-        patchLast((m) => ({ ...m, streaming: false, live: undefined, content: `${m.content}${m.content ? "\n\n" : ""}_(Stopped.)_` }));
+        patchLast((m) => ({ ...m, streaming: false, live: undefined, content: `${m.content}${m.content ? "\n\n" : ""}_${t("chat.stopped")}_` }));
       } else {
-        setError(e instanceof Error && e.message !== "Failed to fetch" ? e.message : "We couldn't reach My Graph. Check your connection and try again.");
+        setError(e instanceof Error && e.message !== "Failed to fetch" ? e.message : t("chat.errors.offline"));
         setMessages((ms) => (ms.length && ms[ms.length - 1].id === "pending" && !ms[ms.length - 1].content ? ms.slice(0, -2) : ms.map((m) => (m.streaming ? { ...m, streaming: false } : m))));
         setInput((cur) => cur || question);
         setQueue([]);
@@ -246,14 +284,14 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
   const askedRef = useRef<string | null>(null);
   useEffect(() => {
     if (!initialQuestion || conversation || askedRef.current === initialQuestion) return;
-    const t = window.setTimeout(() => {
+    const timer = window.setTimeout(() => {
       if (askedRef.current === initialQuestion) return;
       askedRef.current = initialQuestion;
       if (activeIdRef.current || abortRef.current) reset("/chat", "replace");
       else window.history.replaceState(null, "", "/chat");
       void ask(initialQuestion);
     }, 0);
-    return () => window.clearTimeout(t);
+    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuestion, conversation]);
 
@@ -265,17 +303,17 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
     return true;
   }
 
-  const rename = (id: string, next: string) => patch(id, { title: next }, "We couldn't rename that conversation.");
-  const pin = (id: string, pinned: boolean) => patch(id, { pinned }, pinned ? "We couldn't pin that conversation." : "We couldn't unpin that conversation.");
+  const rename = (id: string, next: string) => patch(id, { title: next }, t("chat.errors.rename"));
+  const pin = (id: string, pinned: boolean) => patch(id, { pinned }, pinned ? t("chat.errors.pin") : t("chat.errors.unpin"));
 
   async function markUnread(id: string, unread: boolean) {
-    if (await patch(id, { unread }, "We couldn't change that.")) setNotice(unread ? "Marked as unread. It stays bold in the list until you open it again." : "Marked as read.");
+    if (await patch(id, { unread }, t("chat.errors.change"))) setNotice(unread ? t("chat.notice.markedUnread") : t("chat.notice.markedRead"));
   }
 
   async function remove(id: string): Promise<boolean> {
     if (id === activeIdRef.current && streamingRef.current) return false;
     const res = await fetch(`/api/chat/${id}`, { method: "DELETE" });
-    if (!res.ok) { setError(await errorOf(res, "We couldn't delete that conversation.")); return false; }
+    if (!res.ok) { setError(await errorOf(res, t("chat.errors.delete"))); return false; }
     setList((l) => l.filter((c) => c.id !== id));
     if (id === activeIdRef.current) reset("/chat", "replace");
     return true;
@@ -288,12 +326,12 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
     setCompacting(true); setError(null);
     try {
       const res = await fetch(`/api/chat/${id}/compact`, { method: "POST" });
-      if (!res.ok) { setError(await errorOf(res, "We couldn't compact this conversation.")); return; }
+      if (!res.ok) { setError(await errorOf(res, t("chat.errors.compact"))); return; }
       const body = await res.json();
       setSummary({ text: String(body.summary ?? ""), upTo: String(body.upToMessageId) });
-      setNotice(`Compacted: ${body.compacted} earlier messages are now a short summary${body.degraded ? " (a simple list, because the model couldn't be reached)" : ""}. The assistant uses it instead of the full turns.`);
+      setNotice(t(body.degraded ? "chat.notice.compactedDegraded" : "chat.notice.compacted", { count: Number(body.compacted) || 0 }));
     } catch {
-      setError("We couldn't reach My Graph. Check your connection and try again.");
+      setError(t("chat.errors.offline"));
     } finally {
       setCompacting(false);
     }
@@ -306,11 +344,11 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
     setMessages((ms) => ms.map((m) => (m.id === messageId ? { ...m, feedback: value } : m)));
     try {
       const res = await fetch(`/api/chat/${id}/feedback`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messageId, value }) });
-      if (!res.ok) throw new Error(await errorOf(res, "We couldn't save that."));
-      if (value === -1) setNotice("Thanks. Saved as not helpful.");
+      if (!res.ok) throw new Error(await errorOf(res, t("chat.errors.save")));
+      if (value === -1) setNotice(t("chat.notice.notHelpful"));
     } catch (e) {
       setMessages((ms) => ms.map((m) => (m.id === messageId ? { ...m, feedback: prev } : m)));
-      setError(e instanceof Error ? e.message : "We couldn't save that.");
+      setError(e instanceof Error ? e.message : t("chat.errors.save"));
     }
   }
 
@@ -318,7 +356,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
     abortRef.current?.abort();
     activeIdRef.current = null;
     setConversationId(null);
-    setTitle("New conversation");
+    setTitle(t("chat.thread.newConversation"));
     setStartedAt(null);
     setMessages([]);
     setSensitive(false);
@@ -327,6 +365,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
     setQueue([]);
     setError(null);
     setNotice(null);
+    setNoticeHref(null);
     setInput("");
     setDrawer(false);
     if (how === "push") window.history.pushState(null, "", url); else window.history.replaceState(null, "", url);
@@ -349,6 +388,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
   const listProps = { list, activeId: conversationId, onNew: startNew, onRename: rename, onDelete: remove, onPin: pin, busy: streaming };
 
   return (
+    <GraphKindContext.Provider value={graphKind}>
     <div className="-mb-28 lg:-mb-16 lg:grid lg:grid-cols-[216px_minmax(0,1fr)] lg:gap-10">
       <aside className="hidden lg:sticky lg:top-0 lg:-mt-9 lg:block lg:h-dvh lg:pb-2 lg:pt-9">
         <ConversationList {...listProps} />
@@ -358,12 +398,12 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
           <>
             <motion.div key="scrim" className="fixed inset-0 z-50 bg-fg/30 lg:hidden" onClick={() => setDrawer(false)}
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} />
-            <motion.div key="drawer" role="dialog" aria-modal="true" aria-label="Conversations"
+            <motion.div key="drawer" role="dialog" aria-modal="true" aria-label={t("chat.thread.conversations")}
               className="fixed inset-y-0 left-0 z-50 flex w-[86vw] max-w-[320px] flex-col bg-bg px-3 pb-[calc(env(safe-area-inset-bottom)+12px)] pt-3 shadow-float lg:hidden"
               initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} transition={{ duration: 0.26, ease: [0.32, 0.72, 0, 1] }}>
               <div className="mb-2 flex items-center justify-between pl-2.5">
-                <p className="font-semibold">Conversations</p>
-                <IconButton label="Close conversations" onClick={() => setDrawer(false)}><X className="size-4" /></IconButton>
+                <p className="font-semibold">{t("chat.thread.conversations")}</p>
+                <IconButton label={t("chat.thread.closeList")} onClick={() => setDrawer(false)}><X className="size-4" /></IconButton>
               </div>
               <div className="min-h-0 flex-1"><ConversationList {...listProps} onNavigate={() => setDrawer(false)} /></div>
             </motion.div>
@@ -371,7 +411,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
         )}
       </AnimatePresence>
 
-      <section aria-label="Conversation" className="flex min-h-[calc(100dvh-4.5rem)] min-w-0 flex-col pb-[calc(56px+env(safe-area-inset-bottom))] lg:min-h-[calc(100dvh-2.25rem)] lg:pb-0">
+      <section aria-label={t("chat.thread.conversation")} className="flex min-h-[calc(100dvh-4.5rem)] min-w-0 flex-col pb-[calc(56px+env(safe-area-inset-bottom))] lg:min-h-[calc(100dvh-2.25rem)] lg:pb-0">
         <div className="mx-auto flex w-full max-w-[680px] flex-1 flex-col">
           <ThreadBar
             title={empty ? null : title}
@@ -418,49 +458,62 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
                 <motion.div key="err" role="alert" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: EASE }}
                   className="mb-2 flex items-start gap-3 rounded-lg bg-danger-tint px-4 py-3 text-sm text-danger">
                   <p className="min-w-0 flex-1">{error}</p>
-                  <button type="button" onClick={() => setError(null)} aria-label="Dismiss this message" className="-m-1 rounded p-1 hover:bg-surface/50"><X aria-hidden className="size-4" /></button>
+                  <button type="button" onClick={() => setError(null)} aria-label={t("chat.dismissMessage")} className="-m-1 rounded p-1 hover:bg-surface/50"><X aria-hidden className="size-4" /></button>
                 </motion.div>
               )}
               {notice && !error && (
                 <motion.div key="notice" role="status" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: EASE }}
                   className="mb-2 flex items-start gap-3 rounded-lg bg-surface px-4 py-3 text-sm">
-                  <p className="min-w-0 flex-1">{notice}</p>
-                  <button type="button" onClick={() => setNotice(null)} aria-label="Dismiss" className="-m-1 rounded p-1 text-muted hover:bg-surface-2"><X aria-hidden className="size-4" /></button>
+                  <p className="min-w-0 flex-1">
+                    {notice}
+                    {noticeHref && <> <Link href={noticeHref} className="text-accent underline-offset-4 hover:underline">{t("chat.notice.review")}</Link></>}
+                  </p>
+                  <button type="button" onClick={() => { setNotice(null); setNoticeHref(null); }} aria-label={t("chat.dismiss")} className="-m-1 rounded p-1 text-muted hover:bg-surface-2"><X aria-hidden className="size-4" /></button>
                 </motion.div>
               )}
             </AnimatePresence>
             <AnimatePresence initial={false}>
               {queue.length > 0 && (
-                <motion.ul key="queue" aria-label="Questions waiting to be sent" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                <motion.ul key="queue" aria-label={t("chat.queue.label")} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
                   transition={{ duration: 0.18, ease: EASE }} className="mb-2 space-y-1 overflow-hidden">
                   {queue.map((q, i) => (
                     <li key={q.id} className="flex items-center gap-2 rounded-md bg-surface-2 py-1.5 pl-3 pr-1 text-sm">
-                      <span className="shrink-0 text-xs text-muted">{i === 0 ? "Next" : "Then"}</span>
+                      <span className="shrink-0 text-xs text-muted">{i === 0 ? t("chat.queue.next") : t("chat.queue.then")}</span>
                       <span className="min-w-0 flex-1 truncate">{q.text}</span>
-                      <button type="button" aria-label={`Don't send “${q.text}”`} onClick={() => setQueue((x) => x.filter((y) => y.id !== q.id))}
+                      <button type="button" aria-label={t("chat.queue.drop", { text: q.text })} onClick={() => setQueue((x) => x.filter((y) => y.id !== q.id))}
                         className="inline-flex size-6 shrink-0 items-center justify-center rounded text-muted hover:bg-surface hover:text-fg"><X aria-hidden className="size-3.5" /></button>
                     </li>
                   ))}
                 </motion.ul>
               )}
             </AnimatePresence>
-            <Composer value={input} onChange={setInput} onSend={() => submit()} onStop={() => void stop()}
+            <Composer value={input} onChange={setInput} onSend={(p) => void sendFromComposer(p)} onStop={() => void stop()}
               streaming={streaming} stopping={stopping} sensitive={sensitive} empty={empty} inputRef={inputRef} />
           </div>
         </div>
       </section>
     </div>
+    </GraphKindContext.Provider>
   );
+}
+
+function addedNotice(plan: NonNullable<ComposerSend["plan"]>, t: TFn): string {
+  const things = plan.entities.filter((e) => !e.existing).length;
+  const facts = plan.facts.length;
+  const parts = [things ? t("chat.notice.things", { count: things }) : "", facts ? t("chat.notice.facts", { count: facts }) : ""].filter(Boolean);
+  const what = parts.length === 2 ? t("chat.notice.and", { a: parts[0], b: parts[1] }) : parts[0] ?? "";
+  return t("chat.notice.added", { parts: what });
 }
 
 /** Where "Compact this conversation" cut: earlier turns stay readable, the assistant now uses the summary. */
 function SummaryDivider({ text }: { text: string }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   return (
     <div className="mt-10 rounded-lg bg-surface-2 px-4 py-3 text-sm">
       <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-2 text-left text-muted hover:text-fg">
         <Archive aria-hidden className="size-4 shrink-0" />
-        <span className="min-w-0 flex-1">Everything above is summarised. The assistant uses the summary instead of these turns.</span>
+        <span className="min-w-0 flex-1">{t("chat.thread.summarised")}</span>
         <ChevronRight aria-hidden className={`size-4 shrink-0 transition-transform duration-150 ${open ? "rotate-90" : ""}`} />
       </button>
       {open && <p className="mt-2 whitespace-pre-line pl-6 text-fg/90">{text}</p>}
@@ -475,50 +528,52 @@ function ThreadBar({ title, startedAt, sensitive, level, canEdit, busy, pinned, 
   onRename: (t: string) => Promise<boolean>; onDelete: () => Promise<boolean>;
   onPin: () => void; onUnread: () => void; onCompact: () => void;
 }) {
+  const t = useT();
+  const fmt = useFormatDate();
   const [mode, setMode] = useState<"view" | "rename" | "delete">("view");
   const [draft, setDraft] = useState(title ?? "");
   const [saving, setSaving] = useState(false);
   const started = startedAt ? new Date(startedAt) : null;
-  const badge = sensitivityBadge(level);
+  const badge = sensitivityBadge(level) ? t(level === "parents" ? "chat.thread.parentsOnly" : "chat.thread.privateItems") : null;
 
   useEffect(() => { setMode("view"); setDraft(title ?? ""); }, [title]);
 
   async function save() {
-    const t = draft.trim();
-    if (!t || t === title) { setMode("view"); return; }
+    const next = draft.trim();
+    if (!next || next === title) { setMode("view"); return; }
     setSaving(true);
-    if (await onRename(t)) setMode("view");
+    if (await onRename(next)) setMode("view");
     setSaving(false);
   }
 
   return (
     <div className="mb-8 flex min-h-9 items-center gap-2 lg:mb-10">
-      <IconButton label="Show conversations" className="-ml-1.5 lg:hidden" onClick={onOpenList}><PanelLeft className="size-[18px]" /></IconButton>
+      <IconButton label={t("chat.thread.showList")} className="-ml-1.5 lg:hidden" onClick={onOpenList}><PanelLeft className="size-[18px]" /></IconButton>
       <div className="min-w-0 flex-1">
         {mode === "rename" ? (
           <form className="flex items-center gap-2" onSubmit={(e) => { e.preventDefault(); void save(); }}>
-            <label htmlFor="thread-title" className="sr-only">Conversation name</label>
+            <label htmlFor="thread-title" className="sr-only">{t("chat.thread.name")}</label>
             <input id="thread-title" autoFocus value={draft} maxLength={120} disabled={saving}
               onChange={(e) => setDraft(e.target.value)} onFocus={(e) => e.currentTarget.select()}
               onKeyDown={(e) => { if (e.key === "Escape") { setMode("view"); setDraft(title ?? ""); } }}
               className="h-8 min-w-0 flex-1 rounded-md bg-surface px-2 text-sm font-medium outline-none ring-1 ring-inset ring-accent" />
-            <button type="submit" disabled={saving} className="h-8 rounded-md bg-fg px-3 text-sm font-medium text-bg active:scale-[0.97]">{saving ? "Saving…" : "Save"}</button>
-            <button type="button" onClick={() => { setMode("view"); setDraft(title ?? ""); }} className="h-8 rounded-md px-2 text-sm text-muted hover:bg-surface-2 hover:text-fg">Cancel</button>
+            <button type="submit" disabled={saving} className="h-8 rounded-md bg-fg px-3 text-sm font-medium text-bg active:scale-[0.97]">{saving ? t("chat.thread.saving") : t("chat.thread.save")}</button>
+            <button type="button" onClick={() => { setMode("view"); setDraft(title ?? ""); }} className="h-8 rounded-md px-2 text-sm text-muted hover:bg-surface-2 hover:text-fg">{t("chat.thread.cancel")}</button>
           </form>
         ) : mode === "delete" ? (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm" role="group" aria-label="Delete this conversation">
-            <span className="font-medium text-danger">Delete this conversation?</span>
-            <span className="hidden text-muted sm:inline">Things you approved from it stay.</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm" role="group" aria-label={t("chat.thread.deleteQ")}>
+            <span className="font-medium text-danger">{t("chat.thread.deleteQ")}</span>
+            <span className="hidden text-muted sm:inline">{t("chat.thread.deleteKeeps")}</span>
             <span className="flex gap-1.5">
               <button type="button" autoFocus disabled={saving} onClick={async () => { setSaving(true); if (!(await onDelete())) { setSaving(false); setMode("view"); } }}
-                className="h-8 rounded-md bg-danger px-3 font-medium text-white active:scale-[0.97] disabled:opacity-60">{saving ? "Deleting…" : "Delete"}</button>
-              <button type="button" onClick={() => setMode("view")} className="h-8 rounded-md px-2.5 text-muted hover:bg-surface-2 hover:text-fg">Keep it</button>
+                className="h-8 rounded-md bg-danger px-3 font-medium text-white active:scale-[0.97] disabled:opacity-60">{saving ? t("chat.thread.deleting") : t("chat.thread.delete")}</button>
+              <button type="button" onClick={() => setMode("view")} className="h-8 rounded-md px-2.5 text-muted hover:bg-surface-2 hover:text-fg">{t("chat.thread.keep")}</button>
             </span>
           </div>
         ) : title ? (
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 truncate text-sm font-medium">
-              {pinned && <Pin aria-label="Pinned" className="size-3.5 shrink-0 text-muted" />}
+              {pinned && <Pin aria-label={t("chat.thread.pinned")} className="size-3.5 shrink-0 text-muted" />}
               <span className="truncate">{title}</span>
             </p>
             <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted">
@@ -527,27 +582,27 @@ function ThreadBar({ title, startedAt, sensitive, level, canEdit, busy, pinned, 
                   <Lock aria-hidden className="size-3" />{badge}
                 </span>
               )}
-              {sensitive && !badge && <span className="inline-flex items-center gap-1"><Lock aria-hidden className="size-3" />Private, local models only</span>}
-              {started && !Number.isNaN(started.getTime()) && <span>Started {format(started, "EEE d MMM")}</span>}
+              {sensitive && !badge && <span className="inline-flex items-center gap-1"><Lock aria-hidden className="size-3" />{t("chat.thread.private")}</span>}
+              {started && !Number.isNaN(started.getTime()) && <span suppressHydrationWarning>{t("chat.thread.started", { date: fmt(started, "weekday") })}</span>}
             </p>
           </div>
         ) : (
-          <p className="text-sm text-muted lg:hidden">New conversation</p>
+          <p className="text-sm text-muted lg:hidden">{t("chat.thread.newConversation")}</p>
         )}
       </div>
       {mode === "view" && (
         <div className="flex shrink-0 items-center">
           {canEdit && (
-            <ThreadMenu items={[
-              { label: pinned ? "Unpin" : "Pin to the top", icon: pinned ? <PinOff /> : <Pin />, onSelect: onPin },
-              { label: unread ? "Mark as read" : "Mark as unread", icon: unread ? <MailOpen /> : <Mail />, onSelect: onUnread, hint: unread ? undefined : "Keep it bold in the list to come back to" },
-              { label: compacting ? "Compacting…" : "Compact this conversation", icon: <Archive />, onSelect: onCompact, disabled: busy || compacting || !canCompact,
-                hint: canCompact ? "Summarise earlier turns so long chats stay quick" : "Available once the conversation is longer" },
-              { label: "Rename", icon: <Pencil />, onSelect: () => setMode("rename") },
-              { label: "Delete", icon: <Trash2 />, onSelect: () => setMode("delete"), danger: true, disabled: busy },
+            <ThreadMenu label={t("chat.thread.actions")} items={[
+              { label: pinned ? t("chat.thread.unpin") : t("chat.thread.pin"), icon: pinned ? <PinOff /> : <Pin />, onSelect: onPin },
+              { label: unread ? t("chat.thread.markRead") : t("chat.thread.markUnread"), icon: unread ? <MailOpen /> : <Mail />, onSelect: onUnread, hint: unread ? undefined : t("chat.thread.markUnreadHint") },
+              { label: compacting ? t("chat.thread.compacting") : t("chat.thread.compact"), icon: <Archive />, onSelect: onCompact, disabled: busy || compacting || !canCompact,
+                hint: canCompact ? t("chat.thread.compactHint") : t("chat.thread.compactLater") },
+              { label: t("chat.thread.rename"), icon: <Pencil />, onSelect: () => setMode("rename") },
+              { label: t("chat.thread.delete"), icon: <Trash2 />, onSelect: () => setMode("delete"), danger: true, disabled: busy },
             ]} />
           )}
-          <Link href="/chat" onClick={onNew} aria-label="New conversation" title="New conversation"
+          <Link href="/chat" onClick={onNew} aria-label={t("chat.thread.newConversation")} title={t("chat.thread.newConversation")}
             className="inline-flex size-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-surface-2 hover:text-fg lg:hidden">
             <SquarePen className="size-4" aria-hidden />
           </Link>

@@ -7,9 +7,11 @@ import { api, errorFields, errorMessage, type FieldErrors } from "@/lib/auth/cli
 import { describedBy, Field } from "@/lib/auth/client/field";
 import { passkeysSupported, signInWithPasskey } from "@/lib/auth/client/passkeys";
 import { ErrorNote, Notice } from "./notes";
+import { useT } from "@/lib/i18n/client";
 
 export function LoginForm({ next, notice }: { next: string; notice: string | null }) {
   const router = useRouter();
+  const t = useT();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState<"password" | "passkey" | null>(null);
@@ -29,8 +31,8 @@ export function LoginForm({ next, notice }: { next: string; notice: string | nul
     e.preventDefault();
     setError(null); setFields({});
     const f: FieldErrors = {};
-    if (!email.trim()) f.email = "Enter your email or username.";
-    if (!password) f.password = "Enter your password.";
+    if (!email.trim()) f.email = t("auth.login.errEmail");
+    if (!password) f.password = t("auth.login.errPassword");
     if (Object.keys(f).length) { setFields(f); return; }
     setBusy("password");
     try {
@@ -62,20 +64,20 @@ export function LoginForm({ next, notice }: { next: string; notice: string | nul
         <div className="mb-8">
           <Button type="button" className="h-11 w-full text-[15px]" onClick={passkey} disabled={busy !== null}>
             <Fingerprint size={18} aria-hidden />
-            {busy === "passkey" ? "Waiting for your passkey…" : "Sign in with a passkey"}
+            {busy === "passkey" ? t("auth.login.passkeyBusy") : t("auth.login.passkey")}
           </Button>
-          <p className="mt-2 text-sm text-muted">Use your fingerprint, face or device PIN.</p>
+          <p className="mt-2 text-sm text-muted">{t("auth.login.passkeyHint")}</p>
         </div>
       )}
-      <form onSubmit={submit} noValidate aria-label="Sign in with your password">
-        {canPasskey && <p className="mb-4 text-sm font-medium">Or use your password</p>}
+      <form onSubmit={submit} noValidate aria-label={t("auth.login.formLabel")}>
+        {canPasskey && <p className="mb-4 text-sm font-medium">{t("auth.login.orPassword")}</p>}
         <div className="space-y-4">
-          <Field id="login-email" label="Email or username" error={fields.email}>
+          <Field id="login-email" label={t("auth.login.email")} error={fields.email}>
             <Input id="login-email" name="email" type="text" inputMode="email" autoComplete="username webauthn" autoCapitalize="none"
               spellCheck={false} value={email} onChange={(e) => setEmail(e.target.value)} autoFocus className="h-10"
               aria-invalid={!!fields.email || undefined} aria-describedby={describedBy("login-email", fields.email)} />
           </Field>
-          <Field id="login-password" label="Password" error={fields.password}>
+          <Field id="login-password" label={t("auth.login.password")} error={fields.password}>
             <Input id="login-password" name="password" type="password" autoComplete="current-password" value={password} className="h-10"
               onChange={(e) => setPassword(e.target.value)}
               aria-invalid={!!fields.password || undefined} aria-describedby={describedBy("login-password", fields.password)} />
@@ -83,7 +85,7 @@ export function LoginForm({ next, notice }: { next: string; notice: string | nul
         </div>
         <ErrorNote message={error} className="mt-4" />
         <Button type="submit" variant={canPasskey ? "secondary" : "primary"} className="mt-5 h-10 w-full" disabled={busy !== null}>
-          {busy === "password" ? "Signing in…" : "Sign in"}
+          {busy === "password" ? t("auth.login.submitBusy") : t("auth.login.submit")}
         </Button>
       </form>
     </div>

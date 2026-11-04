@@ -52,8 +52,8 @@ export type TodayData = TodayCore & {
 /** How many days "Coming up" covers (today included). */
 export const COMING_UP_DAYS = 14;
 
-export async function loadTodayCore(v: Viewer, now = new Date()): Promise<TodayCore> {
-  const tz = appTimeZone();
+/** `tz` is the reader's time zone (their setting); the household zone when left out. */
+export async function loadTodayCore(v: Viewer, now = new Date(), tz: string = appTimeZone()): Promise<TodayCore> {
   const from = startOfDayInZone(now, tz);
   const to = addDaysInZone(from, COMING_UP_DAYS + 1, tz);
 
@@ -105,9 +105,9 @@ export async function loadTodayCore(v: Viewer, now = new Date()): Promise<TodayC
   return { now, tz, events, reminders, children, attention, failedUploads };
 }
 
-export async function loadToday(v: Viewer, now = new Date()): Promise<TodayData> {
+export async function loadToday(v: Viewer, now = new Date(), tz?: string): Promise<TodayData> {
   const [core, merges, recentSources, recentWiki] = await Promise.all([
-    loadTodayCore(v, now),
+    loadTodayCore(v, now, tz),
     gbrain.mergeSuggestions(v, 20).then((s) => s.length, (err) => {
       console.error("[today] merge suggestions failed:", err);
       return null;

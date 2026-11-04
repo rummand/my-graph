@@ -1,23 +1,10 @@
 import { clsx } from "clsx";
-import { format, isSameYear, isToday, isYesterday } from "date-fns";
-import { AlertTriangle, FileAudio, FileQuestion, FileSpreadsheet, FileText, FileType, Image as ImageIcon, LoaderCircle, Mail, StickyNote } from "lucide-react";
+import { AlertTriangle, FileAudio, FileQuestion, FileSpreadsheet, FileText, FileType, Image as ImageIcon, Inbox, LoaderCircle, Mail, StickyNote } from "lucide-react";
 import type { FileCategory } from "@/lib/ingest/mime";
+import type { Lx } from "./i18n";
 
 export type Visibility = "private" | "parents" | "household";
 export type SourceStatus = "pending" | "processing" | "ready" | "failed";
-
-export const VISIBILITY_OPTIONS: { value: Visibility; label: string; hint: string }[] = [
-  { value: "private", label: "Only me", hint: "Nobody else in the family can see it." },
-  { value: "parents", label: "Parents", hint: "You and the other parents in the family." },
-  { value: "household", label: "Whole family", hint: "Everyone in the family, children included." },
-];
-
-export const visibilityLabel = (v: Visibility) => VISIBILITY_OPTIONS.find((o) => o.value === v)?.label ?? v;
-
-/** What people call each kind of file, singular and as a filter label. */
-export const KIND_WORD: Record<FileCategory, string> = {
-  pdf: "PDF", document: "Word document", text: "Text file", image: "Photo", audio: "Recording", email: "Email", other: "File",
-};
 
 /** Icon for a file category; CSV gets a spreadsheet icon. */
 export function TypeIcon({ category, mime, className }: { category: FileCategory; mime?: string | null; className?: string }) {
@@ -30,6 +17,7 @@ export function TypeIcon({ category, mime, className }: { category: FileCategory
     case "image": return <ImageIcon aria-hidden className={cls} />;
     case "audio": return <FileAudio aria-hidden className={cls} />;
     case "email": return <Mail aria-hidden className={cls} />;
+    case "mailbox": return <Inbox aria-hidden className={cls} />;
     default: return <FileQuestion aria-hidden className={cls} />;
   }
 }
@@ -42,42 +30,20 @@ export function isStuck(status: SourceStatus, startedAt: string | null, createdA
 }
 
 /** The one status mark a file carries. Ready files carry none: being read is the normal state. */
-export function StatusPill({ status, stuck = false, showReady = false, className }: { status: SourceStatus; stuck?: boolean; showReady?: boolean; className?: string }) {
+export function StatusPill({ L, status, stuck = false, showReady = false, className }: { L: Pick<Lx, "t">; status: SourceStatus; stuck?: boolean; showReady?: boolean; className?: string }) {
+  const { t } = L;
   const base = clsx("inline-flex flex-none items-center gap-1 whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium", className);
-  if (stuck) return <span className={clsx(base, "bg-warn-tint text-warn")}><AlertTriangle aria-hidden className="size-3.5" />Stalled</span>;
+  if (stuck) return <span className={clsx(base, "bg-warn-tint text-warn")}><AlertTriangle aria-hidden className="size-3.5" />{t("library.status.stalled")}</span>;
   switch (status) {
     case "pending":
-      return <span className={clsx(base, "bg-surface-2 text-muted")}><LoaderCircle aria-hidden className="size-3.5 motion-safe:animate-spin" />Waiting to be read</span>;
+      return <span className={clsx(base, "bg-surface-2 text-muted")}><LoaderCircle aria-hidden className="size-3.5 motion-safe:animate-spin" />{t("library.status.pending")}</span>;
     case "processing":
-      return <span className={clsx(base, "bg-accent-tint text-accent")}><LoaderCircle aria-hidden className="size-3.5 motion-safe:animate-spin" />Reading</span>;
+      return <span className={clsx(base, "bg-accent-tint text-accent")}><LoaderCircle aria-hidden className="size-3.5 motion-safe:animate-spin" />{t("library.status.processing")}</span>;
     case "ready":
-      return showReady ? <span className={clsx(base, "bg-surface-2 text-muted")}>Read</span> : null;
+      return showReady ? <span className={clsx(base, "bg-surface-2 text-muted")}>{t("library.status.ready")}</span> : null;
     case "failed":
-      return <span className={clsx(base, "bg-danger-tint text-danger")}><AlertTriangle aria-hidden className="size-3.5" />Couldn&apos;t read</span>;
+      return <span className={clsx(base, "bg-danger-tint text-danger")}><AlertTriangle aria-hidden className="size-3.5" />{t("library.status.failed")}</span>;
   }
-}
-
-export function formatBytes(n: number | null | undefined): string {
-  if (!n && n !== 0) return "";
-  if (n < 1024) return `${n} bytes`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
-}
-
-/** "Today", "Yesterday", "Tue 3 Nov", or "3 Nov 2025" for another year. */
-export function formatDay(iso: string, now = new Date()): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  if (isToday(d)) return "Today";
-  if (isYesterday(d)) return "Yesterday";
-  return isSameYear(d, now) ? format(d, "EEE d MMM") : format(d, "d MMM yyyy");
-}
-
-/** "Tue 3 Nov at 20:57" (with the year when it isn't this year). */
-export function formatMoment(iso: string, now = new Date()): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${isSameYear(d, now) ? format(d, "EEE d MMM") : format(d, "d MMM yyyy")} at ${format(d, "HH:mm")}`;
 }
 
 /** File extension as people know it, e.g. ".pdf". */
@@ -86,12 +52,5 @@ export function extensionLabel(title: string): string | null {
   return m ? `.${m[1].toLowerCase()}` : null;
 }
 
-/** Plain-English version of meta.extraction. */
-export function extractionNote(extraction: string | null): string | null {
-  if (!extraction || extraction === "done") return null;
-  if (extraction.startsWith("skipped: mux unreachable")) return "The file is saved and searchable by its words, but nobody was picked out of it: the assistant was unreachable when it was read. Read it again once the assistant is back.";
-  if (extraction.startsWith("skipped: no text")) return "No readable text was found, so nothing was added to the family's graph.";
-  if (extraction.startsWith("failed")) return `Finding people, places and dates failed: ${extraction.replace(/^failed:\s*/, "")}`;
-  if (extraction.startsWith("partial")) return `Only part of the file was read for people and dates: ${extraction.replace(/^partial:\s*/, "")}`;
-  return extraction;
-}
+
+export { extractionNote, formatBytes, formatDay, formatDocDate, formatMoment, kindWord, visibilityLabel, visibilityOptions, listJoin, countsLine, type Lx } from "./i18n";

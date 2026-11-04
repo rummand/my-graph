@@ -2,6 +2,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { clsx } from "clsx";
 import { CitationChip } from "@/components/ui";
+import { useT } from "@/lib/i18n/client";
 
 /**
  * "Provenance you can touch" on a file's page: pressing a fact's citation marks the exact words in the original
@@ -30,9 +31,10 @@ export function ProvenanceProvider({ children }: { children: ReactNode }) {
 /** A cobalt citation that shows where in the original a fact was read. */
 export function CiteButton({ target, title, confidence }: { target: Omit<Target, "key"> & { key: string }; title: string; confidence?: number }) {
   const { show } = useProvenance();
+  const t = useT();
   return (
     <button type="button" onClick={() => show(target)} className="rounded-[4px] align-baseline [&>span]:hover:bg-accent [&>span]:hover:text-accent-fg"
-      aria-label={`Show where this was read: ${title}`}>
+      aria-label={t("library.detail.showWhere", { title })}>
       <CitationChip title={title} confidence={confidence} />
     </button>
   );
@@ -127,8 +129,9 @@ export function PdfFrame({ url, title }: { url: string; title: string }) {
   const { active } = useProvenance();
   const ref = useRef<HTMLIFrameElement>(null);
   const page = active?.page;
+  const t = useT();
   useEffect(() => {
     if (page) ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [page, active?.key]);
-  return <iframe ref={ref} key={page ?? 0} src={page ? `${url}#page=${page}` : url} title={`PDF: ${title}`} className="block h-[78vh] min-h-[420px] w-full bg-surface-2" />;
+  return <iframe ref={ref} key={page ?? 0} src={page ? `${url}#page=${page}` : url} title={t("library.detail.pdfFrame", { title })} className="block h-[78vh] min-h-[420px] w-full bg-surface-2" />;
 }

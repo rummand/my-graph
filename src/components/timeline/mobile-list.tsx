@@ -2,12 +2,19 @@
 /** Phone layout (< 640px): a vertical list by month, a date column on the left, and a cobalt Today line. */
 import { Fragment, useEffect, useMemo, useRef } from "react";
 import { clsx } from "clsx";
-import { format } from "date-fns";
-import { calendarDay, effectivePrecision, formatWhen, groupByMonth } from "@/lib/timeline/pure";
+import { useT } from "@/lib/i18n/client";
+import { calendarDay, effectivePrecision, groupByMonth } from "@/lib/timeline/pure";
 import type { TimelineItem } from "@/lib/timeline/types";
 import { PersonChip } from "@/components/ui";
 import { ItemGlyph, STATUS_LABEL } from "./marks";
-import { useNow } from "./hooks";
+import { useNow, useWhen } from "./hooks";
+import { capitalize, datePrefixKey } from "./when";
+
+/** "2021-03" → 1 March 2021 (local), for the month heading in the reader's language. */
+function monthOf(key: string): Date | null {
+  const m = /^(\d{4})-(\d{2})$/.exec(key);
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, 1) : null;
+}
 
 export function MobileList({ items, peopleById, selectedId, onSelect, scrollToId }: {
   items: TimelineItem[];
@@ -17,6 +24,8 @@ export function MobileList({ items, peopleById, selectedId, onSelect, scrollToId
   /** Bring this item into view (search). */
   scrollToId: string | null;
 }) {
+  const t = useT();
+  const w = useWhen();
   const now = useNow();
   const groups = useMemo(() => groupByMonth(items), [items]);
   const firstUpcoming = useMemo(() => [...items].sort((a, b) => a.start.localeCompare(b.start)).find((i) => new Date(i.start).getTime() >= now)?.id ?? null, [items, now]);
@@ -37,8 +46,8 @@ export function MobileList({ items, peopleById, selectedId, onSelect, scrollToId
   }, [scrollToId]);
 
   const todayMarker = (
-    <div ref={todayRef} className="flex items-center gap-3 py-2" role="separator" aria-label={`Today, ${format(now, "EEEE d MMMM")}`}>
-      <span className="text-sm"><span className="font-semibold">Today</span> {format(now, "EEE d MMM")}</span>
+    <div ref={todayRef} className="flex items-center gap-3 py-2" role="separator" aria-label={t("timeline.todayOn", { date: w.fmt(now, "long") })}>
+      <span className="text-sm"><span className="font-semibold">{t("timeline.today")}</span> {w.fmt(now, "short")}</span>
       <span className="h-px flex-1 bg-accent" aria-hidden="true" />
     </div>
   );
@@ -48,7 +57,7 @@ export function MobileList({ items, peopleById, selectedId, onSelect, scrollToId
       {groups.map((g) => (
         <section key={g.key} aria-labelledby={`m-${g.key}`}>
           <h2 id={`m-${g.key}`} className="sticky top-0 z-10 -mx-4 bg-bg px-4 pb-2 pt-1 text-lg font-semibold tracking-[-0.01em]">
-            {g.label}
+            {monthOf(g.key) ? w.monthHeading(monthOf(g.key)!) : g.label}
           </h2>
           <ul>
             {g.items.map((it) => {
@@ -68,21 +77,21 @@ export function MobileList({ items, peopleById, selectedId, onSelect, scrollToId
                       <span className={clsx("w-10 shrink-0 text-center tabular-nums", past && "text-muted")} aria-hidden="true">
                         {exactDay ? (
                           <>
-                            <span className="block text-xs text-muted">{format(day, "EEE")}</span>
-                            <span className="block text-xl font-semibold leading-tight">{format(day, "d")}</span>
+                            <span className="block text-xs text-muted">{capitalize(w.fmt(day, "weekdayShort"))}</span>
+                            <span className="block text-xl font-semibold leading-tight">{day.getDate()}</span>
                           </>
-                        ) : <span className="block pt-1 text-xs text-muted">{p === "month" ? format(day, "MMM") : format(day, "yyyy")}</span>}
+                        ) : <span className="block pt-1 text-xs text-muted">{p === "month" ? capitalize(w.fmt(day, "monthShort")) : w.fmt(day, "year")}</span>}
                       </span>
                       <span className="mt-1"><ItemGlyph item={it} personId={it.personIds[0]} size={15} /></span>
                       <span className="min-w-0 flex-1">
                         <span className={clsx("block font-medium leading-snug", past && "text-muted")}>{it.title}</span>
                         <span className="mt-0.5 block text-sm text-muted">
-                          {it.kind === "reminder" ? "Due " : it.kind === "source" ? "Added " : ""}
-                          {formatWhen(it.start, it.end, it.precision)}
+                          {(() => { const when = w.when(it.start, it.end, it.precision), k = datePrefixKey(it.kind); return k ? t(k, { when }) : when; })()}
                         </span>
+                        {it.kind === "thread" && it.summary && <span className="mt-0.5 block text-sm text-muted">{it.summary}</span>}
                         {(it.overdue || (it.kind === "event" && it.status !== "confirmed")) && (
                           <span className={clsx("mt-0.5 block text-sm", it.overdue ? "text-danger" : it.status === "inferred" ? "text-inferred" : "text-warn")}>
-                            {it.overdue ? "Overdue" : STATUS_LABEL[it.status]}
+                            {it.overdue ? t("timeline.status.overdue") : t(STATUS_LABEL[it.status])}
                           </span>
                         )}
                         {people.length > 0 && (

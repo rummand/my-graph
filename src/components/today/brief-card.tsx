@@ -7,6 +7,7 @@ import type { CachedBrief } from "@/lib/briefs";
 import { splitCitations } from "@/lib/briefs/context";
 import { workedFor } from "@/lib/briefs/assistant-home";
 import { formatTime } from "@/lib/briefs/dates";
+import { useLocale, useT } from "@/lib/i18n/client";
 import { hrefs } from "./section";
 
 function citationHref(c: Citation): string | undefined {
@@ -33,7 +34,9 @@ function BriefText({ brief }: { brief: CachedBrief }) {
 }
 
 /** The daily brief: written on request through mux, cached per user per day on the server. */
-export function BriefCard({ initial, tz }: { initial: CachedBrief | null; tz: string }) {
+export function BriefCard({ initial, tz, isFamily }: { initial: CachedBrief | null; tz: string; isFamily: boolean }) {
+  const t = useT();
+  const locale = useLocale();
   const [brief, setBrief] = useState<CachedBrief | null>(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,40 +51,42 @@ export function BriefCard({ initial, tz }: { initial: CachedBrief | null; tz: st
         body: JSON.stringify({ refresh }),
       });
       const body = (await res.json().catch(() => ({}))) as { brief?: CachedBrief; error?: string };
-      if (!res.ok || !body.brief) throw new Error(body.error ?? "We couldn't write the brief. Please try again.");
+      if (!res.ok || !body.brief) throw new Error(body.error ?? t("today.brief.failed"));
       setBrief(body.brief);
     } catch (err) {
       setError(err instanceof TypeError
-        ? "We couldn't reach My Graph. Check your connection and try again."
-        : err instanceof Error ? err.message : "We couldn't write the brief. Please try again.");
+        ? t("today.error.offline")
+        : err instanceof Error ? err.message : t("today.brief.failed"));
     } finally {
       setBusy(false);
     }
   }
 
-  const when = brief ? formatTime(new Date(brief.generatedAt), tz) : null;
+  const when = brief ? formatTime(new Date(brief.generatedAt), tz, locale) : null;
+  const worked = brief && !brief.local ? workedFor(brief.durationMs, locale) : null;
 
   return (
     <section aria-labelledby="brief-title" className="min-w-0 rounded-lg bg-surface p-5">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <div className="flex min-w-0 items-baseline gap-2.5">
-          <h2 id="brief-title" className="text-lg font-semibold tracking-[-0.01em]">Today&apos;s brief</h2>
+          <h2 id="brief-title" className="text-lg font-semibold tracking-[-0.01em]">{t("today.brief.title")}</h2>
           {brief && (
             <span className="truncate text-sm text-muted">
-              {brief.local ? `Checked at ${when}` : `Written at ${when}`}{brief.model ? ` by ${brief.model}` : ""}
-              {!brief.local && workedFor(brief.durationMs) ? `, ${workedFor(brief.durationMs)}` : ""}
+              {t(brief.local ? "today.brief.checkedAt" : "today.brief.writtenAt", { time: when ?? "" })}
+              {brief.model ? ` ${t("today.brief.byModel", { model: brief.model })}` : ""}
+              {worked ? `, ${worked}` : ""}
             </span>
           )}
         </div>
         {brief ? (
           <Button variant="ghost" size="sm" onClick={() => write(true)} disabled={busy} aria-busy={busy}>
             {busy ? <Loader2 aria-hidden className="size-4 animate-spin" /> : <RotateCw aria-hidden className="size-3.5" />}
-            {busy ? "Writing…" : "Write it again"}
+            {busy ? t("today.brief.writing") : t("today.brief.again")}
           </Button>
         ) : (
           <Button onClick={() => write(false)} disabled={busy} aria-busy={busy}>
             {busy && <Loader2 aria-hidden className="size-4 animate-spin" />}
-            {busy ? "Writing…" : "Write today's brief"}
+            {busy ? t("today.brief.writing") : t("today.brief.write")}
           </Button>
         )}
       </div>
@@ -89,10 +94,7 @@ export function BriefCard({ initial, tz }: { initial: CachedBrief | null; tz: st
       <div className="mt-2.5" aria-live="polite">
         {error && <p role="alert" className="mb-2 rounded-md bg-warn-tint px-3 py-2 text-sm text-warn">{error}</p>}
         {brief ? <BriefText brief={brief} /> : !error && (
-          <p className="max-w-[60ch] text-muted">
-            A few lines on what&apos;s coming up: what to pack, sign or book, written from your calendar, reminders and
-            letters, with a link to where each point came from.
-          </p>
+          <p className="max-w-[60ch] text-muted">{t(isFamily ? "today.brief.introFamily" : "today.brief.intro")}</p>
         )}
       </div>
     </section>

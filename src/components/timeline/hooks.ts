@@ -1,5 +1,13 @@
 "use client";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useLocale } from "@/lib/i18n/client";
+import { makeWhen, type When } from "./when";
+
+/** Timeline date formatting in the reader's language. */
+export function useWhen(): When {
+  const locale = useLocale();
+  return useMemo(() => makeWhen(locale), [locale]);
+}
 
 /** Live media-query match; `fallback` during SSR. */
 export function useMediaQuery(query: string, fallback = false): boolean {

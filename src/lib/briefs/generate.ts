@@ -4,8 +4,10 @@
  */
 import type { Citation } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
+import { getPrefs, tFor, type Locale } from "@/lib/i18n";
 import * as mux from "@/lib/mux";
 import { peopleContext } from "@/lib/people";
+import { templateFor } from "@/lib/templates";
 import { loadAssistantBriefInput } from "./assistant";
 import { assistantBriefNotes } from "./assistant-home";
 import { getCachedBrief, setCachedBrief, type CachedBrief } from "./cache";
@@ -16,19 +18,33 @@ import { loadTodayCore, toBriefInput } from "./today";
 export type BriefResult = { text: string; citations: Citation[] };
 
 export class BriefUnavailableError extends Error {
-  constructor(message = "The assistant can't be reached right now, so we couldn't write a brief. Everything else on this page still works.") {
+  constructor(message = tFor("en")("today.brief.unavailable")) {
     super(message);
   }
 }
 
-export const NOTHING_TO_BRIEF = "Nothing on the calendar and no open reminders for the next week. Enjoy the quiet.";
+/** English text of the brief written when there is nothing to say (see today.brief.nothing for other languages). */
+export const NOTHING_TO_BRIEF = tFor("en")("today.brief.nothing");
+
+/** The reader's language and zone; English and the household zone outside a request (scripts, tests). */
+async function readerPrefs(): Promise<{ locale: Locale; tz: string }> {
+  try {
+    const p = await getPrefs();
+    return { locale: p.locale, tz: p.timeZone };
+  } catch {
+    return { locale: "en", tz: appTimeZone() };
+  }
+}
+
+/**
+ * Briefs are per person per graph and per language: a brief written in one graph is never shown in another, and
+ * switching language writes a new one.
+ */
+const briefKey = (v: Pick<Viewer, "id" | "graphId">, locale: Locale) => `${v.id}:${v.graphId}:${locale}`;
 
 /** Today's cached brief for the viewer, if one was written. */
-/** Briefs are per person per graph: a brief written in one graph is never shown in another. */
-const briefKey = (v: Pick<Viewer, "id" | "graphId">) => `${v.id}:${v.graphId}`;
-
-export function cachedBriefFor(v: Pick<Viewer, "id" | "graphId">, now = new Date()): CachedBrief | null {
-  return getCachedBrief(briefKey(v), dayKey(now, appTimeZone()));
+export function cachedBriefFor(v: Pick<Viewer, "id" | "graphId">, now = new Date(), opts: { locale?: Locale; tz?: string } = {}): CachedBrief | null {
+  return getCachedBrief(briefKey(v, opts.locale ?? "en"), dayKey(now, opts.tz ?? appTimeZone()));
 }
 
 /**
@@ -36,16 +52,21 @@ export function cachedBriefFor(v: Pick<Viewer, "id" | "graphId">, now = new Date
  */
 export async function generateBrief(v: Viewer, opts: { refresh?: boolean; now?: Date } = {}): Promise<CachedBrief> {
   const now = opts.now ?? new Date();
-  const tz = appTimeZone();
+  const { locale, tz } = await readerPrefs();
+  const t = tFor(locale);
   const day = dayKey(now, tz);
+  const key = briefKey(v, locale);
   if (!opts.refresh) {
-    const hit = getCachedBrief(briefKey(v), day);
+    const hit = getCachedBrief(key, day);
     if (hit) return hit;
   }
 
   const started = Date.now();
-  const [core, assistant] = await Promise.all([loadTodayCore(v, now), loadAssistantBriefInput(v)]);
+  const [core, assistant] = await Promise.all([loadTodayCore(v, now, tz), loadAssistantBriefInput(v)]);
   const input = toBriefInput(v, core);
+  input.locale = locale;
+  input.graphKind = v.graphKind ?? "family";
+  input.graphNoun = templateFor(v).noun;
   try {
     input.people = await peopleContext(v, [], { now });
   } catch (err) {
@@ -59,7 +80,7 @@ export async function generateBrief(v: Viewer, opts: { refresh?: boolean; now?: 
   if (ctx.empty && /^Needs attention:/m.test(input.people ?? "")) ctx.empty = false;
   if (ctx.empty && input.assistant?.trim()) ctx.empty = false;
   if (ctx.empty) {
-    brief = { text: NOTHING_TO_BRIEF, citations: [], generatedAt: now.toISOString(), day, model: null, local: true };
+    brief = { text: t("today.brief.nothing"), citations: [], generatedAt: now.toISOString(), day, model: null, local: true };
   } else {
     let res: mux.MuxResult;
     try {
@@ -72,15 +93,15 @@ export async function generateBrief(v: Viewer, opts: { refresh?: boolean; now?: 
       });
     } catch (err) {
       console.error("[briefs] mux.complete failed:", err);
-      throw new BriefUnavailableError();
+      throw new BriefUnavailableError(t("today.brief.unavailable"));
     }
     const picked = pickCitations(res.text ?? "", ctx.citations);
-    if (!picked.text) throw new BriefUnavailableError("The assistant returned an empty brief. Please try again.");
+    if (!picked.text) throw new BriefUnavailableError(t("today.brief.empty"));
     brief = {
       text: picked.text, citations: picked.citations, generatedAt: new Date().toISOString(), day, model: res.model, local: false,
       durationMs: Date.now() - started,
     };
   }
-  setCachedBrief(briefKey(v), brief);
+  setCachedBrief(key, brief);
   return brief;
 }

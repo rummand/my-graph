@@ -1,25 +1,24 @@
 import Link from "next/link";
-import { BellRing, FileText, MessageCircle, NotebookText, Workflow, type LucideIcon } from "lucide-react";
+import { BellRing, Brain, FileText, MessageCircle, NotebookText, Workflow, type LucideIcon } from "lucide-react";
 import type { Activity } from "@/lib/automations";
 import { activityActorLabel, activityHref, hrefsAssistant } from "@/lib/briefs/assistant-home";
 import { formatWhen } from "@/lib/briefs/dates";
+import { getLocale, getT } from "@/lib/i18n";
 import { SectionError, TodaySection } from "./section";
 
-const ICON: Record<string, LucideIcon> = { heartbeat: BellRing, automation: Workflow, chat: MessageCircle, ingest: FileText, wiki: NotebookText };
+const ICON: Record<string, LucideIcon> = { heartbeat: BellRing, automation: Workflow, chat: MessageCircle, ingest: FileText, wiki: NotebookText, keeper: Brain };
 
 /** "What the assistant did": the last few things it did in this graph, each linking to its chat, run or subject. */
-export function AssistantActivity({ activity, now, tz }: { activity: Activity[] | null; now: Date; tz: string }) {
+export async function AssistantActivity({ activity, now, tz }: { activity: Activity[] | null; now: Date; tz: string }) {
+  const [t, locale] = await Promise.all([getT(), getLocale()]);
   return (
     <TodaySection
       id="activity"
-      title="What the assistant did"
-      action={activity && activity.length > 0 ? <Link href={hrefsAssistant.activity} className="text-sm text-accent hover:underline">All activity</Link> : undefined}
+      title={t("today.activity.title")}
+      action={activity && activity.length > 0 ? <Link href={hrefsAssistant.activity} className="text-sm text-accent hover:underline">{t("today.activity.all")}</Link> : undefined}
     >
-      {activity === null ? <SectionError what="the assistant's activity" /> : activity.length === 0 ? (
-        <p className="text-sm text-muted">
-          Nothing yet. When it answers, checks in or suggests something, it shows here with the time, and anything it
-          wants to save waits for you above.
-        </p>
+      {activity === null ? <SectionError what={t("today.error.what.activity")} /> : activity.length === 0 ? (
+        <p className="text-sm text-muted">{t("today.activity.empty")}</p>
       ) : (
         <ul>
           {activity.slice(0, 5).map((a) => {
@@ -31,9 +30,9 @@ export function AssistantActivity({ activity, now, tz }: { activity: Activity[] 
                 <Icon aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />
                 <span className="min-w-0 flex-1">
                   <span className="line-clamp-2">{a.summary}</span>
-                  <span className="sr-only">, {activityActorLabel(a.actor)}</span>
+                  <span className="sr-only">, {activityActorLabel(a.actor, locale)}</span>
                 </span>
-                <time dateTime={at.toISOString()} className="shrink-0 text-sm tabular-nums text-muted">{formatWhen(at, now, tz)}</time>
+                <time dateTime={at.toISOString()} className="shrink-0 text-sm tabular-nums text-muted">{formatWhen(at, now, tz, true, locale)}</time>
               </>
             );
             return (

@@ -8,10 +8,13 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { X } from "lucide-react";
 import { Badge, CitationChip, IconButton, NodeChip, PersonChip, buttonClass } from "@/components/ui";
-import { formatWhen } from "@/lib/timeline/pure";
+import { useLocale, useT } from "@/lib/i18n/client";
 import type { TimelineItem } from "@/lib/timeline/types";
 import { parseNodeDetail, type DrawerDetail } from "@/lib/timeline/node-detail";
 import { ItemGlyph, KIND_LABEL, STATUS_LABEL } from "./marks";
+import { ThreadSection } from "./thread-section";
+import { useWhen } from "./hooks";
+import { datePrefixKey } from "./when";
 
 type Load = { state: "idle" } | { state: "loading" } | { state: "error"; message: string } | { state: "ready"; detail: DrawerDetail };
 
@@ -69,13 +72,16 @@ export function EventDrawer({ item, peopleById, onClose, isPhone }: {
 }
 
 function DrawerBody({ item, peopleById, onClose, isPhone }: { item: TimelineItem; peopleById: Map<string, string>; onClose: () => void; isPhone: boolean }) {
+  const t = useT();
+  const w = useWhen();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const [load, setLoad] = useState<Load>({ state: "idle" });
   const [retry, setRetry] = useState(0);
 
   useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, [item.id]);
 
-  const nodeId = item.nodeId;
+  const isThread = item.kind === "thread";
+  const nodeId = isThread ? null : item.nodeId;
   useEffect(() => {
     if (!nodeId) { setLoad({ state: "idle" }); return; }
     const ac = new AbortController();
@@ -85,17 +91,18 @@ function DrawerBody({ item, peopleById, onClose, isPhone }: { item: TimelineItem
         const body = await r.json().catch(() => null);
         if (!r.ok) {
           const msg = body && typeof body.error === "string" ? body.error
-            : r.status === 404 ? "This no longer exists, or it isn't shared with you." : "We couldn't load the sources.";
+            : r.status === 404 ? t("timeline.drawer.gone") : t("timeline.drawer.sourcesFailed");
           setLoad({ state: "error", message: msg });
           return;
         }
         setLoad({ state: "ready", detail: parseNodeDetail(body) });
       })
-      .catch((err) => { if (!ac.signal.aborted) setLoad({ state: "error", message: err instanceof Error && err.message.includes("fetch") ? "You seem to be offline." : "We couldn't load the sources." }); });
+      .catch((err) => { if (!ac.signal.aborted) setLoad({ state: "error", message: err instanceof Error && err.message.includes("fetch") ? t("timeline.drawer.offline") : t("timeline.drawer.sourcesFailed") }); });
     return () => ac.abort();
-  }, [nodeId, retry]);
+  }, [nodeId, retry, t]);
 
-  const when = formatWhen(item.start, item.end, item.precision);
+  const when = w.when(item.start, item.end, item.precision);
+  const prefix = datePrefixKey(item.kind);
   const people = item.personIds.map((id) => ({ id, label: peopleById.get(id) })).filter((p): p is { id: string; label: string } => !!p.label);
   const detail = load.state === "ready" ? load.detail : null;
   const summary = item.summary ?? detail?.summary ?? null;
@@ -107,25 +114,25 @@ function DrawerBody({ item, peopleById, onClose, isPhone }: { item: TimelineItem
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
             <ItemGlyph item={item} personId={item.personIds[0]} size={15} />
-            <span>{KIND_LABEL[item.kind]}</span>
+            <span>{t(KIND_LABEL[item.kind])}</span>
             {item.kind === "event" && item.status !== "confirmed" && (
-              <Badge tone={item.status === "inferred" ? "inferred" : "warn"}>{STATUS_LABEL[item.status]}</Badge>
+              <Badge tone={item.status === "inferred" ? "inferred" : "warn"}>{t(STATUS_LABEL[item.status])}</Badge>
             )}
-            {item.overdue && <Badge tone="danger">Overdue</Badge>}
-            {item.sensitive && <Badge>Sensitive</Badge>}
+            {item.overdue && <Badge tone="danger">{t("timeline.status.overdue")}</Badge>}
+            {item.sensitive && <Badge>{t("timeline.status.sensitive")}</Badge>}
           </div>
           <h2 id="timeline-drawer-title" ref={headingRef} tabIndex={-1} className="mt-2 text-xl font-semibold leading-snug tracking-[-0.01em] [text-wrap:balance] focus:outline-none">
             {item.title}
           </h2>
           <p className="mt-1 text-muted">
-            {item.kind === "reminder" ? `Due ${when}` : item.kind === "source" ? `Added ${when}` : <time dateTime={item.start}>{when}</time>}
+            <time dateTime={item.start}>{prefix ? t(prefix, { when }) : when}</time>
           </p>
         </div>
-        <IconButton label="Close details" onClick={onClose} className="-mr-2 -mt-1"><X size={18} /></IconButton>
+        <IconButton label={t("timeline.drawer.close")} onClick={onClose} className="-mr-2 -mt-1"><X size={18} /></IconButton>
       </header>
 
       <div className="flex-1 space-y-6 overflow-y-auto px-6 pb-6">
-        {people.length > 0 && (
+        {people.length > 0 && !isThread && (
           <div className="flex flex-wrap gap-1.5">
             {people.map((p) => <PersonChip key={p.id} id={p.id} name={p.label} href={`/people/${p.id}`} />)}
           </div>
@@ -135,22 +142,24 @@ function DrawerBody({ item, peopleById, onClose, isPhone }: { item: TimelineItem
 
         {item.status === "inferred" && item.kind === "event" && (
           <p className="rounded-lg bg-inferred-tint px-4 py-3 text-sm text-inferred">
-            The assistant worked this out from other facts. It stays marked as inferred until someone confirms it on the graph page.
+            {t("timeline.drawer.inferredNote")}
           </p>
         )}
 
+        {isThread && item.thread && <ThreadSection thread={item.thread} />}
+
         {nodeId && <SourcesSection load={load} onRetry={() => setRetry((n) => n + 1)} />}
 
-        {!nodeId && item.sourceId && (
+        {!nodeId && item.sourceId && !isThread && (
           <section>
-            <h3 className="mb-2 text-sm font-medium">Where this comes from</h3>
-            <CitationChip n={1} title={item.kind === "source" ? item.title : "The document this came from"} href={`/library/${item.sourceId}`} />
+            <h3 className="mb-2 text-sm font-medium">{t("timeline.drawer.whereFrom")}</h3>
+            <CitationChip n={1} title={item.kind === "source" || item.kind === "document" ? item.title : t("timeline.drawer.documentItCameFrom")} href={`/library/${item.sourceId}`} />
           </section>
         )}
 
         {detail && detail.related.length > 0 && (
           <section>
-            <h3 className="mb-2 text-sm font-medium">Connected to</h3>
+            <h3 className="mb-2 text-sm font-medium">{t("timeline.drawer.connectedTo")}</h3>
             <div className="flex flex-wrap gap-1.5">
               {detail.related.map((n) => <NodeChip key={n.id} type={n.type} label={n.label} href={`/node/${n.id}`} />)}
             </div>
@@ -158,11 +167,17 @@ function DrawerBody({ item, peopleById, onClose, isPhone }: { item: TimelineItem
         )}
       </div>
 
-      {(nodeId || item.kind === "source" || item.kind === "reminder") && (
+      {(nodeId || item.kind === "source" || item.kind === "reminder" || isThread) && (
         <footer className="flex flex-wrap gap-2 bg-surface-2/50 px-6 py-4 sm:rounded-b-xl">
-          {nodeId && <Link href={`/node/${nodeId}`} className={buttonClass("primary")}>Open in graph</Link>}
-          {item.kind === "source" && item.sourceId && <Link href={`/library/${item.sourceId}`} className={buttonClass(nodeId ? "secondary" : "primary")}>Open in library</Link>}
-          {item.kind === "reminder" && <Link href="/" className={buttonClass("secondary")}>See on Today</Link>}
+          {isThread && item.thread && (
+            <Link href={item.thread.messages.length > 1 ? `/library/thread?key=${encodeURIComponent(item.thread.key)}` : `/library/${item.sourceId}`} className={buttonClass("primary")}>
+              {item.thread.messages.length > 1 ? t("timeline.drawer.openConversation") : t("timeline.drawer.openEmail")}
+            </Link>
+          )}
+          {item.kind === "document" && item.sourceId && <Link href={`/library/${item.sourceId}`} className={buttonClass("primary")}>{t("timeline.drawer.openLibrary")}</Link>}
+          {nodeId && item.kind !== "document" && <Link href={`/node/${nodeId}`} className={buttonClass("primary")}>{t("timeline.drawer.openGraph")}</Link>}
+          {item.kind === "source" && item.sourceId && <Link href={`/library/${item.sourceId}`} className={buttonClass(nodeId ? "secondary" : "primary")}>{t("timeline.drawer.openLibrary")}</Link>}
+          {item.kind === "reminder" && <Link href="/" className={buttonClass("secondary")}>{t("timeline.drawer.seeToday")}</Link>}
         </footer>
       )}
     </>
@@ -170,11 +185,13 @@ function DrawerBody({ item, peopleById, onClose, isPhone }: { item: TimelineItem
 }
 
 function SourcesSection({ load, onRetry }: { load: Load; onRetry: () => void }) {
+  const t = useT();
+  const [open, close] = useLocale() === "da" ? ["»", "«"] : ["“", "”"];
   return (
     <section aria-busy={load.state === "loading"}>
-      <h3 className="mb-2.5 text-sm font-medium">Where this comes from</h3>
+      <h3 className="mb-2.5 text-sm font-medium">{t("timeline.drawer.whereFrom")}</h3>
       {load.state === "loading" && (
-        <div className="space-y-2" aria-label="Loading sources">
+        <div className="space-y-2" aria-label={t("timeline.drawer.loadingSources")}>
           <div className="h-5 w-2/3 animate-pulse rounded bg-surface-2" />
           <div className="h-14 animate-pulse rounded-lg bg-surface-2" />
         </div>
@@ -182,11 +199,11 @@ function SourcesSection({ load, onRetry }: { load: Load; onRetry: () => void }) 
       {load.state === "error" && (
         <p className="text-sm text-muted">
           {load.message}{" "}
-          <button type="button" onClick={onRetry} className="font-medium text-accent hover:underline">Try again</button>
+          <button type="button" onClick={onRetry} className="font-medium text-accent hover:underline">{t("timeline.tryAgain")}</button>
         </p>
       )}
       {load.state === "ready" && load.detail.sources.length === 0 && (
-        <p className="text-sm text-muted">No source is recorded for this. It was probably added by hand.</p>
+        <p className="text-sm text-muted">{t("timeline.drawer.noSource")}</p>
       )}
       {load.state === "ready" && load.detail.sources.length > 0 && (
         <ol className="space-y-3">
@@ -194,7 +211,7 @@ function SourcesSection({ load, onRetry }: { load: Load; onRetry: () => void }) 
             <li key={s.key}>
               <CitationChip n={i + 1} title={s.title} detail={s.detail} confidence={s.confidence ?? undefined}
                 href={s.sourceId ? `/library/${s.sourceId}` : undefined} />
-              {s.quote && <blockquote className="mt-2 rounded-lg bg-surface-2/70 px-3.5 py-2.5 text-sm leading-relaxed">“{s.quote}”</blockquote>}
+              {s.quote && <blockquote className="mt-2 rounded-lg bg-surface-2/70 px-3.5 py-2.5 text-sm leading-relaxed">{open}{s.quote}{close}</blockquote>}
               {s.how && <p className="mt-1.5 text-xs text-muted">{s.how}</p>}
             </li>
           ))}

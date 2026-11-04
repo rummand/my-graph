@@ -43,6 +43,13 @@
       "when": 1793757364363,
       "tag": "0005_versioning_connectors_i18n",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793757749730,
+      "tag": "0006_keeper_runs",
+      "breakpoints": true
     }
   ]
 }

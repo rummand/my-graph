@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MemoryView } from "@/lib/memory/types";
+import { useT } from "@/lib/i18n/client";
 import { memoryApi } from "./api";
 
 const UNDO_MS = 6000;
@@ -10,6 +11,7 @@ const UNDO_MS = 6000;
  * once, an undo toast shows, and the real DELETE goes out when the toast times out (or when the page is left).
  */
 export function useMemories(initial: MemoryView[]) {
+  const tr = useT();
   const [items, setItems] = useState(initial);
   const [toast, setToast] = useState<{ id: string; text: string; error?: boolean } | null>(null);
   const timers = useRef(new Map<string, { t: ReturnType<typeof setTimeout>; item: MemoryView; index: number }>());
@@ -42,7 +44,7 @@ export function useMemories(initial: MemoryView[]) {
   const itemsRef = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
 
-  const remove = useCallback((m: MemoryView, label = "Forgotten.") => {
+  const remove = useCallback((m: MemoryView, label?: string) => {
     const index = itemsRef.current.findIndex((x) => x.id === m.id);
     const prev = timers.current.get(m.id);
     if (prev) clearTimeout(prev.t);
@@ -52,13 +54,13 @@ export function useMemories(initial: MemoryView[]) {
         await memoryApi.remove(m.id);
       } catch (e) {
         setItems((cur) => [m, ...cur.filter((x) => x.id !== m.id)]);
-        setToast({ id: m.id, text: e instanceof Error ? e.message : "That couldn't be removed.", error: true });
+        setToast({ id: m.id, text: e instanceof Error ? e.message : tr("memory.removeFailed"), error: true });
       }
     }, UNDO_MS);
     timers.current.set(m.id, { t, item: m, index });
     setItems((xs) => xs.filter((x) => x.id !== m.id));
-    setToast({ id: m.id, text: label });
-  }, []);
+    setToast({ id: m.id, text: label ?? tr("memory.forgotten") });
+  }, [tr]);
 
   const undo = useCallback((id: string) => {
     const p = timers.current.get(id);

@@ -1,27 +1,36 @@
 /**
  * The ingestion pipeline. Server-only. Runs in-process after the upload returns; progress lives on the source row
  * (status pending → processing → ready | failed, with `error` and details in `meta`).
- *   1. text extraction (files only)   2. chunk + embed   3. the source's document node
- *   4. entity/fact extraction via mux with provenance   5. reminders for upcoming events involving a child
- * When mux is down, 1–3 still complete and the source ends up ready with meta.extraction = "skipped: mux unreachable".
+ *   1. text extraction (files only), the document's own date, its thread (mail), attachments as child sources
+ *   2. chunk + embed   3. the source's document node
+ *   4. entity/fact extraction via mux   5. a change set proposing what it adds (people, dates, connections,
+ *      reminders, unknown correspondents), each op with a receipt. Nothing extracted is written without a person.
+ * Mail imports (.mbox, .zip of .eml) are split into one email source per message (deduplicated by Message-ID).
+ * When mux is down, 1–3 still complete and the source ends up ready with meta.extraction = "skipped: mux unreachable";
+ * "Rebuild the timeline" (refreshSource) proposes from it later.
  */
+import { randomUUID } from "node:crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { chunks, reminders, sources, users } from "@/db/schema";
+import { chunks, edges, sources, users } from "@/db/schema";
 import type { Locator } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
+import { abandonChangeSet, getChangeSet, listChangeSets, proposeChanges, type ChangeInput } from "@/lib/changes";
 import * as gbrain from "@/lib/gbrain";
 import { viewerInGraph } from "@/lib/graphs/store";
 import * as mux from "@/lib/mux";
 import { getMeta, type Meta as MetaHelpers, type MetaNodeType } from "@/lib/meta";
-import { readStored } from "@/lib/storage";
+import { putFile, readStored, sha256Hex } from "@/lib/storage";
 import { chunkSegments, groupChunks, type TextSegment } from "./chunk";
-import { extractText } from "./extract-text";
-import {
-  buildExtractionMessages, clampConfidence, edgeStatusFor, findQuoteChunk, matchKnownPerson, parseExtraction, reminderDueAt,
-  type Extraction, type KnownPerson,
-} from "./extraction";
-import { kindFromMime } from "./mime";
+import { docKindOf, needsAnything, ocrCharsOf, rebuildNeeds } from "./classify";
+import { checkStatedDate, letterDate, ORIGIN_RANK, parsePdfDate, pickDocumentDate, type DateCandidate, type DateOrigin } from "./document-date";
+import { parseEmail } from "./email";
+import { decodeText, extractText } from "./extract-text";
+import { buildExtractionMessages, parseExtraction, type Extraction } from "./extraction";
+import { participantsOf, resolveThreads, splitMbox, threadKeyFor, type Participant } from "./mail";
+import { CONTAINER_KINDS, detectFileType, kindFromMime, MAX_UPLOAD_BYTES, MBOX_MIME } from "./mime";
+import { buildProposalOps, correspondentOps, describeCounts, edgeKey, type KnownNode } from "./proposals";
+import { readZip } from "./zip";
 
 const AGENT = "library-ingest";
 const EMBED_BATCH = 32;
@@ -66,6 +75,7 @@ async function muxIsUp(): Promise<boolean> {
 /**
  * Process one source end to end. Never throws: failures are written to the source row.
  * `fromFile`: run text extraction on the stored original; otherwise use the source's existing textContent.
+ * A mail import (.mbox / .zip) is split into one source per message instead (processContainer).
  */
 export async function processSource(viewer: Viewer, sourceId: string, opts: { fromFile: boolean }): Promise<void> {
   const [src] = await db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
@@ -76,6 +86,9 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     await db.update(sources).set({ status: "failed", error: "You are no longer a member of the graph this file belongs to." }).where(eq(sources.id, sourceId));
     return;
   }
+  const kind = kindFromMime(src.mime);
+  if (opts.fromFile && kind && CONTAINER_KINDS.has(kind)) return processContainer(v, src);
+
   const meta: Meta = { ...(src.meta ?? {}) };
   delete meta.extraction; delete meta.extracted; delete meta.warnings; delete meta.failedStep;
   const warnings: string[] = [];
@@ -91,21 +104,44 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     let textContent = src.textContent ?? "";
     let occurredAt: Date | undefined;
     let textActivity: "upload" | "ocr" | "transcription" | "import" = opts.fromFile ? "upload" : "import";
+    let dates: DateCandidate[] = [];
+    let threadKey = src.threadKey;
+    let externalId = src.externalId;
+    let raw: Buffer | null = null;
     if (opts.fromFile) {
-      const kind = kindFromMime(src.mime);
       if (!kind || !src.storageKey) throw new Error("The original file is missing or of an unknown type.");
-      const bytes = await readStored(src.storageKey);
+      raw = await readStored(src.storageKey);
       step = "reading the text";
-      const ex = await extractText({ bytes, mime: src.mime!, kind, filename: src.title, sensitive: src.sensitive, muxUp, muxMeta });
+      const ex = await extractText({ bytes: raw, mime: src.mime!, kind, filename: src.title, sensitive: src.sensitive, muxUp, muxMeta });
       segments = ex.segments;
       textContent = ex.textContent;
       occurredAt = ex.occurredAt;
       textActivity = ex.activity;
+      dates = ex.dates ?? [];
+      threadKey = threadKey ?? ex.threadKey ?? null;
+      externalId = externalId ?? ex.externalId ?? null;
       Object.assign(meta, ex.meta);
       warnings.push(...ex.warnings);
-      await db.update(sources).set({ textContent, meta: { ...meta, warnings } }).where(eq(sources.id, sourceId));
     } else {
       segments = textContent.trim() ? [{ text: textContent }] : [];
+      const d = letterDate(textContent);
+      if (d) dates.push(d);
+    }
+    const fallback = parentDate(meta);
+    if (fallback) dates.push(fallback);
+    let docDate = pickDocumentDate(dates);
+    meta.docKind = docKindOf({ mime: src.mime, kind: src.kind, meta, ocrChars: ocrCharsOf(textContent) });
+    meta.documentDateChecked = true;
+    if (docDate) meta.documentDateFrom = { origin: docDate.origin, quote: docDate.quote ?? null };
+    await db.update(sources).set({
+      textContent, threadKey, externalId, meta: { ...meta, warnings },
+      ...(docDate ? { documentDate: docDate.at, documentDatePrecision: docDate.precision } : {}),
+    }).where(eq(sources.id, sourceId));
+
+    // 1b. Attachments of an email become their own sources, in the same conversation.
+    if (raw && kind === "email" && !meta.attachmentsSaved) {
+      step = "saving the attachments";
+      meta.attachmentsSaved = await saveAttachments(v, src, raw, threadKey, docDate?.at ?? null);
     }
 
     // 2. Chunk + embed
@@ -115,7 +151,7 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     step = "indexing for search";
     meta.embedding = await embedChunks(stored, muxMeta, muxUp);
 
-    // 3. Document node
+    // 3. Document node (the file's own record in the graph: adding a file is the person's act, not a proposal)
     step = "adding it to the graph";
     let docNodeId = src.nodeId;
     if (!docNodeId) {
@@ -124,8 +160,8 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
         label: src.title,
         summary: typeof meta.captionText === "string" ? meta.captionText : undefined,
         props: { sourceId: src.id, mime: src.mime, kind: src.kind },
-        startAt: occurredAt ?? null,
-        timePrecision: occurredAt ? "minute" : null,
+        startAt: docDate?.at ?? occurredAt ?? null,
+        timePrecision: docDate ? docDate.precision : occurredAt ? "minute" : null,
         visibility: src.visibility,
         sensitive: src.sensitive,
       }, { sourceId: src.id, activity: textActivity, agentType: "user", agentId: v.id, confidence: 1 });
@@ -133,17 +169,39 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       await db.update(sources).set({ nodeId: docNodeId }).where(eq(sources.id, sourceId));
     }
 
-    // 4–5. Extraction + reminders
+    // 4–5. Extraction → a change set to review (people, places, dates, connections, reminders)
     step = "finding people, places and events";
+    const participants = emailParticipants(meta);
+    let groups: { ex: Extraction; chunks: StoredChunk[] }[] = [];
     if (!muxUp) meta.extraction = "skipped: mux unreachable";
     else if (stored.length === 0) meta.extraction = "skipped: no text";
     else {
-      const r = await extractFacts(v, { id: src.id, title: src.title, visibility: src.visibility, sensitive: src.sensitive, docNodeId }, stored, muxMeta);
+      const r = await readFacts(v, src.title, stored, muxMeta);
+      groups = r.groups;
       meta.extraction = r.summary;
-      meta.extracted = r.counts;
       if (r.model) meta.extractionModel = r.model;
-      step = "creating reminders";
-      meta.reminders = await createReminders(v, src.id, src.title, r.events);
+      const stated = groups.map((g) => checkStatedDate(g.ex.documentDate, g.chunks.map((c) => c.text).join("\n"))).find(Boolean);
+      if (stated) {
+        const better = pickDocumentDate([...dates, stated]);
+        if (better && better !== docDate) {
+          docDate = better;
+          meta.documentDateFrom = { origin: better.origin, quote: better.quote ?? null };
+          await db.update(sources).set({ documentDate: better.at, documentDatePrecision: better.precision }).where(eq(sources.id, sourceId));
+        }
+      }
+    }
+    if (groups.length || (participants.length && !meta.correspondentsDone)) {
+      step = "proposing what it adds";
+      // Read again: the earlier proposal from this file, if nobody has decided on it yet, is replaced.
+      if (typeof meta.changeSetId === "string") {
+        const prev = await getChangeSet(v, meta.changeSetId).catch(() => null);
+        if (prev?.status === "draft") await abandonChangeSet(v, prev.id).catch(() => false);
+        delete meta.changeSetId;
+      }
+      const p = await proposeFromSource(v, { id: src.id, title: src.title, visibility: src.visibility, docNodeId, header: emailHeader(meta) },
+        groups, meta.correspondentsDone ? [] : participants);
+      Object.assign(meta, p);
+      if (participants.length) meta.correspondentsDone = true;
     }
 
     meta.warnings = warnings;
@@ -158,6 +216,121 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       .set({ status: "failed", error: `Failed while ${step}: ${errText(e)}`, meta })
       .where(eq(sources.id, sourceId))
       .catch((e2) => console.error("[ingest] could not record failure", e2));
+  }
+}
+
+/** The sent date of the email an attachment came with, as the weakest date candidate. */
+function parentDate(meta: Meta): DateCandidate | null {
+  const iso = typeof meta.parentSentAt === "string" ? meta.parentSentAt : null;
+  if (!iso) return null;
+  const at = new Date(iso);
+  return Number.isNaN(at.getTime()) ? null : { at, precision: "minute", origin: "parent" };
+}
+
+function emailParticipants(meta: Meta): Participant[] {
+  const e = meta.email as { participants?: unknown } | undefined;
+  return Array.isArray(e?.participants) ? (e!.participants as Participant[]).filter((p) => p && typeof p.email === "string") : [];
+}
+
+function emailHeader(meta: Meta): string {
+  const e = (meta.email ?? {}) as { from?: string | null; to?: string | null; subject?: string | null };
+  return [e.from && `From: ${e.from}`, e.to && `To: ${e.to}`, e.subject && `Subject: ${e.subject}`].filter(Boolean).join("\n");
+}
+
+const MAX_ATTACHMENTS = 20;
+
+/** Save an email's attachments as sources of their own (child sources), each read by the pipeline in turn. */
+async function saveAttachments(v: Viewer, parent: typeof sources.$inferSelect, raw: Buffer, threadKey: string | null, sentAt: Date | null): Promise<number> {
+  let saved = 0;
+  const parts = parseEmail(decodeText(raw), { withAttachments: true }).attachmentParts.slice(0, MAX_ATTACHMENTS);
+  for (const part of parts) {
+    try {
+      if (part.bytes.byteLength === 0 || part.bytes.byteLength > MAX_UPLOAD_BYTES) continue;
+      const type = detectFileType(part.filename, part.mime, part.bytes.subarray(0, 8192));
+      if (!type.ok || CONTAINER_KINDS.has(type.kind)) continue;
+      const sha256 = sha256Hex(part.bytes);
+      const [dup] = await db.select({ id: sources.id }).from(sources)
+        .where(and(eq(sources.graphId, parent.graphId), eq(sources.ownerId, parent.ownerId), eq(sources.sha256, sha256))).limit(1);
+      if (dup) continue;
+      const stored = await putFile(part.bytes);
+      const [row] = await db.insert(sources).values({
+        householdId: parent.householdId, graphId: parent.graphId, ownerId: parent.ownerId, kind: "upload",
+        title: part.filename.split(/[\\/]/).pop()!.slice(0, 250), mime: type.mime, storageKey: stored.storageKey, sha256, size: stored.size,
+        meta: { originalName: part.filename, kind: type.kind, parentSourceId: parent.id, parentSentAt: sentAt?.toISOString() ?? null, correspondentsDone: true },
+        status: "pending", visibility: parent.visibility, sensitive: parent.sensitive, threadKey, connectionId: parent.connectionId,
+      }).returning({ id: sources.id });
+      enqueue(() => processSource(v, row.id, { fromFile: true }));
+      saved++;
+    } catch (e) {
+      console.warn("[ingest] attachment skipped", errText(e));
+    }
+  }
+  return saved;
+}
+
+/* ── Mail imports: .mbox and .zip of .eml ────────────────────────────────────────────────────────────── */
+
+const MAX_MESSAGES = 2000;
+
+/** Split a mail import into messages; each becomes an email source (deduplicated by Message-ID) and is read in turn. */
+async function processContainer(v: Viewer, src: typeof sources.$inferSelect): Promise<void> {
+  const meta: Meta = { ...(src.meta ?? {}) };
+  await db.update(sources).set({ status: "processing", error: null, meta: { ...meta, startedAt: new Date().toISOString() } }).where(eq(sources.id, src.id));
+  try {
+    const bytes = await readStored(src.storageKey!);
+    const raws: string[] = [];
+    if (src.mime === MBOX_MIME) raws.push(...splitMbox(decodeText(bytes)));
+    else {
+      const entries = readZip(new Uint8Array(bytes), { accept: (n) => /\.(eml|mbox)$/i.test(n), maxEntries: MAX_MESSAGES });
+      for (const e of entries) {
+        const text = decodeText(Buffer.from(e.bytes));
+        if (/\.mbox$/i.test(e.name)) raws.push(...splitMbox(text));
+        else raws.push(text);
+      }
+    }
+    if (raws.length === 0) throw new Error(src.mime === MBOX_MIME ? "No messages were found in the mailbox." : "No .eml or .mbox files were found in the zip.");
+    const msgs = raws.slice(0, MAX_MESSAGES).map((raw) => ({ raw, e: parseEmail(raw) }));
+    const threads = resolveThreads(msgs.map((m) => m.e));
+
+    let imported = 0, duplicates = 0;
+    const allParticipants: Participant[] = [];
+    for (const { raw, e } of msgs) {
+      const key = e.messageId ? threads.get(e.messageId.toLowerCase()) ?? threadKeyFor(e) : threadKeyFor(e);
+      for (const p of participantsOf(e)) allParticipants.push(p);
+      const body = new TextEncoder().encode(raw);
+      const sha256 = sha256Hex(body);
+      const dupWhere = e.messageId
+        ? and(eq(sources.graphId, src.graphId), eq(sources.externalId, e.messageId))
+        : and(eq(sources.graphId, src.graphId), eq(sources.ownerId, src.ownerId), eq(sources.sha256, sha256));
+      const [dup] = await db.select({ id: sources.id }).from(sources).where(dupWhere).limit(1);
+      if (dup) { duplicates++; continue; }
+      const stored = await putFile(body);
+      const [row] = await db.insert(sources).values({
+        householdId: src.householdId, graphId: src.graphId, ownerId: src.ownerId, kind: "email",
+        title: (e.subject?.trim() || "(no subject)").slice(0, 250), mime: "message/rfc822",
+        storageKey: stored.storageKey, sha256, size: stored.size,
+        meta: { originalName: `${src.title}`, kind: "email", containerId: src.id, correspondentsDone: true },
+        status: "pending", visibility: src.visibility, sensitive: src.sensitive,
+        threadKey: key, externalId: e.messageId ?? null, documentDate: e.date ?? null, documentDatePrecision: e.date ? "minute" : null,
+        connectionId: src.connectionId,
+      }).returning({ id: sources.id });
+      enqueue(() => processSource(v, row.id, { fromFile: true }));
+      imported++;
+    }
+
+    // Unknown correspondents across the whole import: one proposal, not one per message.
+    const p = await proposeFromSource(v, { id: src.id, title: src.title, visibility: src.visibility, docNodeId: null, header: `Mail import “${src.title}”` }, [], allParticipants);
+    Object.assign(meta, p);
+    Object.assign(meta, {
+      docKind: "mailbox", messages: msgs.length, imported, duplicates, threads: new Set(threads.values()).size,
+      truncated: raws.length > MAX_MESSAGES ? raws.length : undefined, extraction: "done", documentDateChecked: true,
+      finishedAt: new Date().toISOString(),
+    });
+    await db.update(sources).set({ status: "ready", error: null, meta }).where(eq(sources.id, src.id));
+  } catch (e) {
+    console.error(`[ingest] mail import ${src.id} failed`, e);
+    await db.update(sources).set({ status: "failed", error: `Failed while splitting the mail: ${errText(e)}`, meta: { ...meta, finishedAt: new Date().toISOString() } })
+      .where(eq(sources.id, src.id)).catch(() => {});
   }
 }
 
@@ -200,10 +373,7 @@ async function embedChunks(stored: StoredChunk[], meta: mux.MuxCallMeta, muxUp: 
   }
 }
 
-/* ── Step 4: entity and fact extraction ──────────────────────────────────────────────────────────────── */
-
-type SourceCtx = { id: string; title: string; visibility: "private" | "parents" | "household"; sensitive: boolean; docNodeId: string };
-export type FoundEvent = { nodeId: string; label: string; startAt: Date; personIds: Set<string> };
+/* ── Step 4: reading facts (mux) ─────────────────────────────────────────────────────────────────────── */
 
 function stripFences(s: string): string {
   const t = s.trim();
@@ -233,134 +403,87 @@ async function extractGroup(messages: mux.MuxMessage[], meta: mux.MuxCallMeta): 
   throw lastErr;
 }
 
-async function knownPeople(v: Viewer): Promise<(KnownPerson & { props: Record<string, unknown> })[]> {
-  try {
-    const people = await gbrain.listNodes(v, { type: "person", limit: 300 });
-    return people.map((p) => ({ id: p.id, label: p.label, aliases: p.aliases, props: p.props }));
-  } catch (e) {
-    console.warn("[ingest] could not list known people", errText(e));
-    return [];
-  }
-}
-
-const norm = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
-
-async function extractFacts(v: Viewer, src: SourceCtx, stored: StoredChunk[], meta: mux.MuxCallMeta) {
-  const known = await knownPeople(v);
-  // The household's meta model, loaded once: used to give extracted nodes a kind (teacher, school, …).
-  let meta_: MetaHelpers | null = null;
-  try { meta_ = await getMeta(v); } catch (e) { console.warn("[ingest] meta model unavailable", errText(e)); }
-  const kindFor = (type: string, label: string, text: string, relations: string[]): string | null => {
-    if (!meta_) return null;
-    try {
-      const s = meta_.suggestKind(label, { type: type as MetaNodeType, text, relations });
-      return s && s.type === type ? s.kind : null;
-    } catch { return null; }
-  };
-  const labelToId = new Map<string, string>();
-  const nodeType = new Map<string, string>(); // id → type
-  for (const p of known) {
-    nodeType.set(p.id, "person");
-  }
-  const resolve = (label: string): string | undefined => labelToId.get(norm(label)) ?? matchKnownPerson(label, known)?.id;
-
-  const mentioned = new Set<string>();
-  const events = new Map<string, FoundEvent>();
-  const counts = { groups: 0, failedGroups: 0, entities: 0, facts: 0, dropped: 0 };
-  let model: string | null = null;
-  let lastError = "";
-
-  const groups = groupChunks(stored, 4000).slice(0, MAX_EXTRACTION_GROUPS);
-  const totalGroups = groupChunks(stored, 4000).length;
-
+/** Ask the model what the text states, group by group. Nothing is written here. */
+async function readFacts(v: Viewer, title: string, stored: StoredChunk[], meta: mux.MuxCallMeta) {
+  const known = (await knownNodes(v)).filter((k) => k.type === "person").map((p) => ({ id: p.id, label: p.label, aliases: p.aliases }));
+  const all = groupChunks(stored, 4000);
+  const groups = all.slice(0, MAX_EXTRACTION_GROUPS);
+  const out: { ex: Extraction; chunks: StoredChunk[] }[] = [];
+  let failed = 0, lastError = "", model: string | null = null;
   for (const group of groups) {
-    counts.groups++;
-    let ex: Extraction;
     try {
-      const r = await extractGroup(buildExtractionMessages({ title: src.title, text: group.map((c) => c.text).join("\n\n"), known, today: new Date(), viewerName: v.name }), meta);
-      ex = r.data;
+      const r = await extractGroup(buildExtractionMessages({ title, text: group.map((c) => c.text).join("\n\n"), known, today: new Date(), viewerName: v.name }), meta);
+      out.push({ ex: r.data, chunks: group });
       model = r.model ?? model;
     } catch (e) {
-      counts.failedGroups++;
+      failed++;
       lastError = errText(e);
-      continue;
-    }
-    counts.dropped += ex.dropped;
-    const agentId = `mux:${model ?? "agent"}`;
-    const prov = (chunk: StoredChunk | undefined, quote: string | null, confidence: number) => ({
-      sourceId: src.id, chunkId: chunk?.id ?? null, locator: chunk?.locator ?? {}, quote,
-      activity: "llm_extraction" as const, agentType: "model" as const, agentId, confidence,
-    });
-    const chunkMentioning = (label: string) => group.find((c) => norm(c.text).includes(norm(label))) ?? group[0];
-
-    // Entities → nodes
-    for (const ent of ex.entities) {
-      try {
-        let id = ent.type === "person" ? matchKnownPerson(ent.label, known)?.id : undefined;
-        id ??= labelToId.get(norm(ent.label));
-        const chunk = chunkMentioning(ent.label);
-        if (!id) {
-          const key = norm(ent.label);
-          const relations = ex.facts.filter((f) => norm(f.from) === key || norm(f.to) === key).map((f) => f.relation);
-          // Context: the label, plus the entity's own summary for people (a role like "class teacher"). Not the whole
-          // chunk — a letter naming a school would make every place a "school" — and not event summaries, which name
-          // the event a deadline belongs to ("deadline … for the field trip" is not a trip).
-          const kind = kindFor(ent.type, ent.label, ent.type === "person" ? ent.summary ?? "" : "", relations);
-          const { node } = await gbrain.upsertNode(v, {
-            type: ent.type, kind, label: ent.label, aliases: ent.aliases, summary: ent.summary,
-            startAt: ent.startAt ?? null, endAt: ent.endAt ?? null,
-            timePrecision: ent.startAt ? ent.precision ?? "day" : null,
-            visibility: src.visibility, sensitive: src.sensitive,
-          }, prov(chunk, null, 0.8));
-          id = node.id;
-          counts.entities++;
-          if (node.type === "event" && node.startAt && !events.has(id)) events.set(id, { nodeId: id, label: node.label, startAt: node.startAt, personIds: new Set() });
-        }
-        labelToId.set(norm(ent.label), id);
-        for (const a of ent.aliases) labelToId.set(norm(a), id);
-        nodeType.set(id, ent.type);
-        if (ent.type === "event" && ent.startAt && !events.has(id)) events.set(id, { nodeId: id, label: ent.label, startAt: ent.startAt, personIds: new Set() });
-        if (!mentioned.has(id)) {
-          mentioned.add(id);
-          await gbrain.addEdge(v, { fromId: src.docNodeId, toId: id, relation: "mentions", confidence: 0.95, status: "confirmed", visibility: src.visibility },
-            prov(chunk, null, 0.95));
-        }
-      } catch (e) {
-        counts.dropped++;
-        lastError = errText(e);
-      }
-    }
-
-    // Facts → edges
-    for (const f of ex.facts) {
-      let fromId = resolve(f.from);
-      let toId = resolve(f.to);
-      if (!fromId || !toId || fromId === toId) { counts.dropped++; continue; }
-      // "involves" always points event → person.
-      if (f.relation === "involves" && nodeType.get(fromId) === "person" && nodeType.get(toId) === "event") [fromId, toId] = [toId, fromId];
-      const confidence = clampConfidence(f.confidence);
-      const chunk = findQuoteChunk(f.quote, group) ?? group[0];
-      try {
-        await gbrain.addEdge(v, { fromId, toId, relation: f.relation, confidence, status: edgeStatusFor(confidence), visibility: src.visibility },
-          prov(chunk, f.quote ?? null, confidence));
-        counts.facts++;
-        if (f.relation === "involves" && events.has(fromId) && nodeType.get(toId) === "person") events.get(fromId)!.personIds.add(toId);
-      } catch (e) {
-        counts.dropped++;
-        lastError = errText(e);
-      }
     }
   }
-
   let summary: string;
-  if (counts.failedGroups === counts.groups) summary = `failed: ${lastError || "the model gave no usable answer"}`;
-  else if (counts.failedGroups > 0) summary = `partial: ${counts.failedGroups} of ${counts.groups} parts could not be read (${lastError})`;
+  if (failed === groups.length) summary = `failed: ${lastError || "the model gave no usable answer"}`;
+  else if (failed > 0) summary = `partial: ${failed} of ${groups.length} parts could not be read (${lastError})`;
   else summary = "done";
-  if (totalGroups > groups.length) summary += ` (only the first ${groups.length} of ${totalGroups} parts were read for facts)`;
-  return { summary, counts, model, events: [...events.values()], known };
+  if (all.length > groups.length) summary += ` (only the first ${groups.length} of ${all.length} parts were read for facts)`;
+  return { groups: out, summary, model };
 }
 
-/* ── Step 5: reminders ───────────────────────────────────────────────────────────────────────────────── */
+/** Everything the viewer can see that a document might name again (so it isn't proposed twice). */
+async function knownNodes(v: Viewer): Promise<KnownNode[]> {
+  const types = ["person", "place", "event", "topic", "organization"] as const;
+  const lists = await Promise.all(types.map((type) => gbrain.listNodes(v, { type, limit: 500 }).catch(() => [] as gbrain.GNode[])));
+  return lists.flat().map((n) => ({
+    id: n.id, type: n.type, label: n.label, aliases: n.aliases, startAt: n.startAt?.toISOString() ?? null,
+    email: typeof n.props?.email === "string" ? n.props.email : null,
+  }));
+}
+
+/** Emails that already belong to someone: members of this graph (their login) and people with props.email/emails. */
+async function knownEmails(v: Viewer, known: KnownNode[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (const k of known) if (k.email) out.add(k.email.toLowerCase());
+  const rows = await db.select({ email: users.email }).from(users)
+    .where(sql`exists (select 1 from graph_members gm where gm.user_id = ${users.id} and gm.graph_id = ${v.graphId})`);
+  for (const r of rows) if (r.email) out.add(r.email.toLowerCase());
+  return out;
+}
+
+/** Emails proposed as new people in change sets still waiting for a decision. */
+async function pendingEmails(v: Viewer): Promise<Set<string>> {
+  const out = new Set<string>(recentlyProposed(v.graphId));
+  try {
+    for (const cs of await listChangeSets(v, { status: "draft", origin: "ingest", limit: 200 })) {
+      for (const c of cs.changes) {
+        const email = (c.payload?.props as Record<string, unknown> | undefined)?.email;
+        if (c.op === "addNode" && typeof email === "string") out.add(email.toLowerCase());
+      }
+    }
+  } catch { /* versioning unavailable */ }
+  return out;
+}
+
+// Two workers read a mailbox at once; remember what was just proposed so a correspondent isn't proposed twice.
+const gp = globalThis as unknown as { __ingestProposedEmails?: Map<string, Set<string>> };
+const proposedEmails = (gp.__ingestProposedEmails ??= new Map());
+const recentlyProposed = (graphId: string) => proposedEmails.get(graphId) ?? new Set<string>();
+const rememberProposed = (graphId: string, emails: string[]) => {
+  const set = proposedEmails.get(graphId) ?? new Set<string>();
+  for (const e of emails) set.add(e);
+  proposedEmails.set(graphId, set);
+};
+
+/** People who get reminders for upcoming events: children (in the family graph's rules), by person node. */
+async function reminderPeople(v: Viewer, known: KnownNode[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (v.graphKind !== "family") return out;
+  const childUsers = await db.select({ personNodeId: users.personNodeId, name: users.name })
+    .from(users).where(and(eq(users.householdId, v.graphHouseholdId), eq(users.role, "child")));
+  for (const u of childUsers) if (u.personNodeId) out.set(u.personNodeId, u.name);
+  const now = new Date();
+  const people = await gbrain.listNodes(v, { type: "person", limit: 500 }).catch(() => [] as gbrain.GNode[]);
+  for (const p of people) if (isChildNode(p.props, now) && known.some((k) => k.id === p.id)) out.set(p.id, out.get(p.id) ?? p.label);
+  return out;
+}
 
 function isChildNode(props: Record<string, unknown>, now: Date): boolean {
   if (props.role === "child" || props.isChild === true || props.child === true) return true;
@@ -368,37 +491,149 @@ function isChildNode(props: Record<string, unknown>, now: Date): boolean {
   return Number.isFinite(by) && by > 1900 && now.getUTCFullYear() - by < 18;
 }
 
-async function createReminders(v: Viewer, sourceId: string, sourceTitle: string, events: FoundEvent[]): Promise<number> {
-  const now = new Date();
-  const upcoming = events.filter((e) => e.startAt.getTime() > now.getTime() && e.personIds.size > 0);
-  if (upcoming.length === 0) return 0;
+async function existingEdges(v: Viewer): Promise<Set<string>> {
+  const rows = await db.select({ fromId: edges.fromId, relation: edges.relation, toId: edges.toId }).from(edges)
+    .where(and(eq(edges.graphId, v.graphId), sql`${edges.status} not in ('rejected', 'superseded')`)).limit(50_000);
+  return new Set(rows.map((r) => edgeKey(r.fromId, r.relation, r.toId)));
+}
 
-  const personIds = [...new Set(upcoming.flatMap((e) => [...e.personIds]))];
-  const childUsers = await db.select({ personNodeId: users.personNodeId, name: users.name })
-    .from(users).where(and(eq(users.householdId, v.graphHouseholdId), eq(users.role, "child")));
-  const children = new Map<string, string>();
-  for (const u of childUsers) if (u.personNodeId) children.set(u.personNodeId, u.name);
-  const known = await knownPeople(v);
-  for (const p of known) if (personIds.includes(p.id) && isChildNode(p.props, now)) children.set(p.id, children.get(p.id) ?? p.label);
+type ProposalMeta = { changeSetId?: string; proposedAt?: string; proposed: Record<string, number>; proposedTotal: number; proposals?: string };
 
-  let created = 0;
-  for (const ev of upcoming) {
-    for (const pid of ev.personIds) {
-      const childName = children.get(pid);
-      if (!childName) continue;
-      const dueAt = reminderDueAt(ev.startAt, now);
-      if (!dueAt) continue;
-      const existing = await db.select({ id: reminders.id }).from(reminders)
-        .where(and(eq(reminders.graphId, v.graphId), eq(reminders.ownerId, v.id), eq(reminders.nodeId, ev.nodeId), eq(reminders.aboutNodeId, pid))).limit(1);
-      if (existing.length) continue;
-      await db.insert(reminders).values({
-        householdId: v.graphHouseholdId, graphId: v.graphId, ownerId: v.id, aboutNodeId: pid, nodeId: ev.nodeId, sourceId,
-        title: `${childName}: ${ev.label}`,
-        detail: `Coming up on ${ev.startAt.toISOString().slice(0, 10)}. Found in “${sourceTitle}”.`,
-        dueAt, createdByKind: "assistant",
-      });
-      created++;
-    }
+/**
+ * Propose what a source adds (agents propose, humans decide): new people/places/dates, connections, reminders, and
+ * correspondents nobody knows yet, as one change set with a receipt per op. Returns what to record on the source.
+ */
+export async function proposeFromSource(
+  v: Viewer, src: { id: string; title: string; visibility: "private" | "parents" | "household"; docNodeId: string | null; header: string },
+  groups: { ex: Extraction; chunks: StoredChunk[] }[], participants: Participant[],
+): Promise<ProposalMeta> {
+  const known = await knownNodes(v);
+  const mint = () => randomUUID();
+  const people = participants.length
+    ? correspondentOps({ participants, known, knownEmails: await knownEmails(v, known), pendingEmails: await pendingEmails(v), sourceId: src.id, header: src.header, mint })
+    : [];
+  // Correspondents proposed here count as known to the extraction, so the same person isn't proposed twice.
+  const withPeople: KnownNode[] = [...known, ...people.flatMap((c) => (c.op === "addNode" ? [{ id: c.nodeId!, type: "person", label: c.label, aliases: [] }] : []))];
+  const plan = groups.length
+    ? buildProposalOps({
+      groups, known: withPeople, sourceId: src.id, docNodeId: src.docNodeId, existingEdges: await existingEdges(v),
+      visibility: src.visibility, remindFor: await reminderPeople(v, known), mint, sourceTitle: src.title,
+    })
+    : { changes: [], counts: { people: 0, events: 0, other: 0, connections: 0, reminders: 0, dropped: 0 } };
+  await assignKinds(v, plan.changes);
+  const changes = [...people, ...plan.changes];
+  const counts = { ...plan.counts, people: plan.counts.people + people.length };
+  const now = new Date().toISOString();
+  if (changes.length === 0) return { proposedAt: now, proposed: counts, proposedTotal: 0 };
+
+  const r = await proposeChanges(v, {
+    title: `From “${src.title.slice(0, 120)}”`,
+    description: `Read from the document: ${describeCounts(counts)}. Nothing is added until you deliver it.`,
+    origin: "ingest",
+    evidence: { sourceId: src.id },
+    changes,
+  }).catch((e) => { console.warn("[ingest] proposing failed", errText(e)); return null; });
+  if (!r) return { proposed: counts, proposedTotal: changes.length, proposals: "waiting: change sets are not available yet" };
+  rememberProposed(v.graphId, people.flatMap((c) => (c.op === "addNode" && typeof c.props?.email === "string" ? [c.props.email] : [])));
+  return { changeSetId: r.id, proposedAt: now, proposed: counts, proposedTotal: changes.length };
+}
+
+/** Give proposed nodes a kind from the meta model (teacher, school, …), as the old direct writes did. */
+async function assignKinds(v: Viewer, changes: ChangeInput[]): Promise<void> {
+  let meta_: MetaHelpers | null = null;
+  try { meta_ = await getMeta(v); } catch { return; }
+  for (const c of changes) {
+    if (c.op !== "addNode" || c.kind) continue;
+    try {
+      const relations = changes.filter((x) => x.op === "addEdge" && (x.fromId === c.nodeId || x.toId === c.nodeId)).map((x) => (x as { relation: string }).relation);
+      const s = meta_.suggestKind(c.label, { type: c.type as MetaNodeType, text: c.type === "person" ? c.summary ?? "" : "", relations });
+      if (s && s.type === c.type) c.kind = s.kind;
+    } catch { /* no kind */ }
   }
-  return created;
+}
+
+/* ── Rebuild: re-read a source for what is still missing ─────────────────────────────────────────────── */
+
+export type RefreshResult = { date: boolean; thread: boolean; proposed: number; changeSetId?: string; skipped: boolean; error?: string };
+
+/**
+ * Re-read one source for its document date, thread and what it would add, without re-embedding or changing what is
+ * already known. Uses the stored text and chunks; only reaches for the original file when a date has to come from it.
+ */
+export async function refreshSource(viewer: Viewer, sourceId: string, muxUp: boolean): Promise<RefreshResult> {
+  const [src] = await db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
+  const none: RefreshResult = { date: false, thread: false, proposed: 0, skipped: true };
+  if (!src) return none;
+  const v = await viewerInGraph(viewer, src.graphId);
+  if (!v || v.graphId !== viewer.graphId) return none;
+  const meta: Meta = { ...(src.meta ?? {}) };
+  const needs = rebuildNeeds({ mime: src.mime, kind: src.kind, status: src.status, documentDate: src.documentDate, threadKey: src.threadKey, hasText: !!src.textContent?.trim(), meta }, muxUp);
+  if (!needsAnything(needs)) return none;
+  const out: RefreshResult = { date: false, thread: false, proposed: 0, skipped: false };
+  const set: Partial<typeof sources.$inferInsert> = {};
+  try {
+    const kind = kindFromMime(src.mime);
+    if ((needs.date || needs.thread) && (kind === "email" || kind === "image" || kind === "pdf") && src.storageKey) {
+      const bytes = await readStored(src.storageKey);
+      const dates: DateCandidate[] = [];
+      if (kind === "email") {
+        const e = parseEmail(decodeText(bytes));
+        if (e.date) dates.push({ at: e.date, precision: "minute", origin: "email" });
+        if (needs.thread) { set.threadKey = threadKeyFor(e); out.thread = !!set.threadKey; }
+        if (!src.externalId && e.messageId) set.externalId = e.messageId;
+        const em = (meta.email ?? {}) as Record<string, unknown>;
+        meta.email = { ...em, cc: e.cc ?? null, messageId: e.messageId ?? null, inReplyTo: e.inReplyTo ?? null, references: e.references.slice(0, 50), participants: participantsOf(e).slice(0, 60) };
+      } else if (kind === "image") {
+        const exif = (meta.exif ?? null) as { takenAt?: string | null } | null;
+        if (exif?.takenAt) dates.push({ at: new Date(exif.takenAt), precision: "minute", origin: "exif" });
+      } else {
+        try {
+          const { getDocumentProxy, getMeta: pdfMeta } = await import("unpdf");
+          const { info } = await pdfMeta(await getDocumentProxy(new Uint8Array(bytes)));
+          const created = parsePdfDate(info?.CreationDate) ?? parsePdfDate(info?.ModDate);
+          if (created) dates.push({ at: created, precision: "minute", origin: "pdf" });
+        } catch { /* no metadata */ }
+      }
+      const text = src.textContent ?? "";
+      const ocrAt = text.indexOf("Text in the image:");
+      const fromText = kind === "image" ? (ocrAt >= 0 ? letterDate(text.slice(ocrAt)) : null) : text ? letterDate(text) : null;
+      if (fromText && kind !== "email") dates.push(fromText);
+      const fb = parentDate(meta);
+      if (fb) dates.push(fb);
+      const d = needs.date ? pickDocumentDate(dates) : null;
+      if (d) { set.documentDate = d.at; set.documentDatePrecision = d.precision; meta.documentDateFrom = { origin: d.origin, quote: d.quote ?? null }; out.date = true; }
+    } else if (needs.date && src.textContent) {
+      const d = pickDocumentDate([letterDate(src.textContent), parentDate(meta)]);
+      if (d) { set.documentDate = d.at; set.documentDatePrecision = d.precision; meta.documentDateFrom = { origin: d.origin, quote: d.quote ?? null }; out.date = true; }
+    }
+    if (needs.date) meta.documentDateChecked = true;
+    if (needs.kind) meta.docKind = docKindOf({ mime: src.mime, kind: src.kind, meta, ocrChars: ocrCharsOf(src.textContent) });
+
+    if (needs.proposals) {
+      const stored = await db.select({ id: chunks.id, idx: chunks.idx, text: chunks.text, locator: chunks.locator }).from(chunks)
+        .where(eq(chunks.sourceId, src.id)).orderBy(chunks.idx);
+      if (stored.length) {
+        const muxMeta: mux.MuxCallMeta = { userId: v.id, agent: AGENT, traceId: src.id, sensitive: src.sensitive, graphId: v.graphId };
+        const r = await readFacts(v, src.title, stored.map((c) => ({ ...c, locator: c.locator ?? {} })), muxMeta);
+        meta.extraction = r.summary;
+        const stated = r.groups.map((g) => checkStatedDate(g.ex.documentDate, g.chunks.map((c) => c.text).join("\n"))).find(Boolean);
+        const currentOrigin = (meta.documentDateFrom as { origin?: DateOrigin } | undefined)?.origin;
+        const beats = !currentOrigin || (ORIGIN_RANK[currentOrigin] ?? 99) > ORIGIN_RANK.model;
+        if (stated && beats && (!src.documentDate || currentOrigin)) {
+          set.documentDate = stated.at; set.documentDatePrecision = stated.precision;
+          meta.documentDateFrom = { origin: "model", quote: stated.quote ?? null }; out.date = true;
+        }
+        const p = await proposeFromSource(v, { id: src.id, title: src.title, visibility: src.visibility, docNodeId: src.nodeId, header: emailHeader(meta) },
+          r.groups, meta.correspondentsDone ? [] : emailParticipants(meta));
+        Object.assign(meta, p);
+        if (emailParticipants(meta).length) meta.correspondentsDone = true;
+        out.proposed = p.proposedTotal;
+        out.changeSetId = p.changeSetId;
+      }
+    }
+    await db.update(sources).set({ ...set, meta }).where(eq(sources.id, src.id));
+    return out;
+  } catch (e) {
+    return { ...out, error: errText(e) };
+  }
 }

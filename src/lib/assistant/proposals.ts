@@ -60,7 +60,8 @@ export const memoryProposal = z.object({
 export const proposalSchema = z.discriminatedUnion("type", [reminderProposal, factProposal, wikiProposal, memoryProposal]);
 export type Proposal = z.infer<typeof proposalSchema>;
 
-export type ProposalStatus = "pending" | "approved" | "dismissed" | "undone";
+/** queued = a memory handed to the Brain Keeper for its next run (it curates memory; the person can still decide now). */
+export type ProposalStatus = "pending" | "queued" | "approved" | "dismissed" | "undone";
 
 /** What approving created, and how to take it back. */
 export type ProposalResult = { href?: string; label: string; undo?: { type: "reminder" | "edge" | "wiki" | "memory"; id: string } | null };
@@ -68,13 +69,20 @@ export type ProposalResult = { href?: string; label: string; undo?: { type: "rem
 /** A proposal as shown in the UI: its number within the message, status, and what approving it created. */
 export type ProposalView = Proposal & {
   n: number; status: ProposalStatus; result?: ProposalResult | null; error?: string | null;
-  /** Applied without asking: "always" = the person chose Always allow, "setting" = auto-save memories is on. */
-  auto?: "always" | "setting" | null;
+  /**
+   * Applied without asking: "always" = the person chose Always allow, "setting" = auto-save memories is on (older chats),
+   * "asked" = the person explicitly asked to remember it, "keeper" = the Brain Keeper decided on its run.
+   */
+  auto?: ProposalAuto | null;
+  /** The Brain Keeper's reason when it kept or declined a memory that was handed to it. */
+  keeperNote?: string | null;
   /** Shown on the card when approving would make conversation content visible to more people. */
   widens?: string | null;
   /** The current value this would change (shown as a diff), e.g. "Emma attends Lindevang School". */
   current?: string[] | null;
 };
+
+export type ProposalAuto = "always" | "setting" | "asked" | "keeper";
 
 export const MAX_PROPOSALS = 4;
 const OPEN = "<proposals>";

@@ -1,33 +1,37 @@
 import type { CSSProperties, ReactNode } from "react";
 import { Mark } from "@/components/shell";
 import { personStyle } from "@/lib/ui/person-color";
+import { getT } from "@/lib/i18n";
+import { LanguageSwitch } from "./language-switch";
 
 /**
  * The signed-out pages (sign in, first-run setup, waiting for approval).
  * Wide screens: the product's face on the ground at left, the task on a surface at right.
  * Phones: the mark, then the task.
  */
-export function AuthFrame({ title, lead, children, footer, welcome }: {
+export async function AuthFrame({ title, lead, children, footer, welcome }: {
   title: string; lead?: ReactNode; children: ReactNode; footer?: ReactNode;
   welcome?: { title: string; body: ReactNode };
 }) {
-  const w = welcome ?? {
-    title: "The people you love, and everything you know about them.",
-    body: "Letters from school, appointments, photos and plans, kept in one place, each fact with a note of where it came from. Only your household can see it.",
-  };
+  const t = await getT();
+  const w = welcome ?? { title: t("auth.frame.welcomeTitle"), body: t("auth.frame.welcomeBody") };
   return (
     <main className="min-h-dvh lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(480px,44%)]">
       <aside className="flex flex-col px-5 pt-6 sm:px-8 lg:min-h-dvh lg:px-14 lg:py-12">
         <div className="flex items-center gap-2.5">
           <Mark size={30} />
-          <span className="text-[17px] font-semibold tracking-[-0.01em]">My Graph</span>
+          <span className="flex-1 text-[17px] font-semibold tracking-[-0.01em]">{t("auth.frame.product")}</span>
+          <LanguageSwitch className="lg:hidden" />
         </div>
         <div className="my-auto hidden max-w-[30rem] py-12 lg:block">
           <FamilyMotif />
           <p className="mt-10 text-[28px]/[1.2] font-semibold tracking-[-0.02em] text-balance">{w.title}</p>
           <p className="mt-4 max-w-[44ch] text-muted">{w.body}</p>
         </div>
-        <p className="hidden text-sm text-muted lg:block">Runs on your own server. Nothing leaves your household.</p>
+        <div className="hidden items-center justify-between gap-4 lg:flex">
+          <p className="text-sm text-muted">{t("auth.frame.selfHosted")}</p>
+          <LanguageSwitch />
+        </div>
       </aside>
       <section className="flex px-5 pb-12 pt-10 sm:px-8 lg:items-center lg:bg-surface lg:px-16 lg:py-12">
         <div className="w-full max-w-[380px] sm:mx-auto lg:mx-0">

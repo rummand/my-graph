@@ -7,7 +7,8 @@ import { Badge, Button } from "@/components/ui";
 import { api, errorMessage } from "@/lib/auth/client/api";
 import type { SessionView } from "@/lib/auth/settings-data";
 import { ErrorNote, Notice } from "@/app/login/notes";
-import { fmtAgo, fmtWhen } from "./format";
+import { useT } from "@/lib/i18n/client";
+import { useWhen } from "./use-when";
 import { PanelFooter } from "./section";
 
 function DeviceIcon({ device }: { device: string }) {
@@ -19,6 +20,8 @@ function DeviceIcon({ device }: { device: string }) {
 /** Signed-in devices. `inset` drops the panel padding when the list sits inside another panel. */
 export function SessionList({ sessions, allowSignOutOthers = true, inset }: { sessions: SessionView[]; allowSignOutOthers?: boolean; inset?: boolean }) {
   const router = useRouter();
+  const t = useT();
+  const w = useWhen();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -34,7 +37,7 @@ export function SessionList({ sessions, allowSignOutOthers = true, inset }: { se
     try {
       const r = await fn();
       if (r.signedOutHere) { router.replace("/login?reason=signed_out"); return; }
-      setNotice(typeof r.signedOut === "number" ? `Signed out ${r.signedOut} device${r.signedOut === 1 ? "" : "s"}.` : "Signed out.");
+      setNotice(typeof r.signedOut === "number" ? t("settings.sessions.signedOutN", { count: r.signedOut }) : t("settings.sessions.signedOut"));
       router.refresh();
     } catch (e) {
       setError(errorMessage(e));
@@ -43,7 +46,7 @@ export function SessionList({ sessions, allowSignOutOthers = true, inset }: { se
     }
   }
 
-  if (!sessions.length) return <p className={`${inset ? "" : "p-5"} text-sm text-muted`}>Not signed in anywhere right now.</p>;
+  if (!sessions.length) return <p className={`${inset ? "" : "p-5"} text-sm text-muted`}>{t("settings.sessions.none")}</p>;
 
   return (
     <div>
@@ -55,17 +58,17 @@ export function SessionList({ sessions, allowSignOutOthers = true, inset }: { se
               <div className="min-w-0 flex-1">
                 <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="font-medium">{s.device}</span>
-                  {s.current && <Badge tone="accent">This device</Badge>}
-                  {!s.approved && <Badge tone="warn">Waiting for approval</Badge>}
+                  {s.current && <Badge tone="accent">{t("settings.sessions.thisDevice")}</Badge>}
+                  {!s.approved && <Badge tone="warn">{t("settings.sessions.waiting")}</Badge>}
                 </p>
                 <p className="text-sm text-muted">
-                  {s.current ? `Signed in ${fmtWhen(s.createdAt)}` : `Last used ${fmtAgo(s.lastSeenAt)}, signed in ${fmtWhen(s.createdAt)}`}
+                  {s.current ? t("settings.sessions.signedInWhen", { when: w.when(s.createdAt) }) : t("settings.sessions.lastUsed", { ago: w.ago(s.lastSeenAt), when: w.when(s.createdAt) })}
                 </p>
               </div>
               {!s.current && (
                 <Button variant="ghost" size="sm" disabled={busy !== null} onClick={() => run(s.id, () => api(`/api/auth/sessions/${s.id}`, { method: "DELETE" }))}
-                  aria-label={`Sign out ${s.device}`}>
-                  {busy === s.id ? "Signing out…" : "Sign out"}
+                  aria-label={t("settings.sessions.signOutDevice", { device: s.device })}>
+                  {busy === s.id ? t("settings.sessions.signingOut") : t("settings.sessions.signOut")}
                 </Button>
               )}
             </motion.li>
@@ -75,7 +78,7 @@ export function SessionList({ sessions, allowSignOutOthers = true, inset }: { se
       {sorted.length > LIMIT && (
         <div className={inset ? "pt-1" : "px-5"}>
           <button type="button" onClick={() => setShowAll(!showAll)} className="flex h-10 w-full items-center text-sm font-medium text-accent hover:underline underline-offset-2">
-            {showAll ? "Show fewer" : `Show all ${sorted.length} devices`}
+            {showAll ? t("settings.sessions.showFewer") : t("settings.sessions.showAll", { count: sorted.length })}
           </button>
         </div>
       )}
@@ -85,7 +88,7 @@ export function SessionList({ sessions, allowSignOutOthers = true, inset }: { se
           <PanelFooter className="mt-3" status={<Notice message={notice} />}>
             {allowSignOutOthers && others > 0 && (
               <Button variant="secondary" disabled={busy !== null} onClick={() => run("others", () => api("/api/auth/sessions", { method: "DELETE" }))}>
-                {busy === "others" ? "Signing out…" : `Sign out the other ${plural(others)}`}
+                {busy === "others" ? t("settings.sessions.signingOut") : t("settings.sessions.signOutOthers", { count: others })}
               </Button>
             )}
           </PanelFooter>
@@ -95,4 +98,3 @@ export function SessionList({ sessions, allowSignOutOthers = true, inset }: { se
   );
 }
 
-const plural = (n: number) => (n === 1 ? "device" : `${n} devices`);

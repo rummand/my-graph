@@ -1,8 +1,10 @@
 "use client";
 import { clsx } from "clsx";
-import { format, isToday, isTomorrow, isYesterday, differenceInMinutes } from "date-fns";
-import type { ReactNode } from "react";
-import { DAY_SHORT } from "@/lib/automations/schedule";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
+import type { CopyVariant } from "@/components/memory/variant";
+import type { ParsedTrigger } from "@/lib/automations/schedule";
+import { useFormatDate, useLocale, useT, useTimeZone } from "@/lib/i18n/client";
+import { agoText, triggerText, whenText, type Copy } from "./describe";
 
 /** fetch JSON from our API; throws an Error with the server's plain message. */
 export async function api<T>(url: string, init?: RequestInit & { json?: unknown }): Promise<T> {
@@ -17,29 +19,33 @@ export async function api<T>(url: string, init?: RequestInit & { json?: unknown 
   return body as T;
 }
 
-/** "Today 18:00", "Tomorrow 07:00", "Yesterday 21:15", "Sun 8 Nov, 18:00". */
-export function when(iso: string | Date | null | undefined): string {
-  if (!iso) return "";
-  const d = typeof iso === "string" ? new Date(iso) : iso;
-  const t = format(d, "HH:mm");
-  if (isToday(d)) return `Today ${t}`;
-  if (isTomorrow(d)) return `Tomorrow ${t}`;
-  if (isYesterday(d)) return `Yesterday ${t}`;
-  return format(d, "EEE d MMM, HH:mm");
-}
+/**
+ * The reader's wording for times and states: `when` ("Today 18:00"), `whenInline` ("today 18:00"), `ago`, `status`,
+ * `trigger` (a schedule in words), plus `t` and the graph's copy variant (family wording only in a family graph).
+ */
+/** "family" only inside a family graph; set once by the Automations page. */
+export const VariantContext = createContext<CopyVariant>("other");
 
-/** when() for the middle of a sentence: "today 18:00", "Sun 8 Nov, 18:00". */
-export function whenInline(iso: string | Date | null | undefined): string {
-  return when(iso).replace(/^(Today|Tomorrow|Yesterday)/, (m) => m.toLowerCase());
-}
-
-/** "just now", "12 min ago", or `when()` for anything older than an hour. */
-export function ago(iso: string | Date): string {
-  const d = typeof iso === "string" ? new Date(iso) : iso;
-  const m = differenceInMinutes(new Date(), d);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m} min ago`;
-  return when(d);
+export function useCopy() {
+  const t = useT();
+  const vr = useContext(VariantContext);
+  const fmt = useFormatDate();
+  const timeZone = useTimeZone();
+  const locale = useLocale();
+  return useMemo(() => {
+    const c: Copy = { t, fmt, timeZone, locale };
+    return {
+      t,
+      vr,
+      /** t() of a key that has `.family` / `.other` variants. */
+      tv: (key: string, vars?: Record<string, string | number>) => t(`${key}.${vr}`, vars),
+      when: (iso: string | Date | null | undefined) => whenText(c, iso),
+      whenInline: (iso: string | Date | null | undefined) => whenText(c, iso, true),
+      ago: (iso: string | Date) => agoText(c, iso),
+      status: (s: string) => t(`automations.status.${s === "failed" || s === "running" || s === "skipped" ? s : "done"}`),
+      trigger: (p: ParsedTrigger) => triggerText(c, p),
+    };
+  }, [t, vr, fmt, timeZone, locale]);
 }
 
 export function Toggle({ checked, onChange, label, disabled, className }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean; className?: string }) {
@@ -56,8 +62,9 @@ export function Toggle({ checked, onChange, label, disabled, className }: { chec
 /** Monday-first day chips (Danish week). */
 const ORDER = [1, 2, 3, 4, 5, 6, 0];
 export function DaysPicker({ value, onChange, disabled }: { value: number[]; onChange: (d: number[]) => void; disabled?: boolean }) {
+  const t = useT();
   return (
-    <div className="flex flex-wrap gap-1" role="group" aria-label="Days">
+    <div className="flex flex-wrap gap-1" role="group" aria-label={t("automations.days.label")}>
       {ORDER.map((d) => {
         const on = value.includes(d);
         return (
@@ -65,7 +72,7 @@ export function DaysPicker({ value, onChange, disabled }: { value: number[]; onC
             onClick={() => onChange(on ? value.filter((x) => x !== d) : [...value, d].sort())}
             className={clsx("h-8 min-w-11 rounded-md px-2 text-sm transition-colors disabled:opacity-45",
               on ? "bg-fg font-medium text-bg" : "bg-surface-2 text-muted hover:text-fg")}>
-            {DAY_SHORT[d]}
+            {t(`automations.days.short.d${d}`)}
           </button>
         );
       })}
@@ -76,10 +83,6 @@ export function DaysPicker({ value, onChange, disabled }: { value: number[]; onC
 export function StatusDot({ status }: { status: string }) {
   const cls = status === "failed" ? "bg-danger" : status === "running" ? "bg-accent" : status === "skipped" ? "bg-muted/50" : "bg-fg/70";
   return <span aria-hidden className={clsx("inline-block size-1.5 shrink-0 rounded-full", cls)} />;
-}
-
-export function statusLabel(s: string): string {
-  return s === "failed" ? "Failed" : s === "running" ? "Running" : s === "skipped" ? "Nothing to do" : "Done";
 }
 
 export function Hint({ children }: { children: ReactNode }) {

@@ -1,3 +1,4 @@
+"use client";
 /**
  * Renders a stored TipTap document as plain React (no editor, no client JS). Used by the read view on server and
  * client. Only known node types and safe links are rendered; anything else is skipped.
@@ -6,6 +7,8 @@ import { Fragment, type ReactNode } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { NodeChip, PersonChip } from "@/components/ui";
+import { useT } from "@/lib/i18n/client";
+import type { TFn } from "@/lib/i18n/core";
 import { safeHref, type DocMark, type DocNode } from "@/lib/wiki/doc";
 import { PAGE_LINK_CLASS, PROSE } from "./prose";
 
@@ -33,8 +36,8 @@ function withMarks(text: ReactNode, marks: DocMark[] | undefined, key: string): 
   return <Fragment key={key}>{out}</Fragment>;
 }
 
-function render(n: DocNode, key: string, info?: MentionInfo): ReactNode {
-  const kids = () => (n.content ?? []).map((c, i) => render(c, `${key}.${i}`, info));
+function render(n: DocNode, key: string, t: TFn, info?: MentionInfo): ReactNode {
+  const kids = () => (n.content ?? []).map((c, i) => render(c, `${key}.${i}`, t, info));
   switch (n.type) {
     case "text": return withMarks(n.text ?? "", n.marks, key);
     case "hardBreak": return <br key={key} />;
@@ -53,7 +56,7 @@ function render(n: DocNode, key: string, info?: MentionInfo): ReactNode {
       const checked = n.attrs?.checked === true;
       return (
         <li key={key} data-type="taskItem" data-checked={checked}>
-          <label className="pointer-events-none"><input type="checkbox" checked={checked} readOnly tabIndex={-1} aria-readonly aria-label={checked ? "Done" : "Not done"} /></label>
+          <label className="pointer-events-none"><input type="checkbox" checked={checked} readOnly tabIndex={-1} aria-readonly aria-label={checked ? t("wiki.doc.done") : t("wiki.doc.notDone")} /></label>
           <div>{kids()}</div>
         </li>
       );
@@ -63,7 +66,7 @@ function render(n: DocNode, key: string, info?: MentionInfo): ReactNode {
     case "horizontalRule": return <hr key={key} />;
     case "mention": {
       const id = String(n.attrs?.id ?? "");
-      const label = String(n.attrs?.label ?? "someone");
+      const label = String(n.attrs?.label ?? t("wiki.doc.someone"));
       const known = info?.get(id);
       const type = known?.type ?? (typeof n.attrs?.nodeType === "string" ? n.attrs.nodeType : "topic");
       const readable = known ? known.readable : true;
@@ -78,7 +81,7 @@ function render(n: DocNode, key: string, info?: MentionInfo): ReactNode {
     }
     case "pageLink": {
       const slug = typeof n.attrs?.slug === "string" ? n.attrs.slug : null;
-      const label = String(n.attrs?.label ?? "page");
+      const label = String(n.attrs?.label ?? t("wiki.doc.page"));
       const href = slug ? `/wiki/${encodeURIComponent(slug)}` : `/wiki?q=${encodeURIComponent(label)}`;
       return <Link key={key} href={href} data-type="pageLink" className={PAGE_LINK_CLASS}>{label}</Link>;
     }
@@ -88,7 +91,8 @@ function render(n: DocNode, key: string, info?: MentionInfo): ReactNode {
 }
 
 export function DocView({ doc, mentions, className }: { doc: DocNode; mentions?: MentionInfo; className?: string }) {
-  return <div className={clsx(PROSE, className)}>{(doc.content ?? []).map((c, i) => render(c, String(i), mentions))}</div>;
+  const t = useT();
+  return <div className={clsx(PROSE, className)}>{(doc.content ?? []).map((c, i) => render(c, String(i), t, mentions))}</div>;
 }
 
 /** True when a document has no visible content. */

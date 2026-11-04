@@ -4,13 +4,14 @@
  * reminders, GBrain's source rule for uploads).
  */
 import "server-only";
-import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, notInArray, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { provenance, sources, users } from "@/db/schema";
+import { edges, nodes, provenance, sources, users } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import { accessContext, getNode, listNodes, readableNodeIds, timeline, type GNode } from "@/lib/gbrain";
 import { sourceReadSql } from "@/lib/gbrain/access";
 import { listReminders } from "@/lib/briefs";
+import { buildThreadItems, documentItem, isMail, personMatcher, type DatedSource } from "./documents";
 import { deriveStatus, familyLane, laneIdsFor, orderLanes, type LaneCandidate, type ProvLite } from "./pure";
 import type { TimelineQuery } from "./schemas";
 import { FAMILY_LANE, type ItemKind, type Lane, type TimelineData, type TimelineItem, type TopicOption } from "./types";
@@ -18,10 +19,11 @@ import { FAMILY_LANE, type ItemKind, type Lane, type TimelineData, type Timeline
 export type { TimelineData, TimelineItem, Lane, TopicOption } from "./types";
 
 const DEFAULT_LIMIT = 2000;
-const DEFAULT_TYPES: ItemKind[] = ["event", "reminder"];
+const DEFAULT_TYPES: ItemKind[] = ["event", "reminder", "document"];
 
-/** Node types that never become timeline events even if they carry a date. */
-const NOT_EVENTS = new Set<GNode["type"]>(["person", "source"]);
+/** Node types that never become timeline events even if they carry a date. Documents get their own marks (at their
+ * document date, from the library) under "Documents and mail", so their nodes are not drawn twice as events. */
+const NOT_EVENTS = new Set<GNode["type"]>(["person", "source", "document"]);
 
 export async function loadTimeline(v: Viewer, q: TimelineQuery = {}): Promise<TimelineData> {
   const now = new Date();
@@ -32,16 +34,17 @@ export async function loadTimeline(v: Viewer, q: TimelineQuery = {}): Promise<Ti
   const topicFilter = q.topics?.length ? q.topics : undefined;
   const limit = q.limit ?? DEFAULT_LIMIT;
 
-  const [tl, members, reminderRows, sourceRows, topicNodes] = await Promise.all([
+  const [tl, members, reminderRows, sourceRows, topicNodes, docs] = await Promise.all([
     types.has("event")
       ? timeline(v, { from, to, personIds: q.people, topicIds: topicFilter, limit })
       : Promise.resolve({ events: [] as GNode[], involves: [] as { eventId: string; personId: string }[] }),
-    db.select({ id: users.id, role: users.role, birthYear: users.birthYear, personNodeId: users.personNodeId, name: users.name })
+    db.select({ id: users.id, role: users.role, birthYear: users.birthYear, personNodeId: users.personNodeId, name: users.name, email: users.email })
       // Members of the current graph (the household, in the family graph).
       .from(users).where(sql`exists (select 1 from graph_members gm where gm.user_id = ${users.id} and gm.graph_id = ${v.graphId})`),
     types.has("reminder") && v.role !== "guest" ? safe(() => listReminders(v, { limit: 200 }), []) : Promise.resolve([]),
     types.has("source") && !topicFilter ? loadSources(v, from, to) : Promise.resolve([]),
     safe(() => listNodes(v, { type: "topic", limit: 200 }), [] as GNode[]),
+    types.has("document") && !topicFilter ? safe(() => loadDocuments(v, from, to), EMPTY_DOCS) : Promise.resolve(EMPTY_DOCS),
   ]);
 
   const events = tl.events.filter((e) => !NOT_EVENTS.has(e.type) && e.startAt);
@@ -60,11 +63,24 @@ export async function loadTimeline(v: Viewer, q: TimelineQuery = {}): Promise<Ti
     ...reminderRows.map((r) => r.aboutNodeId).filter((x): x is string => !!x),
     ...(personFilter ?? []),
   ]);
+  // Correspondents and the people documents name: matched by email address (people's props, members' logins) or name.
+  const docPeople = docs.sources.length ? await safe(() => listNodes(v, { type: "person", limit: 500 }), [] as GNode[]) : [];
+  const loginEmail = new Map(members.filter((m) => m.personNodeId && m.email).map((m) => [m.personNodeId!, m.email.toLowerCase()]));
+  const match = personMatcher(docPeople.map((p) => ({
+    id: p.id, label: p.label, aliases: p.aliases,
+    emails: [p.props?.email, ...(Array.isArray(p.props?.emails) ? p.props.emails : []), loginEmail.get(p.id)].filter((e): e is string => typeof e === "string"),
+  })));
+  const mail = docs.sources.filter(isMail);
+  const threadDraft = buildThreadItems(mail, { personFor: match, laneSet: new Set() });
+  for (const t of threadDraft) for (const p of t.personIds) candidateIds.add(p);
+  for (const ids of docs.mentions.values()) for (const p of ids) candidateIds.add(p);
   const readable = candidateIds.size ? await readableNodeIds(v, [...candidateIds]) : new Set<string>();
   const labels = await personLabels(v, [...readable]);
 
   const eventCount = new Map<string, number>();
   for (const { personId } of tl.involves) eventCount.set(personId, (eventCount.get(personId) ?? 0) + 1);
+  for (const t of threadDraft) for (const p of t.personIds) eventCount.set(p, (eventCount.get(p) ?? 0) + 1);
+  for (const ids of docs.mentions.values()) for (const p of ids) eventCount.set(p, (eventCount.get(p) ?? 0) + 1);
 
   const candidates: LaneCandidate[] = [...readable].filter((id) => labels.has(id)).map((id) => {
     const m = memberByPerson.get(id);
@@ -123,9 +139,22 @@ export async function loadTimeline(v: Viewer, q: TimelineQuery = {}): Promise<Ti
     });
   }
 
+  // Documents at their own date, and mail as conversations, on the lanes of the people involved.
+  for (const s of docs.sources) {
+    if (isMail(s)) continue;
+    const personIds = (docs.mentions.get(s.nodeId ?? "") ?? []).filter((p) => readable.has(p));
+    const fallback = personIds.length ? personIds : (() => { const p = ownerPerson.get(docs.owners.get(s.id) ?? ""); return p && readable.has(p) ? [p] : []; })();
+    if (personFilter && !fallback.some((x) => personFilter.has(x))) continue;
+    items.push(documentItem(s, fallback, laneSet));
+  }
+  for (const t of buildThreadItems(mail, { personFor: (a) => { const id = match(a); return id && readable.has(id) ? id : null; }, laneSet })) {
+    if (personFilter && !t.personIds.some((x) => personFilter.has(x))) continue;
+    items.push(t);
+  }
+
   items.sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id));
   const usesFamily = items.some((i) => i.laneIds.includes(FAMILY_LANE));
-  const lanes: Lane[] = [...personLanes, ...(!personFilter || usesFamily ? [familyLane()] : [])];
+  const lanes: Lane[] = [...personLanes, ...(!personFilter || usesFamily ? [familyLane(v.graphKind === "family" ? "Family" : "Everyone")] : [])];
   const topics: TopicOption[] = topicNodes.map((t) => ({ id: t.id, label: t.label }))
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" }));
 
@@ -133,6 +162,39 @@ export async function loadTimeline(v: Viewer, q: TimelineQuery = {}): Promise<Ti
     lanes, items, topics, people, truncated,
     from: from?.toISOString() ?? null, to: to?.toISOString() ?? null, generatedAt: now.toISOString(),
   };
+}
+
+type Docs = { sources: DatedSource[]; mentions: Map<string, string[]>; owners: Map<string, string> };
+const EMPTY_DOCS: Docs = { sources: [], mentions: new Map(), owners: new Map() };
+const DOC_LIMIT = 1500;
+
+/**
+ * Library items the viewer may open that carry their own date (letters, scans, photos, mail), in the window, plus
+ * the people each document names (its "mentions" edges to person nodes). Mail imports themselves are not shown.
+ */
+async function loadDocuments(v: Viewer, from?: Date, to?: Date): Promise<Docs> {
+  const ctx = await accessContext(v);
+  const rows = await db.select({
+    id: sources.id, title: sources.title, mime: sources.mime, kind: sources.kind, documentDate: sources.documentDate,
+    documentDatePrecision: sources.documentDatePrecision, threadKey: sources.threadKey, nodeId: sources.nodeId, sensitive: sources.sensitive,
+    meta: sources.meta, ownerId: sources.ownerId,
+  }).from(sources)
+    .where(and(eq(sources.graphId, v.graphId), sourceReadSql(ctx, "sources"), sql`${sources.documentDate} is not null`,
+      sql`coalesce(${sources.mime}, '') not in ('application/mbox', 'application/zip')`,
+      from ? gte(sources.documentDate, from) : undefined, to ? lte(sources.documentDate, to) : undefined))
+    .orderBy(desc(sources.documentDate)).limit(DOC_LIMIT);
+  const list: DatedSource[] = rows.map((r) => ({ ...r, documentDate: r.documentDate!, meta: r.meta ?? {} }));
+  const owners = new Map(rows.map((r) => [r.id, r.ownerId]));
+  const nodeIds = list.filter((s) => s.nodeId && !isMail(s)).map((s) => s.nodeId!);
+  const mentions = new Map<string, string[]>();
+  if (nodeIds.length) {
+    const m = await db.select({ from_id: edges.fromId, to_id: edges.toId }).from(edges)
+      .innerJoin(nodes, eq(nodes.id, edges.toId))
+      .where(and(eq(edges.graphId, v.graphId), eq(edges.relation, "mentions"), eq(nodes.type, "person"), isNull(nodes.mergedInto),
+        notInArray(edges.status, ["rejected", "superseded"]), inArray(edges.fromId, nodeIds)));
+    for (const r of m) (mentions.get(r.from_id) ?? mentions.set(r.from_id, []).get(r.from_id)!).push(r.to_id);
+  }
+  return { sources: list, mentions, owners };
 }
 
 /** Uploads the viewer may open, as 'added to library' markers. */

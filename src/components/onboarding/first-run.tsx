@@ -2,12 +2,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowRight, BellRing, Check, MessageCircle, Quote, ShieldCheck } from "lucide-react";
+import { ArrowRight, BellRing, Brain, Check, MessageCircle, Quote, ShieldCheck } from "lucide-react";
 import { Button, Select } from "@/components/ui";
 import type { defaultHeartbeat } from "@/lib/briefs/assistant-home";
+import { useT, type TFn } from "@/lib/i18n/client";
 import { Switch } from "./switch";
 
-type Settings = { autoSaveMemories: boolean; dailySuggestionCap: number };
+type Settings = { dailySuggestionCap: number };
 
 export type FirstRunProps = {
   graphName: string;
@@ -25,13 +26,13 @@ export type FirstRunProps = {
 const ask = (q: string) => `/chat?q=${encodeURIComponent(q)}`;
 const DISMISS_KEY = "mg:first-run-done:";
 
-async function send(url: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
+async function send(t: TFn, url: string, method: string, body?: unknown): Promise<Record<string, unknown>> {
   const res = await fetch(url, {
     method, headers: body === undefined ? undefined : { "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : "That didn't save. Try again.");
+  if (!res.ok) throw new Error(typeof data.error === "string" ? data.error : t("onboarding.error.save"));
   return data;
 }
 
@@ -45,11 +46,13 @@ function heartbeatFrom(data: Record<string, unknown>): { id: string; enabled: bo
 }
 
 /**
- * First visit to a graph (Scout's onboarding): what the assistant does here, the defaults stated plainly with a switch
- * for each, an option to turn on daily check-ins, three example questions from the family's own data, and a
- * "be specific" tip. "Done" records it so this never shows again in this graph.
+ * First visit to a graph (Scout's onboarding): what the assistant does here, the defaults stated plainly (memory is
+ * looked after by the Brain Keeper, facts always wait for a person), an option to turn on daily check-ins, three
+ * example questions from the graph's own data, and a "be specific" tip. "Done" records it so this never shows again in
+ * this graph. Family wording only in a family graph.
  */
 export function FirstRun(p: FirstRunProps & { graphId: string }) {
+  const t = useT();
   const [hidden, setHidden] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [settings, setSettings] = useState<Settings>(p.settings);
@@ -74,8 +77,8 @@ export function FirstRun(p: FirstRunProps & { graphId: string }) {
     const before = settings;
     setSettings({ ...settings, ...patch });
     setSaving(key); setError(null);
-    try { await send("/api/assistant-settings", "PATCH", patch); }
-    catch (e) { setSettings(before); setError(e instanceof Error ? e.message : "That didn't save. Try again."); }
+    try { await send(t, "/api/assistant-settings", "PATCH", patch); }
+    catch (e) { setSettings(before); setError(e instanceof Error ? e.message : t("onboarding.error.save")); }
     finally { setSaving(null); }
   }
 
@@ -83,16 +86,16 @@ export function FirstRun(p: FirstRunProps & { graphId: string }) {
     setSaving("checkin"); setError(null);
     try {
       // One check-in per person per graph; this address creates it the first time it is switched on.
-      const made = await send("/api/automations/heartbeat", "PATCH", checkIn ? { enabled: on } : { enabled: on, config: p.heartbeat.config });
+      const made = await send(t, "/api/automations/heartbeat", "PATCH", checkIn ? { enabled: on } : { enabled: on, config: p.heartbeat.config });
       setCheckIn(heartbeatFrom(made) ?? { id: checkIn?.id ?? "", enabled: on });
     } catch (e) {
-      setError(e instanceof TypeError ? "We couldn't reach My Graph. Check your connection." : e instanceof Error ? e.message : "That didn't save. Try again.");
+      setError(e instanceof TypeError ? t("onboarding.error.offline") : e instanceof Error ? e.message : t("onboarding.error.save"));
     } finally { setSaving(null); }
   }
 
   async function finish() {
     setSaving("done"); setError(null);
-    try { await send("/api/assistant-settings", "PATCH", { onboarded: true }); }
+    try { await send(t, "/api/assistant-settings", "PATCH", { onboarded: true }); }
     catch { /* Hide it anyway for this visit; it will ask again next time if the save didn't land. */ }
     try { sessionStorage.setItem(DISMISS_KEY + p.graphId, "1"); } catch { /* ignore */ }
     setSaving(null);
@@ -100,9 +103,7 @@ export function FirstRun(p: FirstRunProps & { graphId: string }) {
   }
 
   const checkInOn = !!checkIn?.enabled;
-  const intro = p.isFamily
-    ? "It reads the family's calendar, letters, people and wiki here, and only what you are allowed to see. It suggests; you decide."
-    : `Only what is in ${p.graphName} is used. Nothing from the family graph or your other graphs comes in, and nothing from here goes out.`;
+  const intro = p.isFamily ? t("onboarding.introFamily") : t("onboarding.intro", { graph: p.graphName });
 
   return (
     <AnimatePresence initial={false}>
@@ -117,9 +118,9 @@ export function FirstRun(p: FirstRunProps & { graphId: string }) {
           <div className="p-5 sm:p-6">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <h2 id="first-run-title" className="text-lg font-semibold tracking-[-0.01em]">
-                {step === 1 ? (p.isFamily ? "How the assistant works in your family graph" : `How the assistant works in ${p.graphName}`) : "Try asking"}
+                {step === 1 ? (p.isFamily ? t("onboarding.titleFamily") : t("onboarding.title", { graph: p.graphName })) : t("onboarding.tryTitle")}
               </h2>
-              <p className="text-sm text-muted tabular-nums">Step {step} of 2</p>
+              <p className="text-sm text-muted tabular-nums">{t("onboarding.step", { step, total: 2 })}</p>
             </div>
 
             <AnimatePresence mode="wait" initial={false}>
@@ -129,48 +130,51 @@ export function FirstRun(p: FirstRunProps & { graphId: string }) {
 
                   <div className="mt-5 grid gap-x-10 gap-y-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
                     <div>
-                      <h3 className="text-sm font-medium text-muted">What it can do</h3>
+                      <h3 className="text-sm font-medium text-muted">{t("onboarding.canDo")}</h3>
                       <ul className="mt-2 space-y-2.5">
-                        <li className="flex gap-2.5"><MessageCircle aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />Answer questions, with a link to where each answer came from</li>
-                        <li className="flex gap-2.5"><ShieldCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />Suggest reminders, facts and {p.isFamily ? "family rules" : "rules"}, which wait here until you approve them</li>
-                        <li className="flex gap-2.5"><BellRing aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />Check in on a schedule and tell you what changed, without changing anything itself</li>
+                        <li className="flex gap-2.5"><MessageCircle aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />{t("onboarding.canAnswer")}</li>
+                        <li className="flex gap-2.5"><ShieldCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />{t(p.isFamily ? "onboarding.canSuggestFamily" : "onboarding.canSuggest")}</li>
+                        <li className="flex gap-2.5"><BellRing aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />{t("onboarding.canCheckIn")}</li>
                       </ul>
                     </div>
 
                     <div>
-                      <h3 className="text-sm font-medium text-muted">Your settings to start with</h3>
+                      <h3 className="text-sm font-medium text-muted">{t("onboarding.settingsTitle")}</h3>
                       <ul className="mt-1">
-                        <li className="flex items-center justify-between gap-4 border-b border-line/70 py-2.5">
+                        <li className="flex items-start gap-3 border-b border-line/70 py-2.5">
+                          <Brain aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />
                           <div className="min-w-0">
-                            <p>Remembers preferences you mention: <span className="font-medium">{settings.autoSaveMemories ? "on" : "off"}</span></p>
-                            <p className="text-sm text-muted">Like &ldquo;no plans on Sunday evenings&rdquo;. You can see and edit them under <Link href="/memory" className="text-accent hover:underline">Memory</Link>.</p>
+                            <p>{t("onboarding.memory.label")} <span className="font-medium">{t("onboarding.memory.value")}</span></p>
+                            <p className="text-sm text-muted">
+                              {t(p.isFamily ? "onboarding.memory.hintFamily" : "onboarding.memory.hint")}{" "}
+                              <Link href="/memory" className="text-accent hover:underline">{t("onboarding.memory.link")}</Link>
+                            </p>
                           </div>
-                          <Switch label="Remember preferences I mention" checked={settings.autoSaveMemories} busy={saving === "memory"} disabled={!!saving}
-                            onChange={(on) => patchSettings({ autoSaveMemories: on }, "memory")} />
                         </li>
-                        <li className="flex items-center justify-between gap-4 border-b border-line/70 py-2.5">
+                        <li className="flex items-start gap-3 border-b border-line/70 py-2.5">
+                          <ShieldCheck aria-hidden className="mt-0.5 size-4 shrink-0 text-muted" />
                           <div className="min-w-0">
-                            <p>Saves facts without asking: <span className="font-medium">never</span></p>
-                            <p className="text-sm text-muted">Every new fact waits for your approval. This can&apos;t be turned off.</p>
+                            <p>{t("onboarding.facts.label")} <span className="font-medium">{t("onboarding.facts.value")}</span></p>
+                            <p className="text-sm text-muted">{t("onboarding.facts.hint")}</p>
                           </div>
                         </li>
                         {p.canWrite && (
                           <li className="flex items-center justify-between gap-4 border-b border-line/70 py-2.5">
                             <div className="min-w-0">
-                              <p>Check-ins: <span className="font-medium">{checkInOn ? "every hour, 07:00 to 20:00" : "off"}</span></p>
+                              <p>{t("onboarding.checkIn.label")} <span className="font-medium">{checkInOn ? t("onboarding.checkIn.on") : t("onboarding.checkIn.off")}</span></p>
                               <p className="text-sm text-muted">
-                                {checkInOn ? "It looks for new letters, deadlines and birthdays, and only suggests." : "Turn on to have it look every hour, 07:00 to 20:00, every day. It only suggests."}
+                                {checkInOn ? t(p.isFamily ? "onboarding.checkIn.hintOnFamily" : "onboarding.checkIn.hintOn") : t("onboarding.checkIn.hintOff")}
                               </p>
                             </div>
-                            <Switch label="Daily check-ins" checked={checkInOn} busy={saving === "checkin"} disabled={!!saving} onChange={toggleCheckIn} />
+                            <Switch label={t("onboarding.checkIn.switch")} checked={checkInOn} busy={saving === "checkin"} disabled={!!saving} onChange={toggleCheckIn} />
                           </li>
                         )}
                         <li className="flex items-center justify-between gap-4 py-2.5">
                           <div className="min-w-0">
-                            <p>At most <span className="font-medium tabular-nums">{settings.dailySuggestionCap}</span> suggestions a day</p>
-                            <p className="text-sm text-muted">So it never nags. Anything you deny, it won&apos;t suggest again.</p>
+                            <p>{t("onboarding.cap.before")} <span className="font-medium tabular-nums">{settings.dailySuggestionCap}</span> {t("onboarding.cap.after", { count: settings.dailySuggestionCap })}</p>
+                            <p className="text-sm text-muted">{t("onboarding.cap.hint")}</p>
                           </div>
-                          <div className="w-20 shrink-0"><Select aria-label="Suggestions a day at most" value={settings.dailySuggestionCap} disabled={!!saving}
+                          <div className="w-20 shrink-0"><Select aria-label={t("onboarding.cap.label")} value={settings.dailySuggestionCap} disabled={!!saving}
                             onChange={(e) => patchSettings({ dailySuggestionCap: Number(e.target.value) }, "cap")}>
                             {[...new Set([...p.capChoices, settings.dailySuggestionCap])].sort((a, b) => a - b).map((n) => <option key={n} value={n}>{n}</option>)}
                           </Select></div>
@@ -182,7 +186,7 @@ export function FirstRun(p: FirstRunProps & { graphId: string }) {
               ) : (
                 <motion.div key="s2" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }} transition={{ duration: 0.18 }}>
                   <p className="mt-1.5 max-w-[68ch] text-muted">
-                    {p.isFamily ? "Questions from what is already in your family graph:" : `Questions from what is already in ${p.graphName}:`}
+                    {p.isFamily ? t("onboarding.questionsFamily") : t("onboarding.questions", { graph: p.graphName })}
                   </p>
                   <div className="mt-5 grid gap-x-10 gap-y-6 lg:grid-cols-2">
                     <ul className="-mx-2">
@@ -196,11 +200,11 @@ export function FirstRun(p: FirstRunProps & { graphId: string }) {
                       ))}
                     </ul>
                     <div className="rounded-lg bg-surface-2 p-4">
-                      <h3 className="flex items-center gap-2 font-medium"><Quote aria-hidden className="size-4 text-muted" />Be specific</h3>
-                      <p className="mt-1 text-sm text-muted">Name the person, the day and what you want back. You get a sharper answer and fewer follow-up questions.</p>
+                      <h3 className="flex items-center gap-2 font-medium"><Quote aria-hidden className="size-4 text-muted" />{t("onboarding.tip.title")}</h3>
+                      <p className="mt-1 text-sm text-muted">{t("onboarding.tip.body")}</p>
                       <dl className="mt-3 space-y-2 text-sm">
-                        <div className="flex gap-3"><dt className="w-20 shrink-0 text-muted">Instead of</dt><dd className="text-muted line-through decoration-muted/40">{p.tip.before}</dd></div>
-                        <div className="flex gap-3"><dt className="w-20 shrink-0 text-muted">Try</dt><dd><Link href={ask(p.tip.after)} className="hover:underline">{p.tip.after}</Link></dd></div>
+                        <div className="flex gap-3"><dt className="w-20 shrink-0 text-muted">{t("onboarding.tip.instead")}</dt><dd className="text-muted line-through decoration-muted/40">{p.tip.before}</dd></div>
+                        <div className="flex gap-3"><dt className="w-20 shrink-0 text-muted">{t("onboarding.tip.try")}</dt><dd><Link href={ask(p.tip.after)} className="hover:underline">{p.tip.after}</Link></dd></div>
                       </dl>
                     </div>
                   </div>
@@ -211,17 +215,17 @@ export function FirstRun(p: FirstRunProps & { graphId: string }) {
             <div className="mt-6 flex flex-wrap items-center gap-2">
               {step === 1 ? (
                 <>
-                  <Button onClick={() => setStep(2)}>Next: try asking<ArrowRight aria-hidden className="size-4" /></Button>
-                  <Button variant="ghost" onClick={finish} disabled={saving === "done"}>Skip, I&apos;ll look around</Button>
+                  <Button onClick={() => setStep(2)}>{t("onboarding.next")}<ArrowRight aria-hidden className="size-4" /></Button>
+                  <Button variant="ghost" onClick={finish} disabled={saving === "done"}>{t("onboarding.skip")}</Button>
                 </>
               ) : (
                 <>
-                  <Button onClick={finish} disabled={saving === "done"}><Check aria-hidden className="size-4" />{saving === "done" ? "Saving…" : "Done"}</Button>
-                  <Button variant="ghost" onClick={() => setStep(1)}>Back</Button>
+                  <Button onClick={finish} disabled={saving === "done"}><Check aria-hidden className="size-4" />{saving === "done" ? t("common.saving") : t("onboarding.done")}</Button>
+                  <Button variant="ghost" onClick={() => setStep(1)}>{t("common.back")}</Button>
                 </>
               )}
               {error && <p role="alert" className="text-sm text-danger">{error}</p>}
-              <p className="ml-auto text-sm text-muted">You can change all of this later under Automations.</p>
+              <p className="ml-auto text-sm text-muted">{t("onboarding.later")}</p>
             </div>
           </div>
         </motion.section>

@@ -1,10 +1,11 @@
 "use client";
 import { useMemo, useState } from "react";
-import { Button, Field, Input, Select, Tabs, Textarea } from "@/components/ui";
+import { Button, Field, Input, Select, Tabs } from "@/components/ui";
+import { MentionField, draftFrom, storedFrom, type MentionDraft } from "@/components/memory/mention-field";
 import type { AutomationDTO } from "@/lib/automations/automations";
 import type { RecipeDTO } from "@/lib/recipes";
-import { ALL_DAYS, DEFAULT_TZ, describeTrigger, previewRuns, safeParseTrigger } from "@/lib/automations/schedule";
-import { api, DaysPicker, when } from "./bits";
+import { ALL_DAYS, DEFAULT_TZ, previewRuns, safeParseTrigger } from "@/lib/automations/schedule";
+import { api, DaysPicker, useCopy } from "./bits";
 
 export type FormSeed = { name?: string; prompt?: string; recipeId?: string | null };
 
@@ -12,9 +13,10 @@ export type FormSeed = { name?: string; prompt?: string; recipeId?: string | nul
 export function AutomationForm({ recipes, seed, onCreated, onCancel }: {
   recipes: RecipeDTO[]; seed?: FormSeed; onCreated: (a: AutomationDTO) => void; onCancel: () => void;
 }) {
+  const { t, tv, when, trigger: describe } = useCopy();
   const [name, setName] = useState(seed?.name ?? "");
   const [recipeId, setRecipeId] = useState<string>(seed?.recipeId ?? "");
-  const [prompt, setPrompt] = useState(seed?.prompt ?? "");
+  const [prompt, setPrompt] = useState<MentionDraft>(() => draftFrom(seed?.prompt ?? ""));
   const [trigger, setTrigger] = useState<"schedule" | "condition">("schedule");
   const [days, setDays] = useState<number[]>([0]);
   const [time, setTime] = useState("18:00");
@@ -32,17 +34,18 @@ export function AutomationForm({ recipes, seed, onCreated, onCancel }: {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!name.trim()) return setError("Give it a name.");
-    if (!recipe && !prompt.trim()) return setError("Say what the assistant should do, or pick a recipe.");
-    if (!parsed) return setError(trigger === "schedule" ? "Pick at least one day and a time." : "Say what to look for.");
+    const text = prompt.text.trim();
+    if (!name.trim()) return setError(t("automations.form.errName"));
+    if (!recipe && !text) return setError(t("automations.form.errPrompt"));
+    if (!parsed) return setError(trigger === "schedule" ? t("automations.form.errSchedule") : t("automations.form.errCondition"));
     setBusy(true);
     try {
       const r = await api<{ automation: AutomationDTO }>("/api/automations", {
-        method: "POST", json: { name: name.trim(), prompt: prompt.trim() || undefined, recipeId: recipeId || null, trigger, config, oneShot },
+        method: "POST", json: { name: name.trim(), prompt: text ? storedFrom({ ...prompt, text }) : undefined, recipeId: recipeId || null, trigger, config, oneShot },
       });
       onCreated(r.automation);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save it.");
+      setError(err instanceof Error ? err.message : t("automations.form.couldNotSave"));
     } finally {
       setBusy(false);
     }
@@ -50,80 +53,80 @@ export function AutomationForm({ recipes, seed, onCreated, onCancel }: {
 
   return (
     <form onSubmit={submit} className="space-y-4 rounded-lg bg-surface p-4">
-      <p className="font-medium">New automation</p>
-      <Field label="Name">
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Sunday planning" maxLength={80} autoFocus />
+      <p className="font-medium">{t("automations.form.title")}</p>
+      <Field label={t("automations.form.name")}>
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={tv("automations.form.namePlaceholder")} maxLength={80} autoFocus />
       </Field>
       {recipes.length > 0 && (
-        <Field label="Start from a recipe" hint={recipe ? recipe.description : "Optional. A recipe is a saved set of instructions."}>
+        <Field label={t("automations.form.recipe")} hint={recipe ? recipe.description : t("automations.form.recipeHint")}>
           <Select value={recipeId} onChange={(e) => setRecipeId(e.target.value)}>
-            <option value="">No recipe, I&apos;ll write it</option>
+            <option value="">{t("automations.form.noRecipe")}</option>
             {recipes.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
           </Select>
         </Field>
       )}
-      <Field label={recipe ? "Anything to add (optional)" : "What should the assistant do?"} hint="Be specific: who it's about, what to look at, and what you want back.">
-        <Textarea rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} maxLength={4000}
-          placeholder={recipe ? recipe.prompt.slice(0, 120) : "Summarise what's coming up next week for each of us and list what we need to prepare."} />
+      <Field label={recipe ? t("automations.form.addition") : t("automations.form.whatToDo")} hint={t("automations.form.promptHint")}>
+        <MentionField rows={3} draft={prompt} onDraft={setPrompt} maxLength={4000}
+          placeholder={recipe ? draftFrom(recipe.prompt).text.slice(0, 120) : tv("automations.form.promptPlaceholder")} />
       </Field>
 
       <div>
-        <span className="mb-1.5 block text-sm font-medium">When</span>
-        <Tabs value={trigger} onSelect={setTrigger} items={[{ value: "schedule", label: "On a schedule" }, { value: "condition", label: "When something happens" }]} />
+        <span className="mb-1.5 block text-sm font-medium">{t("automations.form.when")}</span>
+        <Tabs value={trigger} onSelect={setTrigger} items={[{ value: "schedule", label: t("automations.form.onSchedule") }, { value: "condition", label: t("automations.form.onEvent") }]} />
       </div>
       {trigger === "schedule" ? (
         <div className="flex flex-wrap items-end gap-4">
           <div>
-            <span className="mb-1.5 block text-sm font-medium">Days</span>
+            <span className="mb-1.5 block text-sm font-medium">{t("automations.days.label")}</span>
             <DaysPicker value={days} onChange={setDays} />
             <div className="mt-1.5 flex gap-3 text-sm">
-              <button type="button" className="text-accent hover:underline" onClick={() => setDays(ALL_DAYS)}>Every day</button>
-              <button type="button" className="text-accent hover:underline" onClick={() => setDays([1, 2, 3, 4, 5])}>Weekdays</button>
+              <button type="button" className="text-accent hover:underline" onClick={() => setDays(ALL_DAYS)}>{t("automations.form.everyDay")}</button>
+              <button type="button" className="text-accent hover:underline" onClick={() => setDays([1, 2, 3, 4, 5])}>{t("automations.form.weekdays")}</button>
             </div>
           </div>
           <label>
-            <span className="mb-1.5 block text-sm font-medium">At</span>
-            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label="Time"
+            <span className="mb-1.5 block text-sm font-medium">{t("automations.form.at")}</span>
+            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} aria-label={t("automations.form.time")}
               className="h-9 rounded-md bg-surface px-2 text-[15px] tabular-nums ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-accent" />
           </label>
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
-          <Field label="When…" hint="Checked against new files and wiki pages. A quick keyword check runs first, then the assistant decides.">
-            <Input value={check} onChange={(e) => setCheck(e.target.value)} placeholder="a document mentions a vaccination" maxLength={300} />
+          <Field label={t("automations.form.conditionLabel")} hint={t("automations.form.conditionHint")}>
+            <Input value={check} onChange={(e) => setCheck(e.target.value)} placeholder={tv("automations.form.conditionPlaceholder")} maxLength={300} />
           </Field>
           <label className="block">
-            <span className="mb-1.5 block text-sm font-medium">Check</span>
+            <span className="mb-1.5 block text-sm font-medium">{t("automations.form.check")}</span>
             <Select value={everyMinutes} onChange={(e) => setEvery(Number(e.target.value))} className="w-40">
-              <option value={15}>Every 15 minutes</option>
-              <option value={30}>Every 30 minutes</option>
-              <option value={60}>Every hour</option>
-              <option value={240}>Every 4 hours</option>
-              <option value={1440}>Once a day</option>
+              <option value={15}>{t("automations.every.m15")}</option>
+              <option value={30}>{t("automations.every.m30")}</option>
+              <option value={60}>{t("automations.every.h1")}</option>
+              <option value={240}>{t("automations.every.h4")}</option>
+              <option value={1440}>{t("automations.every.d1")}</option>
             </Select>
           </label>
         </div>
       )}
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={oneShot} onChange={(e) => setOneShot(e.target.checked)} className="size-4 accent-[var(--color-fg)]" />
-        Only once, then switch it off
+        {t("automations.form.oneShot")}
       </label>
 
       <div className="rounded-md bg-surface-2 px-3 py-2.5 text-sm">
         {parsed ? (
           <>
-            <p className="font-medium">{describeTrigger(parsed)}</p>
+            <p className="font-medium">{describe(parsed)}</p>
             <p className="mt-0.5 text-muted">
-              {preview.length ? <>Next {preview.length === 1 ? "run" : "runs"}: {preview.map((d) => when(d)).join(", ")}</> : "No run times with these settings."}
+              {preview.length ? t("automations.form.nextRuns", { count: preview.length, list: preview.map((d) => when(d)).join(", ") }) : t("automations.form.noRuns")}
             </p>
           </>
-        ) : <p className="text-muted">Pick when it should run to see the next times.</p>}
-        <p className="mt-1 text-muted">It runs as you and sees only what you can see. It suggests; it doesn&apos;t change anything on its own.</p>
+        ) : <p className="text-muted">{t("automations.form.pickWhen")}</p>}
+        <p className="mt-1 text-muted">{t("automations.form.runsAsYou")}</p>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save automation"}</Button>
-        <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
+        <Button type="submit" disabled={busy}>{busy ? t("automations.form.saving") : t("automations.form.save")}</Button>
+        <Button type="button" variant="ghost" onClick={onCancel}>{t("automations.form.cancel")}</Button>
         {error && <span role="alert" className="text-sm text-danger">{error}</span>}
       </div>
     </form>

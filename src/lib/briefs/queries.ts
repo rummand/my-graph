@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { edges, nodes, provenance, sources, users, wikiPages } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import { scopeOf } from "@/lib/graphs/pure";
+import { getMeta } from "@/lib/meta";
 import { canSeeItem, visibleChildren } from "./access";
 import { humanizeRelation } from "./context";
 import { visibleWhere } from "./sql";
@@ -71,6 +72,9 @@ export async function loadAttentionFacts(v: Viewer, opts: { days?: number; limit
     .leftJoin(sources, eq(sources.id, provenance.sourceId))
     .where(and(eq(provenance.subjectType, "edge"), inArray(provenance.subjectId, rows.map((r) => r.edgeId))))
     .orderBy(desc(provenance.createdAt));
+  // Relation words come from this graph's meta model ("works on", "member of"); snake_case words as a fallback.
+  const meta = await getMeta(v).catch(() => null);
+  const relWords = (key: string) => { try { return meta?.relationLabel(key) || humanizeRelation(key); } catch { return humanizeRelation(key); } };
   const firstProv = new Map<string, (typeof provRows)[number]>();
   for (const p of provRows) if (!firstProv.has(p.subjectId)) firstProv.set(p.subjectId, p);
 
@@ -81,7 +85,7 @@ export async function loadAttentionFacts(v: Viewer, opts: { days?: number; limit
       && canSeeItem(v, { ownerId: p.sourceOwnerId, householdId: p.sourceHouseholdId, graphId: p.sourceGraphId, visibility: p.sourceVisibility, sensitive: p.sourceSensitive ?? false }));
     return {
       edgeId: r.edgeId, fromId: r.fromId, fromLabel: r.fromLabel, fromType: r.fromType, toId: r.toId, toLabel: r.toLabel, toType: r.toType,
-      relation: r.relation, text: `${r.fromLabel} ${humanizeRelation(r.relation)} ${r.toLabel}`,
+      relation: r.relation, text: `${r.fromLabel} ${relWords(r.relation)} ${r.toLabel}`,
       confidence: r.confidence, createdAt: r.createdAt, sensitive: r.fromSensitive || r.toSensitive,
       sourceId: sourceVisible ? p!.sourceId : null, sourceTitle: sourceVisible ? p!.sourceTitle : null,
       quote: sourceVisible ? p!.quote ?? null : null, page: sourceVisible ? p!.locator?.page ?? null : null,
@@ -123,4 +127,35 @@ export async function loadRecentWikiPages(v: Viewer, limit = 5): Promise<WikiRow
     .where(visibleWhere(v, wikiPages))
     .orderBy(desc(wikiPages.updatedAt))
     .limit(limit);
+}
+
+export type KeyThing = { id: string; label: string; type: string; kind: string | null; links: number; updatedAt: Date };
+
+/**
+ * The people, projects and organisations that matter most in the viewer's current graph (outside a family graph,
+ * Today shows these instead of the children's week): most connected first, then most recently touched. Only nodes and
+ * links the viewer may see count. The viewer's own person node is left out.
+ */
+export async function loadKeyThings(v: Viewer, limit = 6): Promise<KeyThing[]> {
+  const where = and(
+    visibleWhere(v, nodes),
+    isNull(nodes.mergedInto),
+    inArray(nodes.type, ["person", "project", "organization"]),
+    v.personNodeId ? ne(nodes.id, v.personNodeId) : undefined,
+  );
+  const candidates = await db.select({ id: nodes.id, label: nodes.label, type: nodes.type, kind: nodes.kind, updatedAt: nodes.updatedAt })
+    .from(nodes).where(where).orderBy(desc(nodes.updatedAt)).limit(60);
+  if (!candidates.length) return [];
+  const ids = candidates.map((c) => c.id);
+  const live = and(visibleWhere(v, edges), notInArray(edges.status, ["rejected", "superseded"]));
+  const [outs, ins] = await Promise.all([
+    db.select({ id: edges.fromId, n: count() }).from(edges).where(and(live, inArray(edges.fromId, ids))).groupBy(edges.fromId),
+    db.select({ id: edges.toId, n: count() }).from(edges).where(and(live, inArray(edges.toId, ids))).groupBy(edges.toId),
+  ]);
+  const links = new Map<string, number>();
+  for (const r of [...outs, ...ins]) links.set(r.id, (links.get(r.id) ?? 0) + Number(r.n));
+  return candidates
+    .map((c) => ({ ...c, links: links.get(c.id) ?? 0 }))
+    .sort((a, b) => b.links - a.links || b.updatedAt.getTime() - a.updatedAt.getTime())
+    .slice(0, limit);
 }

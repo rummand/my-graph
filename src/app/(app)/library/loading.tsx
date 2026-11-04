@@ -1,8 +1,11 @@
+import { getT } from "@/lib/i18n";
+
 /** The library's own layout with flat placeholders, so nothing jumps when the files arrive. */
-export default function Loading() {
+export default async function Loading() {
+  const t = await getT();
   return (
     <div aria-busy="true" aria-live="polite">
-      <span className="sr-only">Loading the library…</span>
+      <span className="sr-only">{t("library.loadingLibrary")}</span>
       <div className="mb-8">
         <div className="h-8 w-32 rounded-md bg-surface-2" />
         <div className="mt-3 h-5 w-[min(32rem,100%)] rounded bg-surface-2" />

@@ -19,15 +19,16 @@ const csv = <T extends z.ZodType>(item: T, max: number) =>
 const isoDate = z.preprocess(blank, z.iso.datetime({ offset: true, message: "Use an ISO date, e.g. 2024-03-01T00:00:00Z" })
   .or(z.iso.date({ message: "Use an ISO date, e.g. 2024-03-01" })).optional());
 
-export const ITEM_KINDS = ["event", "reminder", "source"] as const satisfies readonly ItemKind[];
+/** "document" covers dated documents and mail threads. */
+export const ITEM_KINDS = ["event", "reminder", "source", "document"] as const satisfies readonly ItemKind[];
 
 export const timelineQuerySchema = z.object({
   from: isoDate,
   to: isoDate,
   people: csv(z.uuid({ message: "people must be a list of person ids" }), 50),
   topics: csv(z.uuid({ message: "topics must be a list of topic ids" }), 50),
-  /** Which kinds of marker to include. Default: events and reminders ("source" adds 'added to library' markers). */
-  types: csv(z.enum(ITEM_KINDS, { message: "types can be event, reminder and source" }), 3),
+  /** Which kinds of marker to include. Default: events, reminders and documents ("source" adds 'added to library' markers). */
+  types: csv(z.enum(ITEM_KINDS, { message: "types can be event, reminder, document and source" }), 4),
   limit: z.preprocess(blank, z.coerce.number().int().min(1).max(2000).optional()),
 }).refine((q) => !q.from || !q.to || new Date(q.from) <= new Date(q.to), { message: "from must be before to", path: ["from"] });
 
@@ -43,3 +44,8 @@ export function searchParamsToObject(sp: URLSearchParams): Record<string, string
   }
   return out;
 }
+
+export const threadQuerySchema = z.object({
+  key: z.preprocess(blank, z.string().min(1).max(1000).optional()),
+  ids: csv(z.uuid({ message: "ids must be a list of message ids" }), 300),
+}).refine((q) => !!q.key || !!q.ids?.length, { message: "Say which conversation: key or ids." });

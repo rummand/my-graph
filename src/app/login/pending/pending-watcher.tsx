@@ -1,10 +1,12 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useT } from "@/lib/i18n/client";
 
 /** Polls the session state and moves on once a parent has approved (or turned away) this device. */
 export function PendingWatcher() {
   const router = useRouter();
+  const t = useT();
   const [state, setState] = useState<"waiting" | "error">("waiting");
   useEffect(() => {
     let stop = false;
@@ -27,7 +29,7 @@ export function PendingWatcher() {
   return (
     <p role="status" aria-live="polite" className="flex items-center gap-2 font-medium text-warn">
       <span className="size-2 rounded-full bg-warn motion-safe:animate-pulse" aria-hidden />
-      {state === "error" ? "Can't check right now. We'll keep trying." : "Waiting for a parent"}
+      {state === "error" ? t("auth.pending.cantCheck") : t("auth.pending.waiting")}
     </p>
   );
 }

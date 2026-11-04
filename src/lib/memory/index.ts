@@ -37,6 +37,8 @@ export type MemoryInput = {
   kind: MemoryKind; text: string; aboutNodeIds?: string[]; origin: MemoryOrigin; createdByKind: "user" | "assistant";
   conversationId?: string; messageId?: string; sourceId?: string; runId?: string; quote?: string; confidence?: number;
   visibility?: "private" | "parents" | "household";
+  /** Who to name in the activity log; the Brain Keeper passes "keeper". */
+  actor?: "keeper";
 };
 
 export { memoryAllowed, canAddMemory, canEditMemory } from "./pure";
@@ -186,7 +188,8 @@ export async function addMemory(v: Viewer, input: MemoryInput): Promise<Memory |
     }).returning({ id: memories.id });
     if (input.createdByKind === "assistant") {
       await tx.insert(assistantActivity).values({
-        graphId: v.graphId, userId: v.id, actor: input.origin === "automation" ? "automation" : input.origin === "chat" ? "chat" : "ingest",
+        graphId: v.graphId, userId: v.id,
+        actor: input.actor ?? (input.origin === "automation" ? "automation" : input.origin === "chat" ? "chat" : "ingest"),
         action: "saved_memory",
         summary: status === "pending" ? `Found something to remember and is waiting for you to confirm it: "${cleanText(text, 120)}"` : `Remembered: "${cleanText(text, 120)}"`,
         subjectType: "memory", subjectId: row.id, runId: origin.runId, conversationId: origin.conversationId, visibility,

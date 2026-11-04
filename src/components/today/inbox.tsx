@@ -4,6 +4,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { ApprovalCard, type Decision } from "@/components/assistant/approval-card";
 import type { Citation } from "@/db/schema";
+import { useT } from "@/lib/i18n/client";
 import { TodaySection } from "./section";
 
 /** A pending suggestion as sent to the browser (labels worked out on the server). */
@@ -32,6 +33,7 @@ function Preview({ lines }: { lines: InboxItem["preview"] }) {
  * A decided card says what happened, then folds away and the next one moves up.
  */
 export function WaitingForYou({ items: initial, limit, seeAllHref, readOnly, id = "waiting" }: { items: InboxItem[]; limit: number; seeAllHref: string; readOnly: boolean; id?: string }) {
+  const t = useT();
   const [items, setItems] = useState(initial);
   if (items.length === 0) return null;
   const shown = items.slice(0, limit);
@@ -51,8 +53,8 @@ export function WaitingForYou({ items: initial, limit, seeAllHref, readOnly, id 
   return (
     <TodaySection
       id={id}
-      title={<>Waiting for you<span className="ml-2 rounded-full bg-warn-tint px-2 py-0.5 align-middle text-xs font-medium tabular-nums text-warn">{items.length}</span></>}
-      action={<Link href={seeAllHref} className="text-sm text-accent hover:underline">{more > 0 ? `See all ${items.length}` : "See all"}</Link>}
+      title={<>{t("today.waiting.title")}<span className="ml-2 rounded-full bg-warn-tint px-2 py-0.5 align-middle text-xs font-medium tabular-nums text-warn">{items.length}</span></>}
+      action={<Link href={seeAllHref} className="text-sm text-accent hover:underline">{more > 0 ? t("today.waiting.seeAllN", { count: items.length }) : t("today.waiting.seeAll")}</Link>}
     >
       <ul className="space-y-2">
         <AnimatePresence initial={false}>
@@ -63,7 +65,7 @@ export function WaitingForYou({ items: initial, limit, seeAllHref, readOnly, id 
                   <p className="mb-0.5 text-xs text-muted">{s.kindLabel}, {s.origin}</p>
                   <p className="font-medium">{s.title}</p>
                   {s.why && <p className="mt-0.5 text-sm text-muted">{s.why}</p>}
-                  <p className="mt-2 text-sm text-muted">You can see this graph but not change it, so someone who can edit it decides.</p>
+                  <p className="mt-2 text-sm text-muted">{t("today.waiting.readOnly")}</p>
                 </div>
               ) : (
                 <ApprovalCard
@@ -82,7 +84,7 @@ export function WaitingForYou({ items: initial, limit, seeAllHref, readOnly, id 
           ))}
         </AnimatePresence>
       </ul>
-      {more > 0 && <p className="mt-2 text-sm text-muted">{more} more waiting. <Link href={seeAllHref} className="text-accent hover:underline">See them all</Link></p>}
+      {more > 0 && <p className="mt-2 text-sm text-muted">{t("today.waiting.more", { count: more })} <Link href={seeAllHref} className="text-accent hover:underline">{t("today.waiting.seeThemAll")}</Link></p>}
     </TodaySection>
   );
 }

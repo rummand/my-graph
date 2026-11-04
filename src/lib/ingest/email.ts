@@ -4,7 +4,15 @@
  * quoted-printable, base64 and RFC 2047 encoded-word headers. Attachments are listed by name, not parsed.
  */
 
-export type ParsedEmail = { subject?: string; from?: string; to?: string; date?: Date; body: string; attachments: string[] };
+export type AttachmentPart = { filename: string; mime: string; bytes: Uint8Array };
+
+export type ParsedEmail = {
+  subject?: string; from?: string; to?: string; cc?: string; date?: Date; body: string; attachments: string[];
+  /** Threading headers, angle brackets removed. */
+  messageId?: string; inReplyTo?: string; references: string[];
+  /** Decoded attachment bodies (only when asked for: they can be large). */
+  attachmentParts: AttachmentPart[];
+};
 
 type Part = { headers: Record<string, string>; body: string };
 
@@ -98,7 +106,16 @@ export function htmlToText(html: string): string {
     .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
-function walk(p: Part, acc: { plain: string[]; html: string[]; attachments: string[] }, depth = 0) {
+type Acc = { plain: string[]; html: string[]; attachments: string[]; parts: AttachmentPart[] | null };
+
+function partBytes(p: Part): Uint8Array {
+  const enc = (p.headers["content-transfer-encoding"] ?? "").toLowerCase().trim();
+  if (enc === "base64") return base64ToBytes(p.body);
+  if (enc === "quoted-printable") return qpToBytes(p.body);
+  return new TextEncoder().encode(p.body);
+}
+
+function walk(p: Part, acc: Acc, depth = 0) {
   const ct = (p.headers["content-type"] ?? "text/plain").toLowerCase();
   const disp = (p.headers["content-disposition"] ?? "").toLowerCase();
   const filename = decodeHeader(param(p.headers["content-disposition"], "filename") ?? param(p.headers["content-type"], "name"));
@@ -114,7 +131,10 @@ function walk(p: Part, acc: { plain: string[]; html: string[]; attachments: stri
     return;
   }
   if (disp.startsWith("attachment") || (filename && !ct.startsWith("text/"))) {
-    if (filename) acc.attachments.push(filename);
+    if (filename) {
+      acc.attachments.push(filename);
+      if (acc.parts) acc.parts.push({ filename, mime: ct.split(";")[0].trim(), bytes: partBytes(p) });
+    }
     return;
   }
   if (ct.startsWith("text/plain")) acc.plain.push(decodeBody(p));
@@ -122,9 +142,17 @@ function walk(p: Part, acc: { plain: string[]; html: string[]; attachments: stri
   else if (ct.startsWith("message/rfc822")) walk(splitHeadersBody(p.body.replace(/\r\n/g, "\n")), acc, depth + 1);
 }
 
-export function parseEmail(raw: string): ParsedEmail {
+/** Message ids in a header ("<a@x> <b@y>" → ["a@x", "b@y"]); bare ids without brackets are accepted too. */
+export function messageIds(v: string | undefined): string[] {
+  if (!v) return [];
+  const bracketed = [...v.matchAll(/<([^<>\s]+)>/g)].map((m) => m[1]);
+  if (bracketed.length) return bracketed;
+  return v.split(/[\s,]+/).map((s) => s.trim()).filter((s) => s.includes("@"));
+}
+
+export function parseEmail(raw: string, opts: { withAttachments?: boolean } = {}): ParsedEmail {
   const top = splitHeadersBody(raw);
-  const acc = { plain: [] as string[], html: [] as string[], attachments: [] as string[] };
+  const acc: Acc = { plain: [], html: [], attachments: [], parts: opts.withAttachments ? [] : null };
   walk(top, acc);
   const body = (acc.plain.length ? acc.plain : acc.html).join("\n\n").replace(/\r\n/g, "\n").trim();
   const dateHeader = top.headers["date"];
@@ -133,9 +161,14 @@ export function parseEmail(raw: string): ParsedEmail {
     subject: decodeHeader(top.headers["subject"]),
     from: decodeHeader(top.headers["from"]),
     to: decodeHeader(top.headers["to"]),
+    cc: decodeHeader(top.headers["cc"]),
     date: date && !Number.isNaN(date.getTime()) ? date : undefined,
     body,
     attachments: acc.attachments,
+    messageId: messageIds(top.headers["message-id"])[0],
+    inReplyTo: messageIds(top.headers["in-reply-to"])[0],
+    references: messageIds(top.headers["references"]),
+    attachmentParts: acc.parts ?? [],
   };
 }
 
@@ -145,6 +178,7 @@ export function emailToText(e: ParsedEmail): string {
     e.subject && `Subject: ${e.subject}`,
     e.from && `From: ${e.from}`,
     e.to && `To: ${e.to}`,
+    e.cc && `Cc: ${e.cc}`,
     e.date && `Date: ${e.date.toISOString()}`,
     e.attachments.length ? `Attachments: ${e.attachments.join(", ")}` : undefined,
   ].filter(Boolean).join("\n");

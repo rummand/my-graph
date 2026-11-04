@@ -1,22 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { format } from "date-fns";
-import { AlertTriangle, ArrowLeft, Bell, CircleCheck, ExternalLink, LoaderCircle, Lock, MapPin, ShieldAlert, Users, UsersRound } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bell, CalendarDays, CircleCheck, ExternalLink, GitPullRequestArrow, LoaderCircle, Lock, MapPin, MessagesSquare, Paperclip, ShieldAlert, Users, UsersRound } from "lucide-react";
 import { NodeChip, PersonChip } from "@/components/ui";
 import { AudioTranscript } from "@/components/library/audio-transcript";
 import { CiteButton, MarkedText, PassageList, PdfFrame, ProvenanceProvider } from "@/components/library/provenance";
 import { SharingSettings, SourceSettings } from "@/components/library/source-settings";
-import { extractionNote, formatBytes, formatDay, formatMoment, isStuck, KIND_WORD, StatusPill, visibilityLabel } from "@/components/library/source-meta";
+import { isStuck, StatusPill } from "@/components/library/source-meta";
+import { countsLine, dateOriginNote, extractionNote, formatBytes, formatDay, formatDocDate, formatMoment, kindWord, listJoin, senderName, timeOfDay, visibilityLabel, type Lx } from "@/components/library/i18n";
+import { libraryLx } from "@/components/library/server-lx";
 import { StatusWatcher } from "@/components/library/status-watcher";
 import { requireUser, type Viewer } from "@/lib/auth";
 import { listReminders, type ReminderDTO } from "@/lib/briefs";
 import { formatTime } from "@/lib/ingest/chunk";
 import { getSourceDetail, type ExtractedFact, type SourceDetail } from "@/lib/ingest/library";
+import { getT } from "@/lib/i18n";
 import { getMeta } from "@/lib/meta";
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "File · My Graph" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT())("library.fileMetaTitle") };
+}
 
 type Detail = SourceDetail;
 type Chunk = Detail["chunks"][number];
@@ -44,65 +48,78 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
   const v = await requireUser();
   const d = await getSourceDetail(v, id);
   if (!d) notFound();
-  const [label, reminders] = await Promise.all([relationLabeller(v), remindersFrom(v, id)]);
+  const [label, reminders, L] = await Promise.all([relationLabeller(v), remindersFrom(v, id), libraryLx(v)]);
+  const { t } = L;
   const s = d.source;
   const stuck = isStuck(s.status, s.startedAt, s.createdAt);
   const busy = (s.status === "pending" || s.status === "processing") && !stuck;
   const VisIcon = s.visibility === "private" ? Lock : s.visibility === "parents" ? UsersRound : Users;
+  const family = L.family;
+  const dateFrom = (s.meta.documentDateFrom ?? null) as { origin?: string; quote?: string | null } | null;
+  const who = s.isOwner ? t("library.detail.byYou") : s.ownerName ?? t(family ? "library.detail.bySomeoneFamily" : "library.detail.bySomeone");
+  const whom = s.visibility === "household" ? t(family ? "library.detail.whom.householdFamily" : "library.detail.whom.household")
+    : s.visibility === "parents" ? t(family ? "library.detail.whom.parentsFamily" : "library.detail.whom.parents") : t("library.detail.whom.private");
 
   return (
     <ProvenanceProvider>
       <StatusWatcher active={busy} />
       <Link href="/library" className="mb-5 inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
-        <ArrowLeft aria-hidden className="size-4" />Library
+        <ArrowLeft aria-hidden className="size-4" />{t("library.detail.back")}
       </Link>
 
       <header className="mb-8">
         <h1 className="break-words text-[28px]/[1.15] font-semibold tracking-[-0.02em]">{s.title}</h1>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted">
+          {s.documentDate && (
+            <span className="inline-flex items-center gap-1.5 font-medium text-fg" title={dateOriginNote(L, dateFrom)}>
+              <CalendarDays aria-hidden className="size-4 text-muted" />{t("library.detail.dated", { date: formatDocDate(L, s.documentDate, s.documentDatePrecision) })}
+            </span>
+          )}
           <span>
-            {KIND_WORD[s.category]} added {formatMoment(s.createdAt)} by {s.isOwner ? "you" : s.ownerName ?? "someone in the family"}
-            {s.size ? `, ${formatBytes(s.size)}` : ""}
+            {t("library.detail.addedBy", { kind: kindWord(L, s.docKind, s.category), when: formatMoment(L, s.createdAt), who })}
+            {s.size ? `, ${formatBytes(L, s.size)}` : ""}
           </span>
           <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-fg">
-            <VisIcon aria-hidden className="size-3.5 text-muted" />{visibilityLabel(s.visibility)}
+            <VisIcon aria-hidden className="size-3.5 text-muted" />{visibilityLabel(L, s.visibility)}
           </span>
           {s.sensitive && (
             <span className="inline-flex items-center gap-1 rounded-full bg-warn-tint px-2 py-0.5 text-xs font-medium text-warn">
-              <ShieldAlert aria-hidden className="size-3.5" />Sensitive
+              <ShieldAlert aria-hidden className="size-3.5" />{t("library.detail.sensitive")}
             </span>
           )}
-          <StatusPill status={s.status} stuck={stuck} />
+          <StatusPill L={L} status={s.status} stuck={stuck} />
         </div>
       </header>
 
-      <FoundSummary d={d} reminders={reminders.length} />
+      <FoundSummary L={L} d={d} reminders={reminders.length} />
+      <Proposed L={L} d={d} />
 
       <div className="grid gap-x-10 gap-y-10 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div className="min-w-0 space-y-8">
-          <Original d={d} />
-          <ReadText d={d} />
+          <Original L={L} d={d} />
+          <ReadText L={L} d={d} />
+          <ImportedMessages L={L} d={d} />
         </div>
 
-        <aside className="min-w-0 space-y-10" aria-label="What was found in this file">
-          <Learned d={d} busy={busy} stuck={stuck} reminders={reminders} label={label} />
+        <aside className="min-w-0 space-y-10" aria-label={t("library.detail.foundAside")}>
+          <Conversation L={L} d={d} />
+          {s.category !== "mailbox" && <Learned L={L} d={d} busy={busy} stuck={stuck} reminders={reminders} label={label} />}
 
           <section aria-labelledby="sharing-h">
-            <h2 id="sharing-h" className="mb-4 text-lg font-semibold tracking-[-0.01em]">Sharing</h2>
+            <h2 id="sharing-h" className="mb-4 text-lg font-semibold tracking-[-0.01em]">{t("library.detail.sharing")}</h2>
             {s.isOwner ? (
-              <SharingSettings id={s.id} visibility={s.visibility} sensitive={s.sensitive} />
+              <SharingSettings family={family} id={s.id} visibility={s.visibility} sensitive={s.sensitive} />
             ) : (
               <p className="text-sm text-muted">
-                {s.ownerName ?? "Someone"} added this file and shares it with {s.visibility === "household" ? "the whole family" : s.visibility === "parents" ? "the parents" : "you"}.
-                Only they can change who sees it.
+                {t("library.detail.sharedWith", { owner: s.ownerName ?? t("library.list.someone"), whom })}
               </p>
             )}
           </section>
 
           {s.isOwner && (
             <section aria-labelledby="file-h">
-              <h2 id="file-h" className="mb-4 text-lg font-semibold tracking-[-0.01em]">The file</h2>
-              <SourceSettings id={s.id} title={s.title} visibility={s.visibility} sensitive={s.sensitive} hasFile={!!s.mime} busy={busy} />
+              <h2 id="file-h" className="mb-4 text-lg font-semibold tracking-[-0.01em]">{t("library.detail.theFile")}</h2>
+              <SourceSettings family={family} id={s.id} title={s.title} visibility={s.visibility} sensitive={s.sensitive} hasFile={!!s.mime} busy={busy} />
             </section>
           )}
         </aside>
@@ -111,28 +128,139 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
   );
 }
 
+/** What reading the file proposed for the graph: nothing is added until someone delivers it. */
+function Proposed({ L, d }: { L: Lx; d: Detail }) {
+  const { t } = L;
+  const p = d.proposal;
+  if (!p || p.total === 0) return null;
+  const what = countsLine(L, p.counts);
+  if (p.status === "waiting" || !p.changeSetId) {
+    return (
+      <div className="-mt-4 mb-6 flex items-start gap-2.5 rounded-lg bg-warn-tint px-4 py-3 text-sm text-warn">
+        <GitPullRequestArrow aria-hidden className="mt-0.5 size-4 shrink-0" />
+        <p>{t("library.detail.proposal.waiting", { count: p.total, what })}</p>
+      </div>
+    );
+  }
+  const decided = p.status === "delivered" ? t("library.detail.proposal.delivered", { what }) : p.status === "abandoned" ? t("library.detail.proposal.abandoned", { what }) : null;
+  return (
+    <Link href={`/changes/${p.changeSetId}`}
+      className={`-mt-4 mb-6 flex items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm ${decided ? "bg-surface-2 text-muted" : "bg-warn-tint text-warn"}`}>
+      <span className="inline-flex items-start gap-2.5">
+        <GitPullRequestArrow aria-hidden className="mt-0.5 size-4 shrink-0" />
+        <span>
+          <span className="font-medium">{t("library.detail.proposal.title", { count: p.total })}</span>
+          <span className="block text-fg/70">{decided ?? t("library.detail.proposal.open", { what: `${what[0].toUpperCase()}${what.slice(1)}` })}</span>
+        </span>
+      </span>
+      <span aria-hidden className="shrink-0 font-medium">{decided ? t("library.detail.proposal.see") : t("library.detail.proposal.review")}</span>
+    </Link>
+  );
+}
+
+/** Mail: the rest of the conversation, oldest first, this message marked. Attachments and the email they came with. */
+function Conversation({ L, d }: { L: Lx; d: Detail }) {
+  const { t } = L;
+  const s = d.source;
+  if (!d.thread && !d.attachments.length && !d.parent) return null;
+  return (
+    <section aria-labelledby="conv-h" className="space-y-5">
+      {d.thread && (
+        <div>
+          <h2 id="conv-h" className="mb-3 flex items-baseline gap-2 text-lg font-semibold tracking-[-0.01em]">
+            {t("library.detail.conversation")}<span className="text-sm font-normal tabular-nums text-muted">{t("library.count.messages", { count: d.thread.messages.length })}</span>
+          </h2>
+          <ol className="space-y-0.5">
+            {d.thread.messages.map((m) => {
+              const here = m.id === s.id;
+              const from = senderName(m.from) ?? t("library.list.someone");
+              return (
+                <li key={m.id}>
+                  <Link href={`/library/${m.id}`} aria-current={here ? "page" : undefined}
+                    className={`flex gap-3 rounded-md px-2 py-1.5 text-sm ${here ? "bg-surface font-medium" : "hover:bg-surface-2"}`}>
+                    <span className="w-[5.5rem] shrink-0 text-muted">{formatDay(L, m.at)}</span>
+                    <span className="min-w-0 truncate">{from}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ol>
+          <Link href={`/library/thread?key=${encodeURIComponent(d.thread.key)}`} className="mt-2 inline-flex items-center gap-1 text-sm font-medium text-accent hover:underline">
+            <MessagesSquare aria-hidden className="size-4" />{t("library.detail.readWhole")}
+          </Link>
+        </div>
+      )}
+      {d.parent && (
+        <p className="text-sm text-muted">
+          {t("library.detail.attachedTo")} <Link href={`/library/${d.parent.id}`} className="font-medium text-accent hover:underline">{d.parent.title}</Link>.
+        </p>
+      )}
+      {d.attachments.length > 0 && (
+        <div>
+          <h3 className="mb-2 text-sm font-semibold">{t("library.detail.attachments")}</h3>
+          <ul className="flex flex-wrap gap-1.5">
+            {d.attachments.map((a) => (
+              <li key={a.id}><Link href={`/library/${a.id}`} className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2.5 py-1 text-sm hover:bg-line"><Paperclip aria-hidden className="size-3.5" />{a.title}</Link></li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** A mail import: the messages it brought in. */
+function ImportedMessages({ L, d }: { L: Lx; d: Detail }) {
+  const { t } = L;
+  const s = d.source;
+  if (s.messages === null) return null;
+  const dup = typeof s.meta.duplicates === "number" ? s.meta.duplicates : 0;
+  return (
+    <section>
+      <h2 className="mb-1 text-lg font-semibold tracking-[-0.01em]">{t("library.detail.importTitle")}</h2>
+      <p className="mb-4 text-sm text-muted">
+        {t(dup ? "library.detail.importLineDup" : "library.detail.importLine", { imported: s.imported ?? 0, total: s.messages, dup })}
+      </p>
+      {d.importedMessages.length > 0 && (
+        <ul>
+          {d.importedMessages.map((m) => (
+            <li key={m.id} className="flex gap-4 border-b border-line py-2 text-sm last:border-0">
+              <span className="w-28 shrink-0 text-muted">{m.at ? formatDay(L, m.at) : t("library.detail.noDate")}</span>
+              <Link href={`/library/${m.id}`} className="min-w-0 truncate hover:underline">{m.title}</Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      <Link href="/library?type=mail" className="mt-3 inline-block text-sm font-medium text-accent hover:underline">{t("library.detail.allMail")}</Link>
+    </section>
+  );
+}
+
 /** Phones: the findings sit below the original, so say up front what is there and link to it. */
-function FoundSummary({ d, reminders }: { d: Detail; reminders: number }) {
+function FoundSummary({ L, d, reminders }: { L: Lx; d: Detail; reminders: number }) {
+  const { t } = L;
   const people = d.entities.filter((e) => e.type === "person").length;
   const dates = d.entities.filter((e) => e.type === "event").length;
   const parts = [
-    people && `${people} ${people === 1 ? "person" : "people"}`,
-    dates && `${dates} ${dates === 1 ? "date" : "dates"}`,
-    reminders && `${reminders} ${reminders === 1 ? "reminder" : "reminders"}`,
+    people && t("library.count.people", { count: people }),
+    dates && t("library.count.dates", { count: dates }),
+    reminders && t("library.count.reminders", { count: reminders }),
   ].filter(Boolean) as string[];
   if (parts.length === 0) return null;
-  const list = parts.length > 1 ? `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}` : parts[0];
+  const list = listJoin(L, parts);
   return (
     <a href="#learned-h" className="-mt-4 mb-6 flex items-center justify-between gap-3 rounded-lg bg-accent-tint px-4 py-3 text-sm text-accent lg:hidden">
-      <span>Found {list} in this file</span><span aria-hidden>See them</span>
+      <span>{t("library.detail.found", { list })}</span><span aria-hidden className="shrink-0 whitespace-nowrap">{t("library.detail.seeThem")}</span>
     </a>
   );
 }
 
 /* ── The original ─────────────────────────────────────────────────────────────────────────────────────────── */
 
-function Original({ d }: { d: Detail }) {
+function Original({ L, d }: { L: Lx; d: Detail }) {
+  const { t } = L;
   const s = d.source;
+  if (s.category === "mailbox") return null; // a mail import is its messages (ImportedMessages)
   const url = `/api/files/${s.id}`;
   const exif = (s.meta.exif ?? null) as { takenAt: string | null; lat: number | null; lon: number | null; camera: string | null } | null;
   const email = (s.meta.email ?? null) as { subject: string | null; from: string | null; date: string | null } | null;
@@ -141,22 +269,22 @@ function Original({ d }: { d: Detail }) {
   if (s.category === "image") {
     const details: [string, React.ReactNode][] = [];
     // The description is also the photo's first passage; show it once, where citations can point at it.
-    if (caption && d.chunks.length === 0) details.push(["What's in it", caption]);
-    if (exif?.takenAt) details.push(["Taken", formatMoment(exif.takenAt)]);
+    if (caption && d.chunks.length === 0) details.push([t("library.detail.photo.whatsIn"), caption]);
+    if (exif?.takenAt) details.push([t("library.detail.photo.taken"), formatMoment(L, exif.takenAt)]);
     if (exif?.lat != null && exif?.lon != null) {
-      details.push(["Where", (
+      details.push([t("library.detail.photo.where"), (
         <a key="map" className="inline-flex items-center gap-1 text-accent hover:underline" target="_blank" rel="noreferrer noopener"
           href={`https://www.openstreetmap.org/?mlat=${exif.lat}&mlon=${exif.lon}#map=16/${exif.lat}/${exif.lon}`}>
-          <MapPin aria-hidden className="size-3.5" />Open the place on a map
+          <MapPin aria-hidden className="size-3.5" />{t("library.detail.photo.map")}
         </a>
       )]);
     }
-    if (exif?.camera) details.push(["Camera", exif.camera]);
+    if (exif?.camera) details.push([t("library.detail.photo.camera"), exif.camera]);
     return (
-      <section aria-label="The original photo">
+      <section aria-label={t("library.detail.photo.aria")}>
         {s.mime === "image/heic" ? (
           <div className="rounded-lg bg-surface p-8 text-sm text-muted">
-            This browser can&apos;t show HEIC photos. <a className="text-accent hover:underline" href={`${url}?download=1`}>Download the original</a> to see it.
+            {t("library.detail.heic")} <a className="text-accent hover:underline" href={`${url}?download=1`}>{t("library.detail.heicDownload")}</a> {t("library.detail.heicTail")}
           </div>
         ) : (
           <figure className="flex justify-center overflow-hidden rounded-lg bg-surface-2">
@@ -171,12 +299,12 @@ function Original({ d }: { d: Detail }) {
 
   if (s.category === "pdf") {
     return (
-      <section aria-label="The original PDF">
+      <section aria-label={t("library.detail.pdfAria")}>
         <div className="overflow-hidden rounded-lg bg-surface">
           <PdfFrame url={url} title={s.title} />
         </div>
         <a className="mt-2 inline-flex items-center gap-1 text-sm text-muted hover:text-fg" href={url} target="_blank" rel="noreferrer">
-          <ExternalLink aria-hidden className="size-3.5" />Open the PDF in its own tab
+          <ExternalLink aria-hidden className="size-3.5" />{t("library.detail.pdfOpen")}
         </a>
       </section>
     );
@@ -184,7 +312,7 @@ function Original({ d }: { d: Detail }) {
 
   if (s.category === "audio") {
     return (
-      <section aria-label="The recording and its transcript" className="overflow-hidden rounded-lg bg-surface">
+      <section aria-label={t("library.detail.audioAria")} className="overflow-hidden rounded-lg bg-surface">
         <AudioTranscript src={url} title={s.title}
           segments={d.chunks.map((c) => ({ id: c.id, text: c.text, start: c.locator.timeStartSec ?? null, end: c.locator.timeEndSec ?? null }))} />
       </section>
@@ -194,11 +322,11 @@ function Original({ d }: { d: Detail }) {
   // Letters, notes, Word documents and emails: the text itself, on a page.
   const text = s.textContent ?? "";
   const emailRows: [string, React.ReactNode][] = [];
-  if (email?.subject) emailRows.push(["Subject", email.subject]);
-  if (email?.from) emailRows.push(["From", email.from]);
-  if (email?.date) emailRows.push(["Sent", formatMoment(email.date)]);
+  if (email?.subject) emailRows.push([t("library.detail.email.subject"), email.subject]);
+  if (email?.from) emailRows.push([t("library.detail.email.from"), email.from]);
+  if (email?.date) emailRows.push([t("library.detail.email.sent"), formatMoment(L, email.date)]);
   return (
-    <section aria-label="The original text" className="rounded-lg bg-surface px-5 py-6 sm:px-10 sm:py-9">
+    <section aria-label={t("library.detail.textAria")} className="rounded-lg bg-surface px-5 py-6 sm:px-10 sm:py-9">
       {emailRows.length > 0 && <div className="mb-6 border-b border-line pb-4"><Details rows={emailRows} flush /></div>}
       {text.trim() ? (
         <div className="max-h-[78vh] overflow-y-auto">
@@ -206,7 +334,7 @@ function Original({ d }: { d: Detail }) {
             className="max-w-[68ch] whitespace-pre-wrap break-words text-[15px] leading-7" />
         </div>
       ) : (
-        <p className="text-sm text-muted">{s.status === "ready" ? "No text was found in this file." : "The text appears here once the file has been read."}</p>
+        <p className="text-sm text-muted">{s.status === "ready" ? t("library.detail.noText") : t("library.detail.textLater")}</p>
       )}
     </section>
   );
@@ -226,37 +354,39 @@ function Details({ rows, flush = false }: { rows: [string, React.ReactNode][]; f
 }
 
 /** For PDFs and photos: the words read out of the file, passage by passage, so a citation has somewhere to point. */
-function ReadText({ d }: { d: Detail }) {
+function ReadText({ L, d }: { L: Lx; d: Detail }) {
+  const { t } = L;
   const s = d.source;
   if (s.category !== "pdf" && s.category !== "image") return null;
   if (d.chunks.length === 0) {
     if (s.category === "image") return null;
     return (
       <section>
-        <h2 className="mb-2 text-lg font-semibold tracking-[-0.01em]">Text read from the PDF</h2>
-        <p className="text-sm text-muted">{s.status === "ready" ? "No text was found. If this is a scan, the words may be too faint to read." : "The text appears here once the file has been read."}</p>
+        <h2 className="mb-2 text-lg font-semibold tracking-[-0.01em]">{t("library.detail.pdfText")}</h2>
+        <p className="text-sm text-muted">{s.status === "ready" ? t("library.detail.pdfNoText") : t("library.detail.textLater")}</p>
       </section>
     );
   }
   return (
     <section>
-      <h2 className="mb-4 text-lg font-semibold tracking-[-0.01em]">{s.category === "pdf" ? "Text read from the PDF" : "What was read from the photo"}</h2>
-      <PassageList chunks={d.chunks.map((c) => ({ id: c.id, text: c.text, label: passageLabel(c) }))} />
+      <h2 className="mb-4 text-lg font-semibold tracking-[-0.01em]">{s.category === "pdf" ? t("library.detail.pdfText") : t("library.detail.photoText")}</h2>
+      <PassageList chunks={d.chunks.map((c) => ({ id: c.id, text: c.text, label: passageLabel(L, c) }))} />
     </section>
   );
 }
 
-function passageLabel(c: Chunk): string {
-  if (c.locator.page !== undefined) return `Page ${c.locator.page}`;
-  if (c.locator.timeStartSec !== undefined) return `From ${formatTime(c.locator.timeStartSec)}`;
-  return `Passage ${c.idx + 1}`;
+function passageLabel(L: Lx, c: Chunk): string {
+  if (c.locator.page !== undefined) return L.t("library.detail.page", { n: c.locator.page });
+  if (c.locator.timeStartSec !== undefined) return L.t("library.detail.fromTime", { time: formatTime(c.locator.timeStartSec) });
+  return L.t("library.detail.passage", { n: c.idx + 1 });
 }
 
-/* ── What the brain learned ───────────────────────────────────────────────────────────────────────────────── */
+/* ── What reading the file found ───────────────────────────────────────────────────────────────────────────────── */
 
-function Learned({ d, busy, stuck, reminders, label }: { d: Detail; busy: boolean; stuck: boolean; reminders: ReminderDTO[]; label: (k: string) => string }) {
+function Learned({ L, d, busy, stuck, reminders, label }: { L: Lx; d: Detail; busy: boolean; stuck: boolean; reminders: ReminderDTO[]; label: (k: string) => string }) {
+  const { t, family } = L;
   const s = d.source;
-  const note = s.status === "ready" ? extractionNote(s.extraction) : null;
+  const note = s.status === "ready" ? extractionNote(L, s.extraction) : null;
   const people = d.entities.filter((e) => e.type === "person");
   const events = d.entities.filter((e) => e.type === "event").sort((a, b) => (a.startAt ?? "9").localeCompare(b.startAt ?? "9"));
   const things = d.entities.filter((e) => e.type !== "person" && e.type !== "event");
@@ -265,27 +395,27 @@ function Learned({ d, busy, stuck, reminders, label }: { d: Detail; busy: boolea
 
   return (
     <section aria-labelledby="learned-h">
-      <h2 id="learned-h" className="scroll-mt-20 text-lg font-semibold tracking-[-0.01em]">Found in this file</h2>
+      <h2 id="learned-h" className="scroll-mt-20 text-lg font-semibold tracking-[-0.01em]">{t("library.detail.learned")}</h2>
 
       {/* Honest state first: is the reading done, and did it work? */}
       {busy && (
         <div role="status" className="mt-3 flex gap-2.5 rounded-lg bg-accent-tint px-4 py-3 text-sm text-accent">
           <LoaderCircle aria-hidden className="mt-0.5 size-4 shrink-0 motion-safe:animate-spin" />
-          <p>{s.status === "pending" ? "Waiting its turn to be read." : "Reading it now for people, places and dates."} This page fills in by itself.</p>
+          <p>{s.status === "pending" ? t("library.detail.pending") : t("library.detail.processing")} {t("library.detail.fillsIn")}</p>
         </div>
       )}
       {stuck && (
         <div role="status" className="mt-3 flex gap-2.5 rounded-lg bg-warn-tint px-4 py-3 text-sm text-warn">
           <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0" />
-          <p>Reading started a long time ago and seems to have stopped, probably at a restart.{s.isOwner ? " Use Read again below." : ""}</p>
+          <p>{t("library.detail.stuck")}{s.isOwner ? ` ${t("library.detail.stuckOwner")}` : ""}</p>
         </div>
       )}
       {s.status === "failed" && (
         <div role="alert" className="mt-3 flex gap-2.5 rounded-lg bg-danger-tint px-4 py-3 text-sm">
           <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0 text-danger" />
           <div>
-            <p className="font-medium text-danger">This file couldn&apos;t be read</p>
-            <p className="mt-0.5 text-fg/80">{s.error ?? "Something went wrong while reading it."}{s.isOwner ? " The original is safe. Use Read again below to retry." : ""}</p>
+            <p className="font-medium text-danger">{t("library.detail.failedTitle")}</p>
+            <p className="mt-0.5 text-fg/80">{s.error ?? t("library.detail.failedBody")}{s.isOwner ? ` ${t("library.detail.failedOwner")}` : ""}</p>
           </div>
         </div>
       )}
@@ -300,12 +430,16 @@ function Learned({ d, busy, stuck, reminders, label }: { d: Detail; busy: boolea
 
       {nothing ? (
         !busy && s.status === "ready" && !note && (
-          <p className="mt-3 text-sm text-muted">Nobody and nothing in it was stated plainly enough to add to the family&apos;s graph.</p>
+          <p className="mt-3 text-sm text-muted">
+            {d.proposal && d.proposal.total > 0
+              ? t("library.detail.waitingInProposal")
+              : t(family ? "library.detail.nothingFamily" : "library.detail.nothing")}
+          </p>
         )
       ) : (
         <div className="mt-5 space-y-7">
           {people.length > 0 && (
-            <Group title="People" count={people.length}>
+            <Group title={t("library.detail.people")} count={people.length}>
               <ul className="flex flex-wrap gap-1.5">
                 {people.map((p) => <li key={p.id}><PersonChip id={p.id} name={p.label} href={`/node/${p.id}`} /></li>)}
               </ul>
@@ -313,13 +447,13 @@ function Learned({ d, busy, stuck, reminders, label }: { d: Detail; busy: boolea
           )}
 
           {events.length > 0 && (
-            <Group title="Dates" count={events.length}>
+            <Group title={t("library.detail.dates")} count={events.length}>
               <ul>
                 {events.map((e) => (
                   <li key={e.id} className="flex gap-4 py-1.5">
                     <span className="w-[5.5rem] shrink-0 text-sm">
-                      {e.startAt ? <><span className="font-medium">{formatDay(e.startAt)}</span>{hasTime(e.startAt) && <span className="block text-xs text-muted">{format(new Date(e.startAt), "HH:mm")}</span>}</>
-                        : <span className="text-muted">No date</span>}
+                      {e.startAt ? <><span className="font-medium">{formatDay(L, e.startAt)}</span>{timeOfDay(L, e.startAt) && <span className="block text-xs text-muted">{timeOfDay(L, e.startAt)}</span>}</>
+                        : <span className="text-muted">{t("library.detail.noDate")}</span>}
                     </span>
                     <span className="min-w-0 text-sm">
                       <Link href={`/node/${e.id}`} className="font-medium hover:underline">{e.label}</Link>
@@ -332,16 +466,16 @@ function Learned({ d, busy, stuck, reminders, label }: { d: Detail; busy: boolea
           )}
 
           {reminders.length > 0 && (
-            <Group title="Reminders made from it" count={reminders.length}>
+            <Group title={t("library.detail.reminders")} count={reminders.length}>
               <ul>
                 {reminders.map((r) => (
                   <li key={r.id} className="flex gap-2.5 py-1.5 text-sm">
-                    {r.done ? <CircleCheck aria-label="Done" className="mt-0.5 size-4 shrink-0 text-muted" /> : <Bell aria-hidden className="mt-0.5 size-4 shrink-0 text-warn" />}
+                    {r.done ? <CircleCheck aria-label={t("library.detail.done")} className="mt-0.5 size-4 shrink-0 text-muted" /> : <Bell aria-hidden className="mt-0.5 size-4 shrink-0 text-warn" />}
                     <span className="min-w-0">
                       <span className={r.done ? "text-muted line-through" : "font-medium"}>{r.title}</span>
                       <span className="block text-xs text-muted">
-                        {r.done ? "Done" : `Due ${formatDay(r.dueAt)}`}{r.aboutLabel ? `, about ${r.aboutLabel}` : ""}
-                        {r.createdByKind === "assistant" && <span className="text-inferred"> (suggested by the assistant)</span>}
+                        {r.done ? t("library.detail.done") : t("library.detail.due", { day: formatDay(L, r.dueAt) })}{r.aboutLabel ? t("library.detail.about", { label: r.aboutLabel }) : ""}
+                        {r.createdByKind === "assistant" && <span className="text-inferred">{t("library.detail.suggested")}</span>}
                       </span>
                     </span>
                   </li>
@@ -351,7 +485,7 @@ function Learned({ d, busy, stuck, reminders, label }: { d: Detail; busy: boolea
           )}
 
           {things.length > 0 && (
-            <Group title="Places and topics" count={things.length}>
+            <Group title={t(family ? "library.detail.things" : "library.detail.thingsGraph")} count={things.length}>
               <ul className="flex flex-wrap gap-1.5">
                 {things.map((e) => <li key={e.id}><NodeChip type={e.type} label={e.label} href={`/node/${e.id}`} /></li>)}
               </ul>
@@ -359,10 +493,10 @@ function Learned({ d, busy, stuck, reminders, label }: { d: Detail; busy: boolea
           )}
 
           {d.facts.length > 0 && (
-            <Group title="How it all connects" count={d.facts.length}
-              hint="Press a citation to see the words it was read from.">
+            <Group title={t("library.detail.connects")} count={d.facts.length}
+              hint={t("library.detail.connectsHint")}>
               <ul>
-                {d.facts.map((f) => <FactRow key={f.edgeId} f={f} relation={label(f.relation)} passage={f.chunkId ? chunkIdx.get(f.chunkId) : undefined} />)}
+                {d.facts.map((f) => <FactRow L={L} key={f.edgeId} f={f} relation={label(f.relation)} passage={f.chunkId ? chunkIdx.get(f.chunkId) : undefined} />)}
               </ul>
             </Group>
           )}
@@ -371,8 +505,6 @@ function Learned({ d, busy, stuck, reminders, label }: { d: Detail; busy: boolea
     </section>
   );
 }
-
-const hasTime = (iso: string) => { const t = format(new Date(iso), "HH:mm"); return t !== "00:00" && t !== "23:59"; };
 
 function Group({ title, count, hint, children }: { title: string; count: number; hint?: string; children: React.ReactNode }) {
   return (
@@ -391,14 +523,15 @@ function Name({ n }: { n: ExtractedFact["from"] }) {
   return <Link href={`/node/${n.id}`} className="font-medium hover:underline">{n.label}</Link>;
 }
 
-function citeTitle(f: ExtractedFact, passage: number | undefined): string {
-  if (f.locator.page !== undefined) return `Page ${f.locator.page}`;
-  if (f.locator.timeStartSec !== undefined) return `At ${formatTime(f.locator.timeStartSec)}`;
-  if (passage !== undefined) return `Passage ${passage + 1}`;
-  return "In the text";
+function citeTitle(L: Lx, f: ExtractedFact, passage: number | undefined): string {
+  if (f.locator.page !== undefined) return L.t("library.detail.page", { n: f.locator.page });
+  if (f.locator.timeStartSec !== undefined) return L.t("library.detail.atTime", { time: formatTime(f.locator.timeStartSec) });
+  if (passage !== undefined) return L.t("library.detail.passage", { n: passage + 1 });
+  return L.t("library.detail.inText");
 }
 
-function FactRow({ f, relation, passage }: { f: ExtractedFact; relation: string; passage?: number }) {
+function FactRow({ L, f, relation, passage }: { L: Lx; f: ExtractedFact; relation: string; passage?: number }) {
+  const { t } = L;
   return (
     <li className="border-b border-line py-3 first:pt-1 last:border-0">
       <p className="text-sm leading-7">
@@ -406,11 +539,11 @@ function FactRow({ f, relation, passage }: { f: ExtractedFact; relation: string;
       </p>
       {f.quote && <p className="mt-0.5 text-sm text-muted">&ldquo;{f.quote}&rdquo;</p>}
       <div className="mt-1.5 flex flex-wrap items-center gap-2">
-        <CiteButton title={citeTitle(f, passage)} confidence={f.confidence}
+        <CiteButton title={citeTitle(L, f, passage)} confidence={f.confidence}
           target={{ key: f.edgeId, quote: f.quote, chunkId: f.chunkId, page: f.locator.page, time: f.locator.timeStartSec, charStart: f.locator.charStart, charEnd: f.locator.charEnd }} />
-        {f.status === "inferred" && <span className="text-xs text-inferred">Inferred, not confirmed</span>}
-        {f.status === "unconfirmed" && <span className="text-xs text-warn">Needs checking</span>}
-        {f.status !== "inferred" && f.status !== "unconfirmed" && f.status !== "confirmed" && <span className="text-xs text-muted">{f.status}</span>}
+        {f.status === "inferred" && <span className="text-xs text-inferred">{t("library.detail.inferred")}</span>}
+        {f.status === "unconfirmed" && <span className="text-xs text-warn">{t("library.detail.unconfirmed")}</span>}
+        {f.status !== "inferred" && f.status !== "unconfirmed" && f.status !== "confirmed" && <span className="text-xs text-muted">{t(`library.detail.factStatus.${f.status}`, undefined, f.status)}</span>}
       </div>
     </li>
   );

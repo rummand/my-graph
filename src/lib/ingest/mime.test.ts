@@ -27,7 +27,14 @@ describe("detectFileType", () => {
     const xlsx = detectFileType("Budget.xlsx", "", zip);
     expect(xlsx.ok).toBe(false);
     if (!xlsx.ok) expect(xlsx.reason).toMatch(/spreadsheet/);
-    expect(detectFileType("stuff.zip", "", zip)).toMatchObject({ ok: false });
+    // A .zip is a mail import (its .eml files are read); a zip under another name is still refused.
+    expect(detectFileType("mail.zip", "", zip)).toMatchObject({ ok: true, kind: "archive", mime: "application/zip" });
+    expect(detectFileType("stuff.bin", "", zip)).toMatchObject({ ok: false });
+  });
+
+  it("accepts a mailbox (.mbox) as a mail import", () => {
+    const mbox = new TextEncoder().encode("From a@x.dk Tue Nov  3 08:15:00 2026\nSubject: hi\n\nbody\n");
+    expect(detectFileType("Inbox.mbox", "", mbox)).toMatchObject({ ok: true, kind: "mailbox", mime: "application/mbox" });
   });
 
   it("accepts text formats by extension when the bytes are text", () => {
@@ -70,6 +77,8 @@ describe("helpers", () => {
     expect(mimeCategory(null)).toBe("other");
     expect(kindFromMime("message/rfc822")).toBe("email");
     expect(kindFromMime("text/csv")).toBe("text");
-    expect(kindFromMime("application/zip")).toBeNull();
+    expect(kindFromMime("application/zip")).toBe("archive");
+    expect(kindFromMime("application/mbox")).toBe("mailbox");
+    expect(kindFromMime("application/octet-stream")).toBeNull();
   });
 });

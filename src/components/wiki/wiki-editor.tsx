@@ -1,7 +1,7 @@
 "use client";
 /**
  * The page editor: TipTap with headings, lists, checklists, quotes, code and links, plus two suggestion triggers:
- *   @   mention a person, place, event or topic from the graph (GET /api/nodes?q=)
+ *   @   mention anything in the current graph: the shared @mention typeahead (src/components/mention, GET /api/mentions)
  *   [[  link to another wiki page (GET /api/wiki?q=), or create one
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -16,7 +16,10 @@ import { clsx } from "clsx";
 import {
   AtSign, Bold, Code, FileText, Heading2, Heading3, Italic, Link2, List, ListChecks, ListOrdered, Plus, Quote, Redo2, Sparkles, SquareCode, Strikethrough, Undo2,
 } from "lucide-react";
-import { Avatar, Button } from "@/components/ui";
+import { Button } from "@/components/ui";
+import { graphMention } from "@/components/mention/tiptap";
+import { useT } from "@/lib/i18n/client";
+import type { TFn } from "@/lib/i18n/core";
 import type { Doc } from "@/lib/wiki/doc";
 import type { Visibility } from "@/lib/wiki/labels";
 import { CowritePanel, savedDocOf, type AcceptInfo, type AcceptResult } from "./cowrite/cowrite-panel";
@@ -25,23 +28,7 @@ import { mentionChip, PAGE_LINK_CLASS, PROSE } from "./prose";
 
 /* ── Suggestion data ───────────────────────────────────────────────────────────────────────────────────── */
 
-type NodeItem = { kind: "node"; id: string; label: string; type: string };
 type PageItem = { kind: "page"; id: string; label: string; slug: string } | { kind: "create"; label: string };
-type Item = NodeItem | PageItem;
-
-const TYPE_LABEL: Record<string, string> = { person: "Person", place: "Place", event: "Event", topic: "Topic", document: "Document", source: "Source" };
-
-async function fetchNodes(q: string): Promise<NodeItem[]> {
-  if (!q.trim()) return [];
-  try {
-    const res = await fetch(`/api/nodes?q=${encodeURIComponent(q)}&limit=8`, { headers: { accept: "application/json" } });
-    if (!res.ok) return [];
-    const data = (await res.json()) as { nodes?: { id: string; type: string; label: string }[] };
-    return (data.nodes ?? []).filter((n) => n.type !== "source").slice(0, 8).map((n) => ({ kind: "node", id: n.id, label: n.label, type: n.type }));
-  } catch {
-    return [];
-  }
-}
 
 async function fetchPages(q: string, excludeId: string): Promise<PageItem[]> {
   let pages: PageItem[] = [];
@@ -61,9 +48,11 @@ async function fetchPages(q: string, excludeId: string): Promise<PageItem[]> {
 
 /* ── Suggestion popup ──────────────────────────────────────────────────────────────────────────────────── */
 
-type Popup = { trigger: "@" | "[["; items: Item[]; query: string; rect: DOMRect | null; select: (item: Item) => void };
+type Popup = { items: PageItem[]; query: string; rect: DOMRect | null; select: (item: PageItem) => void };
 
+/** The [[ page-link list. (@ uses the shared mention menu.) */
 function SuggestionList({ popup, index, onHover, listId }: { popup: Popup; index: number; onHover: (i: number) => void; listId: string }) {
+  const t = useT();
   const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number } | null>(null);
   useEffect(() => {
     if (!popup.rect) return;
@@ -76,34 +65,21 @@ function SuggestionList({ popup, index, onHover, listId }: { popup: Popup; index
       : { top: popup.rect.bottom + 8, left });
   }, [popup.rect]);
 
-  const mention = popup.trigger === "@";
-  const empty = mention
-    ? popup.query.trim() ? `Nobody and nothing called “${popup.query}” yet.` : "Start typing a name."
-    : "No other pages yet. Keep typing to make one.";
 
   return (
     <div className="fixed z-50 w-[min(320px,calc(100vw-16px))] rounded-lg bg-surface p-1.5 font-sans shadow-float"
       style={pos ?? { visibility: "hidden" }}>
-      <p className="px-2.5 pb-1 pt-1 text-xs text-muted">{mention ? "Mention a person, place or event" : "Link to a page"}</p>
-      <div role="listbox" id={listId} aria-label={mention ? "Mention from the graph" : "Link to a page"} className="max-h-64 overflow-y-auto">
-        {popup.items.length === 0 && <p className="px-2.5 py-2 text-sm text-muted">{empty}</p>}
+      <p className="px-2.5 pb-1 pt-1 text-xs text-muted">{t("wiki.editor.pages.title")}</p>
+      <div role="listbox" id={listId} aria-label={t("wiki.editor.pages.title")} className="max-h-64 overflow-y-auto">
+        {popup.items.length === 0 && <p className="px-2.5 py-2 text-sm text-muted">{t("wiki.editor.pages.empty")}</p>}
         {popup.items.map((item, i) => {
           const on = i === index;
           return (
             <button key={item.kind === "create" ? "create" : item.id} type="button" role="option" aria-selected={on} id={`${listId}-${i}`}
               onMouseDown={(e) => { e.preventDefault(); popup.select(item); }} onMouseEnter={() => onHover(i)}
               className={clsx("flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm", on ? "bg-surface-2 text-fg" : "text-fg")}>
-              {item.kind === "node" && (
-                <>
-                  {item.type === "person"
-                    ? <Avatar id={item.id} name={item.label} size={22} />
-                    : <span className="flex size-[22px] shrink-0 items-center justify-center" aria-hidden><span className="size-2 rounded-full" style={{ background: `var(--t-${item.type}, var(--muted))` }} /></span>}
-                  <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                  <span className="shrink-0 text-xs text-muted">{TYPE_LABEL[item.type] ?? item.type}</span>
-                </>
-              )}
               {item.kind === "page" && (<><FileText aria-hidden className="size-4 shrink-0 text-muted" /><span className="min-w-0 flex-1 truncate">{item.label}</span></>)}
-              {item.kind === "create" && (<><Plus aria-hidden className="size-4 shrink-0 text-accent" /><span className="min-w-0 flex-1 truncate">New page called <span className="font-medium">{item.label}</span></span></>)}
+              {item.kind === "create" && (<><Plus aria-hidden className="size-4 shrink-0 text-accent" /><span className="min-w-0 flex-1 truncate">{t("wiki.editor.pages.newCalled")} <span className="font-medium">{item.label}</span></span></>)}
             </button>
           );
         })}
@@ -115,7 +91,8 @@ function SuggestionList({ popup, index, onHover, listId }: { popup: Popup; index
 /* ── Toolbar ───────────────────────────────────────────────────────────────────────────────────────────── */
 
 function ToolButton({ label, keys, active, disabled, onClick, children }: { label: string; keys?: string; active?: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
-  const tip = keys ? `${label} (${keys})` : label;
+  const t = useT();
+  const tip = keys ? t("wiki.editor.tip", { label, keys }) : label;
   return (
     <button type="button" aria-label={label} title={tip} aria-pressed={active} disabled={disabled}
       onMouseDown={(e) => e.preventDefault()} onClick={onClick}
@@ -130,6 +107,7 @@ const Gap = () => <span aria-hidden className="w-2 shrink-0" />;
 
 /** A small popover under the toolbar for adding, changing or removing a link (instead of the browser's prompt). */
 function LinkEditor({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+  const t = useT();
   const prev = editor.getAttributes("link").href as string | undefined;
   const [url, setUrl] = useState(prev ?? "");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -145,11 +123,11 @@ function LinkEditor({ editor, onClose }: { editor: Editor; onClose: () => void }
   return (
     <form onSubmit={apply} onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); editor.commands.focus(); onClose(); } }}
       className="absolute left-2 top-[calc(100%+6px)] z-20 flex w-[min(26rem,calc(100vw-3rem))] items-center gap-1.5 rounded-lg bg-surface p-1.5 shadow-float">
-      <label htmlFor="wiki-link-url" className="sr-only">Link address</label>
-      <input id="wiki-link-url" ref={inputRef} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="Paste or type a link"
+      <label htmlFor="wiki-link-url" className="sr-only">{t("wiki.editor.link.address")}</label>
+      <input id="wiki-link-url" ref={inputRef} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t("wiki.editor.link.placeholder")}
         className="h-8 min-w-0 flex-1 rounded-md bg-surface-2 px-2.5 text-sm outline-none placeholder:text-muted focus:ring-2 focus:ring-accent" />
-      <Button type="submit" size="sm">{prev ? "Update" : "Add link"}</Button>
-      {prev && <Button type="button" size="sm" variant="ghost" onClick={() => { editor.chain().focus().extendMarkRange("link").unsetLink().run(); onClose(); }}>Remove</Button>}
+      <Button type="submit" size="sm">{prev ? t("wiki.editor.link.update") : t("wiki.editor.link.add")}</Button>
+      {prev && <Button type="button" size="sm" variant="ghost" onClick={() => { editor.chain().focus().extendMarkRange("link").unsetLink().run(); onClose(); }}>{t("wiki.editor.link.remove")}</Button>}
     </form>
   );
 }
@@ -158,6 +136,8 @@ function Toolbar({ editor, end, onAsk }: { editor: Editor; end?: ReactNode; onAs
   // Re-render on selection/content changes so active states stay correct.
   const [, force] = useState(0);
   const [linking, setLinking] = useState(false);
+  const t = useT();
+  const L = (k: string) => t(`wiki.editor.tools.${k}`);
   useEffect(() => {
     const f = () => force((n) => n + 1);
     editor.on("transaction", f);
@@ -169,28 +149,28 @@ function Toolbar({ editor, end, onAsk }: { editor: Editor; end?: ReactNode; onAs
   return (
     <div className="sticky top-[56px] z-20 rounded-t-lg bg-surface lg:top-0">
       <div className="flex items-center gap-3 border-b border-line px-3 py-2 sm:px-6">
-        <div role="toolbar" aria-label="Formatting" className="-my-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto py-1 [scrollbar-width:none]">
-          <ToolButton label="Heading" keys="Ctrl+Alt+2" active={editor.isActive("heading", { level: 2 })} onClick={() => c().toggleHeading({ level: 2 }).run()}><Heading2 className={icon} /></ToolButton>
-          <ToolButton label="Subheading" keys="Ctrl+Alt+3" active={editor.isActive("heading", { level: 3 })} onClick={() => c().toggleHeading({ level: 3 }).run()}><Heading3 className={icon} /></ToolButton>
+        <div role="toolbar" aria-label={t("wiki.editor.toolbar")} className="-my-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto py-1 [scrollbar-width:none]">
+          <ToolButton label={L("heading")} keys="Ctrl+Alt+2" active={editor.isActive("heading", { level: 2 })} onClick={() => c().toggleHeading({ level: 2 }).run()}><Heading2 className={icon} /></ToolButton>
+          <ToolButton label={L("subheading")} keys="Ctrl+Alt+3" active={editor.isActive("heading", { level: 3 })} onClick={() => c().toggleHeading({ level: 3 }).run()}><Heading3 className={icon} /></ToolButton>
           <Gap />
-          <ToolButton label="Bold" keys="Ctrl+B" active={editor.isActive("bold")} onClick={() => c().toggleBold().run()}><Bold className={icon} /></ToolButton>
-          <ToolButton label="Italic" keys="Ctrl+I" active={editor.isActive("italic")} onClick={() => c().toggleItalic().run()}><Italic className={icon} /></ToolButton>
-          <ToolButton label="Strikethrough" keys="Ctrl+Shift+S" active={editor.isActive("strike")} onClick={() => c().toggleStrike().run()}><Strikethrough className={icon} /></ToolButton>
-          <ToolButton label="Inline code" keys="Ctrl+E" active={editor.isActive("code")} onClick={() => c().toggleCode().run()}><Code className={icon} /></ToolButton>
-          <ToolButton label="Link" active={editor.isActive("link") || linking} onClick={() => setLinking((v) => !v)}><Link2 className={icon} /></ToolButton>
+          <ToolButton label={L("bold")} keys="Ctrl+B" active={editor.isActive("bold")} onClick={() => c().toggleBold().run()}><Bold className={icon} /></ToolButton>
+          <ToolButton label={L("italic")} keys="Ctrl+I" active={editor.isActive("italic")} onClick={() => c().toggleItalic().run()}><Italic className={icon} /></ToolButton>
+          <ToolButton label={L("strike")} keys="Ctrl+Shift+S" active={editor.isActive("strike")} onClick={() => c().toggleStrike().run()}><Strikethrough className={icon} /></ToolButton>
+          <ToolButton label={L("code")} keys="Ctrl+E" active={editor.isActive("code")} onClick={() => c().toggleCode().run()}><Code className={icon} /></ToolButton>
+          <ToolButton label={L("link")} active={editor.isActive("link") || linking} onClick={() => setLinking((v) => !v)}><Link2 className={icon} /></ToolButton>
           <Gap />
-          <ToolButton label="Bulleted list" active={editor.isActive("bulletList")} onClick={() => c().toggleBulletList().run()}><List className={icon} /></ToolButton>
-          <ToolButton label="Numbered list" active={editor.isActive("orderedList")} onClick={() => c().toggleOrderedList().run()}><ListOrdered className={icon} /></ToolButton>
-          <ToolButton label="Checklist" active={editor.isActive("taskList")} onClick={() => c().toggleTaskList().run()}><ListChecks className={icon} /></ToolButton>
-          <ToolButton label="Quote" active={editor.isActive("blockquote")} onClick={() => c().toggleBlockquote().run()}><Quote className={icon} /></ToolButton>
-          <ToolButton label="Code block" active={editor.isActive("codeBlock")} onClick={() => c().toggleCodeBlock().run()}><SquareCode className={icon} /></ToolButton>
+          <ToolButton label={L("bullets")} active={editor.isActive("bulletList")} onClick={() => c().toggleBulletList().run()}><List className={icon} /></ToolButton>
+          <ToolButton label={L("numbers")} active={editor.isActive("orderedList")} onClick={() => c().toggleOrderedList().run()}><ListOrdered className={icon} /></ToolButton>
+          <ToolButton label={L("checklist")} active={editor.isActive("taskList")} onClick={() => c().toggleTaskList().run()}><ListChecks className={icon} /></ToolButton>
+          <ToolButton label={L("quote")} active={editor.isActive("blockquote")} onClick={() => c().toggleBlockquote().run()}><Quote className={icon} /></ToolButton>
+          <ToolButton label={L("codeBlock")} active={editor.isActive("codeBlock")} onClick={() => c().toggleCodeBlock().run()}><SquareCode className={icon} /></ToolButton>
           <Gap />
-          <ToolButton label="Mention someone" keys="@" onClick={() => c().insertContent(" @").run()}><AtSign className={icon} /></ToolButton>
-          <ToolButton label="Link another page" keys="[[" onClick={() => c().insertContent(" [[").run()}><FileText className={icon} /></ToolButton>
-          {onAsk && <><Gap /><ToolButton label="Ask the assistant to write" keys="Ctrl+J" onClick={onAsk}><Sparkles className={clsx(icon, "text-accent")} /></ToolButton></>}
+          <ToolButton label={L("mention")} keys="@" onClick={() => c().insertContent(" @").run()}><AtSign className={icon} /></ToolButton>
+          <ToolButton label={L("pageLink")} keys="[[" onClick={() => c().insertContent(" [[").run()}><FileText className={icon} /></ToolButton>
+          {onAsk && <><Gap /><ToolButton label={L("ask")} keys="Ctrl+J" onClick={onAsk}><Sparkles className={clsx(icon, "text-accent")} /></ToolButton></>}
           <Gap />
-          <ToolButton label="Undo" keys="Ctrl+Z" disabled={!editor.can().undo()} onClick={() => c().undo().run()}><Undo2 className={icon} /></ToolButton>
-          <ToolButton label="Redo" keys="Ctrl+Shift+Z" disabled={!editor.can().redo()} onClick={() => c().redo().run()}><Redo2 className={icon} /></ToolButton>
+          <ToolButton label={L("undo")} keys="Ctrl+Z" disabled={!editor.can().undo()} onClick={() => c().undo().run()}><Undo2 className={icon} /></ToolButton>
+          <ToolButton label={L("redo")} keys="Ctrl+Shift+Z" disabled={!editor.can().redo()} onClick={() => c().redo().run()}><Redo2 className={icon} /></ToolButton>
         </div>
         {end && <div className="flex shrink-0 items-center gap-3">{end}</div>}
       </div>
@@ -204,6 +184,8 @@ function Toolbar({ editor, end, onAsk }: { editor: Editor; end?: ReactNode; onAs
 export type WikiEditorProps = {
   pageId: string;
   pageVisibility: Visibility;
+  /** A family graph: family wording and examples in co-writing. */
+  family?: boolean;
   initialContent: Doc;
   onChange: (doc: Doc) => void;
   onReady?: (editor: Editor) => void;
@@ -222,7 +204,10 @@ export type WikiEditorProps = {
   };
 };
 
-export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, onReady, labelledBy, toolbarEnd, children, cowrite }: WikiEditorProps) {
+export function WikiEditor({ pageId, pageVisibility, family = false, initialContent, onChange, onReady, labelledBy, toolbarEnd, children, cowrite }: WikiEditorProps) {
+  const t = useT();
+  const tRef = useRef<TFn>(t);
+  tRef.current = t;
   const [popup, setPopup] = useState<Popup | null>(null);
   const [asking, setAsking] = useState(false);
   const openSignal = cowrite?.openSignal ?? 0;
@@ -244,14 +229,14 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
   };
   const move = (i: number) => { indexRef.current = i; setIndex(i); };
 
-  /** Lifecycle shared by both triggers: mirror suggestion state into React and handle the keyboard. */
-  const renderer = (trigger: "@" | "[[") => () => ({
-    onStart: (props: SuggestionProps<Item, MentionNodeAttrs>) => {
+  /** The [[ suggestion lifecycle: mirror its state into React and handle the keyboard. */
+  const renderer = () => () => ({
+    onStart: (props: SuggestionProps<PageItem, MentionNodeAttrs>) => {
       indexRef.current = 0; setIndex(0);
-      show({ trigger, items: props.items, query: props.query, rect: props.clientRect?.() ?? null, select: (item) => props.command(item as never) });
+      show({ items: props.items, query: props.query, rect: props.clientRect?.() ?? null, select: (item) => props.command(item as never) });
     },
-    onUpdate: (props: SuggestionProps<Item, MentionNodeAttrs>) => {
-      show({ trigger, items: props.items, query: props.query, rect: props.clientRect?.() ?? null, select: (item) => props.command(item as never) });
+    onUpdate: (props: SuggestionProps<PageItem, MentionNodeAttrs>) => {
+      show({ items: props.items, query: props.query, rect: props.clientRect?.() ?? null, select: (item) => props.command(item as never) });
     },
     onKeyDown: ({ event }: SuggestionKeyDownProps) => {
       const p = popupRef.current;
@@ -278,35 +263,15 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
       TaskItem.configure({ nested: true }),
       Cowrite,
       Placeholder.configure({
-        placeholder: ({ node }) => node.type.name === "heading" ? "Heading" : "Start writing. Type @ to mention someone, [[ to link another page.",
+        placeholder: ({ node }) => node.type.name === "heading" ? tRef.current("wiki.editor.heading") : tRef.current("wiki.editor.placeholder"),
         emptyEditorClass: "is-editor-empty",
       }),
-      Mention.extend({
-        addAttributes() {
-          return {
-            ...this.parent?.(),
-            nodeType: { default: null, parseHTML: (el: HTMLElement) => el.getAttribute("data-node-type"), renderHTML: (a: Record<string, unknown>) => (a.nodeType ? { "data-node-type": a.nodeType } : {}) },
-          };
-        },
-      }).configure({
-        renderText: ({ node }) => `@${node.attrs.label ?? ""}`,
+      // The shared @mention: same typeahead and markup as the chat composer. The chip keeps the wiki's look so
+      // writing matches reading (PersonChip / NodeChip in the read view).
+      graphMention().configure({
         renderHTML: ({ options, node }) => {
           const chip = mentionChip(String(node.attrs.id ?? ""), node.attrs.nodeType as string | null);
-          return ["span", mergeAttributes(options.HTMLAttributes, chip), String(node.attrs.label ?? "")];
-        },
-        suggestion: {
-          char: "@",
-          allowSpaces: false,
-          pluginKey: new PluginKey("wikiMention"),
-          items: ({ query }) => fetchNodes(query),
-          command: ({ editor, range, props }) => {
-            const item = props as unknown as NodeItem;
-            editor.chain().focus().insertContentAt(range, [
-              { type: "mention", attrs: { id: item.id, label: item.label, nodeType: item.type } },
-              { type: "text", text: " " },
-            ]).run();
-          },
-          render: renderer("@"),
+          return ["span", mergeAttributes(options.HTMLAttributes, { "data-node-id": String(node.attrs.id ?? "") }, chip), String(node.attrs.label ?? "")];
         },
       }),
       Mention.extend({
@@ -345,15 +310,15 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
                   body: JSON.stringify({ title: item.label, visibility: visibilityRef.current }),
                 });
                 const data = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(data.error ?? "Couldn't create the page.");
+                if (!res.ok) throw new Error(data.error ?? tRef.current("wiki.editor.pages.createFailed"));
                 insert({ id: data.page.id, label: data.page.title, slug: data.page.slug });
-                setNotice(`Created the page “${data.page.title}”. It's empty for now.`);
+                setNotice(tRef.current("wiki.editor.pages.created", { title: data.page.title }));
               } catch (e) {
-                setNotice(e instanceof Error ? e.message : "Couldn't create the page.");
+                setNotice(e instanceof Error ? e.message : tRef.current("wiki.editor.pages.createFailed"));
               }
             })();
           },
-          render: renderer("[["),
+          render: renderer(),
         },
       }),
     ],
@@ -365,7 +330,7 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
         // Writing on the page itself: the caret shows focus, not a ring around the whole text.
         style: "outline: none",
         "aria-multiline": "true",
-        ...(labelledBy ? { "aria-labelledby": labelledBy } : { "aria-label": "Page text" }),
+        ...(labelledBy ? { "aria-labelledby": labelledBy } : { "aria-label": tRef.current("wiki.editor.pageText") }),
       },
     },
     // Autosave never stores the assistant's draft: only the person's own text, until they accept the draft.
@@ -402,7 +367,7 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
         <div className={sheet}>
           {children}
           <div className="mt-6 max-w-[68ch] space-y-3">{[92, 100, 76].map((w) => <div key={w} className="h-4 animate-pulse rounded bg-surface-2" style={{ width: `${w}%` }} />)}</div>
-          <span className="sr-only">Loading the editor…</span>
+          <span className="sr-only">{t("wiki.editor.loading")}</span>
         </div>
       </div>
     );
@@ -415,7 +380,7 @@ export function WikiEditor({ pageId, pageVisibility, initialContent, onChange, o
         <EditorContent editor={editor} className="mt-6" />
       </div>
       {cowrite && (
-        <CowritePanel editor={editor} slug={cowrite.slug} pageVisibility={pageVisibility} open={asking} onOpenChange={setAsking}
+        <CowritePanel editor={editor} slug={cowrite.slug} pageVisibility={pageVisibility} family={family} open={asking} onOpenChange={setAsking}
           onAccept={cowrite.onAccept} onPendingChange={cowrite.onPendingChange} />
       )}
       {popup && <SuggestionList popup={popup} index={index} onHover={move} listId={listId} />}

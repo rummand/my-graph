@@ -18,7 +18,9 @@ import { extractMentions, extractPageLinks, type Doc, type DocNode } from "@/lib
 import type { Visibility } from "@/lib/wiki/labels";
 import { citeHref, docToMarkdown, markdownToBlocks, newTerms, wordCount, type KnownRefs } from "@/lib/wiki/cowrite/markdown";
 import { beginEdit, blocksToFragment, docWithoutEdit, renderInto, revertEdit } from "@/lib/wiki/cowrite/pending";
-import { sensitivityWarning, type CowriteEvent, type CowriteMode, type CowriteSourceOut } from "@/lib/wiki/cowrite/prompt";
+import type { CowriteEvent, CowriteMode, CowriteSourceOut } from "@/lib/wiki/cowrite/prompt";
+import { useT } from "@/lib/i18n/client";
+import { cowriteExamples, cowriteWarning } from "../copy";
 import { asAssistant, getCowrite } from "./extension";
 
 export type AcceptInfo = { instruction: string; mode: CowriteMode; words: number; sourceCount: number; usedNarrower: boolean };
@@ -29,17 +31,7 @@ type Phase = "closed" | "composing" | "writing" | "review";
 const IDLE_FOLLOW_MS = 3000;
 const RENDER_EVERY_MS = 90;
 
-const EXAMPLES: Record<CowriteMode, string[]> = {
-  insert: ["Draft a packing list for the summer house from last year's trip", "Add a section with the important dates this term"],
-  rewrite: ["Make this shorter and clearer", "Turn this into a checklist"],
-  page: ["Update this page with the new school times", "Tidy this page up and add headings"],
-};
-
-const MODE_OPTIONS: { mode: CowriteMode; label: string; short: string }[] = [
-  { mode: "insert", label: "New section here", short: "New section" },
-  { mode: "rewrite", label: "Rewrite selection", short: "Selection" },
-  { mode: "page", label: "Whole page", short: "Whole page" },
-];
+const MODES: CowriteMode[] = ["insert", "rewrite", "page"];
 
 function useReducedMotion() {
   const [r, setR] = useState(false);
@@ -53,10 +45,12 @@ function useReducedMotion() {
   return r;
 }
 
-export function CowritePanel({ editor, slug, pageVisibility, open, onOpenChange, onAccept, onPendingChange }: {
+export function CowritePanel({ editor, slug, pageVisibility, family = false, open, onOpenChange, onAccept, onPendingChange }: {
   editor: Editor;
   slug: string;
   pageVisibility: Visibility;
+  /** A family graph: family examples and wording. */
+  family?: boolean;
   /** Ask to show the composer (the toolbar button, Ctrl+J, or "Ask the assistant" on the read view). */
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -64,6 +58,7 @@ export function CowritePanel({ editor, slug, pageVisibility, open, onOpenChange,
   onAccept: (fullDoc: Doc, info: AcceptInfo) => Promise<AcceptResult>;
   onPendingChange?: (pending: boolean) => void;
 }) {
+  const t = useT();
   const [phase, setPhase] = useState<Phase>("closed");
   const [instruction, setInstruction] = useState("");
   const [mode, setMode] = useState<CowriteMode>("insert");
@@ -197,10 +192,10 @@ export function CowritePanel({ editor, slug, pageVisibility, open, onOpenChange,
   const start = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const ask = instruction.trim();
-    if (ask.length < 3) { setError("Tell the assistant what to write."); inputRef.current?.focus(); return; }
+    if (ask.length < 3) { setError(t("wiki.cowrite.tellWhat")); inputRef.current?.focus(); return; }
     const { state } = editor;
     const sel = state.selection;
-    if (mode === "rewrite" && sel.to <= sel.from) { setError("Select the text you want rewritten first, or choose another option."); return; }
+    if (mode === "rewrite" && sel.to <= sel.from) { setError(t("wiki.cowrite.selectRewrite")); return; }
 
     const edit = beginEdit(state.doc, mode, { from: sel.from, to: sel.to });
     const pageJson = state.doc.toJSON() as DocNode;
@@ -226,7 +221,7 @@ export function CowritePanel({ editor, slug, pageVisibility, open, onOpenChange,
       });
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? (res.status === 401 ? "You've been signed out. Sign in again, then ask again." : "The assistant couldn't write this. Try again."));
+        throw new Error(data.error ?? t(res.status === 401 ? "wiki.cowrite.signedOut" : "wiki.cowrite.failed"));
       }
       const reader = res.body.getReader();
       const dec = new TextDecoder();
@@ -248,7 +243,7 @@ export function CowritePanel({ editor, slug, pageVisibility, open, onOpenChange,
         }
       }
     } catch (err) {
-      if ((err as Error)?.name !== "AbortError") failed = err instanceof Error ? err.message : "The assistant couldn't write this. Try again.";
+      if ((err as Error)?.name !== "AbortError") failed = err instanceof Error ? err.message : t("wiki.cowrite.failed");
     } finally {
       abort.current = null;
       if (renderTimer.current) { clearTimeout(renderTimer.current); renderTimer.current = null; }
@@ -256,7 +251,7 @@ export function CowritePanel({ editor, slug, pageVisibility, open, onOpenChange,
 
     if (!md.current.trim()) {
       undoDraft();
-      setError(failed ?? "The assistant stopped before writing anything. Your page is unchanged.");
+      setError(failed ?? t("wiki.cowrite.stoppedEmpty"));
       setPhase("composing");
       return;
     }
@@ -280,14 +275,14 @@ export function CowritePanel({ editor, slug, pageVisibility, open, onOpenChange,
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
     editor.view.dispatch(asAssistant(editor.state.tr, { edit: null, streaming: false }));
-    setNotice("Kept. It's saved as the assistant's version in the page history.");
+    setNotice(t("wiki.cowrite.kept"));
     setInstruction("");
     setPhase("closed");
   };
 
   const undo = () => {
     undoDraft();
-    setNotice("Undone. The assistant's text is gone; your own edits are still there.");
+    setNotice(t("wiki.cowrite.undone"));
     setPhase("closed");
   };
 
@@ -304,8 +299,9 @@ export function CowritePanel({ editor, slug, pageVisibility, open, onOpenChange,
   // Sources the draft actually cites; the warning considers those (or all it read when it cited none).
   const citedSources = sources.filter((s) => cited.includes(s.n));
   const warning = phase !== "review" ? null
-    : citedSources.length ? sensitivityWarning(citedSources, pageVisibility)
-    : addsNew ? sensitivityWarning(sources, pageVisibility, { cited: false }) : null;
+    : citedSources.length ? cowriteWarning(t, citedSources, pageVisibility, { family })
+    : addsNew ? cowriteWarning(t, sources, pageVisibility, { cited: false, family }) : null;
+  const examples = cowriteExamples(t, mode, family);
   const ease = [0.22, 1, 0.36, 1] as const;
 
   return (
@@ -318,31 +314,32 @@ export function CowritePanel({ editor, slug, pageVisibility, open, onOpenChange,
             {phase === "composing" && (
               <form onSubmit={(e) => void start(e)} onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); close(); editor.commands.focus(); } }}>
                 <div className="flex items-center justify-between gap-3">
-                  <h2 id={`${id}-h`} className="flex items-center gap-2 text-sm font-semibold"><Sparkles aria-hidden className="size-4 text-accent" />Ask the assistant to write</h2>
-                  <IconButton type="button" label="Close" onClick={close}><X aria-hidden className="size-4" /></IconButton>
+                  <h2 id={`${id}-h`} className="flex items-center gap-2 text-sm font-semibold"><Sparkles aria-hidden className="size-4 text-accent" />{t("wiki.cowrite.title")}</h2>
+                  <IconButton type="button" label={t("wiki.cowrite.close")} onClick={close}><X aria-hidden className="size-4" /></IconButton>
                 </div>
-                <label htmlFor={`${id}-ask`} className="sr-only">What should the assistant write?</label>
+                <label htmlFor={`${id}-ask`} className="sr-only">{t("wiki.cowrite.what")}</label>
                 <textarea id={`${id}-ask`} ref={inputRef} rows={2} value={instruction} maxLength={2000}
                   onChange={(e) => { setInstruction(e.target.value); if (error) setError(null); }}
                   onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey || !e.shiftKey)) { e.preventDefault(); void start(); } }}
-                  placeholder={`For example: ${EXAMPLES[mode][0]}`}
+                  placeholder={t("wiki.cowrite.forExample", { example: examples[0] })}
                   // The UI kit's Textarea look; a plain element because the composer needs a ref for focus.
                   className="mt-2 w-full resize-none rounded-md bg-surface px-3 py-2 text-[15px] leading-relaxed text-fg ring-1 ring-inset ring-line transition-shadow placeholder:text-muted/80 hover:ring-muted/40 focus:outline-none focus:ring-2 focus:ring-accent" />
                 {!instruction.trim() && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
-                    {EXAMPLES[mode].map((x) => (
+                    {examples.map((x) => (
                       <button key={x} type="button" onClick={() => { setInstruction(x); inputRef.current?.focus(); }}
                         className="rounded-full bg-surface-2 px-2.5 py-1 text-left text-xs text-muted transition-colors hover:text-fg">{x}</button>
                     ))}
                   </div>
                 )}
                 <fieldset className="mt-3">
-                  <legend className="sr-only">Where to write</legend>
+                  <legend className="sr-only">{t("wiki.cowrite.where")}</legend>
                   <div className="grid grid-cols-3 gap-0.5 rounded-md bg-surface-2 p-0.5 sm:inline-flex">
-                    {MODE_OPTIONS.map((o) => {
+                    {MODES.map((m) => {
+                      const o = { mode: m, label: t(`wiki.cowrite.modes.${m}`), short: t(`wiki.cowrite.modes.${m}Short`) };
                       const disabled = o.mode === "rewrite" && !hasSelection;
                       return (
-                        <label key={o.mode} title={disabled ? "Select some text in the page first" : undefined}
+                        <label key={o.mode} title={disabled ? t("wiki.cowrite.selectFirst") : undefined}
                           className={clsx("relative cursor-pointer whitespace-nowrap rounded-[5px] px-2.5 py-1 text-center text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent",
                             mode === o.mode && !disabled ? "bg-surface text-fg shadow-[0_1px_0_var(--line)]" : "text-muted hover:text-fg", disabled && "cursor-not-allowed opacity-45 hover:text-muted")}>
                           <input type="radio" name={`${id}-mode`} value={o.mode} checked={mode === o.mode} disabled={disabled} onChange={() => setMode(o.mode)} className="sr-only" />
@@ -353,8 +350,8 @@ export function CowritePanel({ editor, slug, pageVisibility, open, onOpenChange,
                   </div>
                 </fieldset>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                  <p className="min-w-0 flex-1 text-xs text-muted">It reads only what you can see in this graph and cites it. Nothing is saved until you accept.</p>
-                  <Button type="submit" size="sm"><Sparkles aria-hidden className="size-3.5" />Write</Button>
+                  <p className="min-w-0 flex-1 text-xs text-muted">{t("wiki.cowrite.readsOnly")}</p>
+                  <Button type="submit" size="sm"><Sparkles aria-hidden className="size-3.5" />{t("wiki.cowrite.write")}</Button>
                 </div>
                 {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
               </form>
@@ -363,28 +360,28 @@ export function CowritePanel({ editor, slug, pageVisibility, open, onOpenChange,
             {phase === "writing" && (
               <div className="flex flex-wrap items-center justify-between gap-3" aria-live="polite">
                 <div className="flex min-w-0 items-center gap-3">
-                  <Badge tone="accent"><span aria-hidden className="size-1.5 rounded-full bg-accent" />Assistant is writing</Badge>
-                  <h2 id={`${id}-h`} className="sr-only">The assistant is writing in this page</h2>
+                  <Badge tone="accent"><span aria-hidden className="size-1.5 rounded-full bg-accent" />{t("wiki.cowrite.writing")}</Badge>
+                  <h2 id={`${id}-h`} className="sr-only">{t("wiki.cowrite.writingSr")}</h2>
                   <p className="min-w-0 truncate text-sm text-muted">
-                    {words > 0 ? `${words} ${words === 1 ? "word" : "words"} so far.` : sources.length ? `Read ${sources.length} ${sources.length === 1 ? "item" : "items"} from your graph.` : "Looking through your graph…"}
-                    <span className="hidden sm:inline"> Keep editing elsewhere if you like.</span>
+                    {words > 0 ? t("wiki.cowrite.wordsSoFar", { count: words }) : sources.length ? t("wiki.cowrite.readItems", { count: sources.length }) : t("wiki.cowrite.looking")}
+                    <span className="hidden sm:inline">{t("wiki.cowrite.keepEditing")}</span>
                   </p>
                 </div>
-                <Button size="sm" variant="secondary" onClick={stop}><Square aria-hidden className="size-3 fill-current" />Stop</Button>
+                <Button size="sm" variant="secondary" onClick={stop}><Square aria-hidden className="size-3 fill-current" />{t("wiki.cowrite.stop")}</Button>
               </div>
             )}
 
             {phase === "review" && (
               <div>
-                <h2 id={`${id}-h`} className="text-sm font-semibold">Keep what the assistant wrote?</h2>
+                <h2 id={`${id}-h`} className="text-sm font-semibold">{t("wiki.cowrite.keepTitle")}</h2>
                 <p className="mt-0.5 text-sm text-muted">
-                  It wrote {words} {words === 1 ? "word" : "words"}{citedSources.length ? <> from {citedSources.length} {citedSources.length === 1 ? "source" : "sources"}</> : sources.length ? ", without citing a source" : ", with nothing from your graph to go on"}. The highlighted text is only a draft until you accept it.
-                  {touched && " Undo also removes your changes inside the highlighted text."}
+                  {t("wiki.cowrite.wrote", { count: words })}{citedSources.length ? t("wiki.cowrite.fromSources", { count: citedSources.length }) : sources.length ? t("wiki.cowrite.noCite") : t("wiki.cowrite.nothingToGoOn")}{t("wiki.cowrite.onlyDraft")}
+                  {touched && t("wiki.cowrite.touched")}
                 </p>
                 {citedSources.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {citedSources.slice(0, 5).map((s) => <CitationChip key={s.n} n={s.n} title={s.title} detail={s.what} href={citeHref(s)} />)}
-                    {citedSources.length > 5 && <span className="self-center text-xs text-muted">and {citedSources.length - 5} more</span>}
+                    {citedSources.length > 5 && <span className="self-center text-xs text-muted">{t("wiki.cowrite.andMore", { count: citedSources.length - 5 })}</span>}
                   </div>
                 )}
                 {warning && (
@@ -394,9 +391,9 @@ export function CowritePanel({ editor, slug, pageVisibility, open, onOpenChange,
                 )}
                 {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Button size="sm" onClick={() => void accept()} disabled={busy}>{busy ? "Saving…" : "Accept"}</Button>
-                  <Button size="sm" variant="secondary" onClick={undo} disabled={busy}>Undo</Button>
-                  <Button size="sm" variant="ghost" onClick={tryAgain} disabled={busy}>Ask differently</Button>
+                  <Button size="sm" onClick={() => void accept()} disabled={busy}>{busy ? t("wiki.cowrite.saving") : t("wiki.cowrite.accept")}</Button>
+                  <Button size="sm" variant="secondary" onClick={undo} disabled={busy}>{t("wiki.cowrite.undo")}</Button>
+                  <Button size="sm" variant="ghost" onClick={tryAgain} disabled={busy}>{t("wiki.cowrite.askDifferently")}</Button>
                 </div>
               </div>
             )}

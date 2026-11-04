@@ -2,12 +2,14 @@
 import { useEffect, useRef, useState } from "react";
 import { clsx } from "clsx";
 import { formatTime } from "@/lib/ingest/chunk";
+import { useT } from "@/lib/i18n/client";
 import { useProvenance } from "./provenance";
 
 type Seg = { id: string; text: string; start: number | null; end: number | null };
 
 /** Audio player with its transcript. Timestamps and citations play from that moment; the passage playing is marked. */
 export function AudioTranscript({ src, title, segments }: { src: string; title: string; segments: Seg[] }) {
+  const t = useT();
   const ref = useRef<HTMLAudioElement>(null);
   const [now, setNow] = useState<number | null>(null);
   const { active } = useProvenance();
@@ -34,7 +36,7 @@ export function AudioTranscript({ src, title, segments }: { src: string; title: 
   return (
     <div>
       <div className="bg-surface-2/60 p-4 sm:p-5">
-        <audio ref={ref} controls preload="metadata" src={src} className="w-full" aria-label={`Play ${title}`}
+        <audio ref={ref} controls preload="metadata" src={src} className="w-full" aria-label={t("library.detail.play", { title })}
           onTimeUpdate={(e) => setNow(e.currentTarget.currentTime)} />
       </div>
       {segments.length > 0 ? (
@@ -44,7 +46,7 @@ export function AudioTranscript({ src, title, segments }: { src: string; title: 
             return (
               <li key={s.id} id={`chunk-${s.id}`} className={clsx("flex scroll-mt-24 gap-3 rounded-md px-2 py-2 transition-colors duration-200", on && "bg-accent-tint/60")}>
                 {s.start !== null ? (
-                  <button type="button" onClick={() => play(s.start!)} aria-label={`Play from ${formatTime(s.start)}`}
+                  <button type="button" onClick={() => play(s.start!)} aria-label={t("library.detail.playFrom", { time: formatTime(s.start) })}
                     className="h-fit w-12 shrink-0 rounded px-1 py-0.5 text-left text-xs font-medium tabular-nums text-accent hover:bg-accent-tint">
                     {formatTime(s.start)}
                   </button>
@@ -55,7 +57,7 @@ export function AudioTranscript({ src, title, segments }: { src: string; title: 
           })}
         </ol>
       ) : (
-        <p className="p-5 text-sm text-muted">The transcript appears here once the recording has been read.</p>
+        <p className="p-5 text-sm text-muted">{t("library.detail.transcriptLater")}</p>
       )}
     </div>
   );

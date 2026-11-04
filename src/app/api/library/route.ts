@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { ingestFile, IngestError } from "@/lib/ingest";
 import { jsonError, withViewer } from "@/lib/ingest/http";
-import { listSources } from "@/lib/ingest/library";
+import { LIBRARY_TYPES, listSources, type LibraryType } from "@/lib/ingest/library";
 import { MAX_UPLOAD_BYTES } from "@/lib/ingest/mime";
 
 export const runtime = "nodejs";
@@ -11,20 +11,21 @@ export const dynamic = "force-dynamic";
 const MAX_FILES = 20;
 
 const listQuery = z.object({
-  type: z.enum(["pdf", "document", "text", "image", "audio", "email", "other"]).optional(),
+  type: z.enum(LIBRARY_TYPES as [LibraryType, ...LibraryType[]]).optional(),
   status: z.enum(["pending", "processing", "ready", "failed"]).optional(),
   q: z.string().trim().max(200).optional(),
+  thread: z.string().trim().min(1).max(1000).optional(),
   limit: z.coerce.number().int().min(1).max(200).optional(),
   offset: z.coerce.number().int().min(0).max(100_000).optional(),
 });
 
-/** GET /api/library?type=&status=&q= — the sources the viewer can see, newest first. */
+/** GET /api/library?type=&status=&q=&thread= — the sources the viewer can see, newest first. type also takes mail, letter, scan, photo. */
 export async function GET(req: Request) {
   return withViewer(async (v) => {
     const params = Object.fromEntries(new URL(req.url).searchParams);
     for (const k of Object.keys(params)) if (params[k] === "") delete params[k];
     const f = listQuery.parse(params);
-    const r = await listSources(v, { category: f.type, status: f.status, q: f.q, limit: f.limit, offset: f.offset });
+    const r = await listSources(v, { category: f.type, status: f.status, q: f.q, thread: f.thread, limit: f.limit, offset: f.offset });
     return NextResponse.json(r);
   });
 }

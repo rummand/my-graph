@@ -2,7 +2,18 @@
 
 export type TimePrecision = "minute" | "day" | "month" | "year";
 export type ItemStatus = "confirmed" | "unconfirmed" | "inferred";
-export type ItemKind = "event" | "reminder" | "source";
+export type ItemKind = "event" | "reminder" | "source" | "document" | "thread";
+
+/** What a dated document is (library docKind). */
+export type DocKind = "mail" | "letter" | "scan" | "photo" | "recording" | "note" | "file";
+
+export type ThreadMessage = { sourceId: string; at: string; from: string | null; fromPersonId: string | null; title: string };
+export type ThreadInfo = {
+  key: string;
+  subject: string;
+  messages: ThreadMessage[];
+  participants: { name: string; email: string; personId: string | null }[];
+};
 
 export type TimelineItem = {
   /** Unique within a response: `event:<nodeId>`, `reminder:<id>`, `source:<id>`. */
@@ -25,12 +36,16 @@ export type TimelineItem = {
   sensitive: boolean;
   /** Reminders only: due in the past and not done. */
   overdue?: boolean;
+  /** Documents: letter, scan, photo… (threads are mail). */
+  docKind?: DocKind;
+  /** Threads only: the conversation, messages in order. */
+  thread?: ThreadInfo;
 };
 
 export type LaneKind = "viewer" | "child" | "member" | "person" | "family";
 
 export type Lane = {
-  /** Person node id, or "family". */
+  /** Person node id, or "family" (the shared lane: "Family" in a family graph, "Everyone" elsewhere). */
   id: string;
   label: string;
   kind: LaneKind;

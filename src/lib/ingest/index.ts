@@ -37,7 +37,8 @@ export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "p
     householdId: v.graphHouseholdId,
     graphId: v.graphId,
     ownerId: v.id,
-    kind: "upload",
+    // A single email is a message of a correspondence; everything else (mail imports included) is an upload.
+    kind: type.kind === "email" ? "email" : "upload",
     title: name,
     mime: type.mime,
     storageKey: stored.storageKey,
