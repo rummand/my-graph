@@ -57,9 +57,16 @@ test.describe("Ask @slow", () => {
     await page.getByRole("button", { name: "New conversation" }).first().click().catch(() => {});
     const box = page.locator("#chat-input");
     await box.click();
-    await box.fill(`Add a reminder for me: buy birthday candles ${tag}, tomorrow at 09:00.`);
+    // The tag goes in as an order number: a bare random word reads like a name and makes the assistant ask who it is.
+    await box.fill(`Add a reminder for me (Anna): buy birthday candles, order number ${tag}, tomorrow at 09:00.`);
     await box.press("Enter");
     await waitForAnswer(page);
+    // If it still asks a clarifying question, let it go on with what it knows.
+    const skip = page.getByRole("button", { name: "Skip", exact: true }).last();
+    if (await skip.isVisible().catch(() => false)) {
+      await skip.click();
+      await waitForAnswer(page);
+    }
     const approve = page.getByRole("button", { name: "Approve", exact: true }).last();
     const auto = page.getByText(/Saved automatically/).last();
     await expect(approve.or(auto)).toBeVisible();
