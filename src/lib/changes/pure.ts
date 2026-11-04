@@ -5,19 +5,15 @@
  * delivers it; these functions only look.
  */
 import type { ChangeOp } from "./index";
-import type { EdgeSnap, GraphState, NodeSnap } from "@/lib/history/pure";
+import type { GraphState, NodeSnap } from "@/lib/history/pure";
+import type { ChangeRowLike } from "./rebase";
 
-export type Verdict = "outstanding" | "landed" | "conflicted";
+export * from "./rebase";
 
 export const NODE_OPS = new Set(["addNode", "updateNode", "retireNode", "mergeNodes"]);
 export const EDGE_OPS = new Set(["addEdge", "updateEdge", "removeEdge"]);
 export const META_OPS = new Set(["addKind", "addRelationType", "addAttribute"]);
 export const ALL_OPS = new Set([...NODE_OPS, ...EDGE_OPS, ...META_OPS, "addReminder", "editWiki"]);
-
-/** A stored change as the pure functions see it. */
-export type ChangeRowLike = { id: string; seq: number; op: string; nodeId: string | null; edgeId: string | null; payload: Record<string, unknown>; included: boolean };
-
-export const norm = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
 
 /* ── Who sees a change set ───────────────────────────────────────────────────────────────────────────── */
 
@@ -61,131 +57,6 @@ export function fingerprintOf(changes: ChangeRowLike[]): string {
   return hash(stable(ordered.map((c) => ({ id: c.id, op: c.op, nodeId: c.nodeId, edgeId: c.edgeId, payload: c.payload, included: c.included }))));
 }
 
-/* ── The graph now, as verdicts need it ──────────────────────────────────────────────────────────────── */
-
-export type Now = {
-  /** Nodes the person delivering can see (merged ones included, flagged by mergedInto). */
-  nodes: Map<string, Pick<NodeSnap, "id" | "type" | "label" | "aliases" | "summary" | "kind" | "props" | "startAt" | "endAt" | "visibility" | "sensitive" | "mergedInto">>;
-  edges: Map<string, Pick<EdgeSnap, "id" | "fromId" | "toId" | "relation" | "status" | "confidence" | "validFrom" | "validTo" | "visibility">>;
-  /** Active facts, as `from|relation|to`. */
-  triples: Set<string>;
-  /** Live nodes by `type:normalised label` (and alias). */
-  names: Map<string, string>;
-  /** Model elements this graph sees: `kinds:type:key`, `relations:key`, `attributes:type:kind:key`. */
-  meta: Set<string>;
-};
-
-export function emptyNow(): Now {
-  return { nodes: new Map(), edges: new Map(), triples: new Set(), names: new Map(), meta: new Set() };
-}
-
-const INACTIVE = new Set(["rejected", "superseded"]);
-const p = <T = unknown>(c: ChangeRowLike, k: string) => c.payload[k] as T;
-
-function valueEq(a: unknown, b: unknown): boolean {
-  if (a instanceof Date || b instanceof Date) return new Date(a as never).getTime() === new Date(b as never).getTime();
-  if ((a ?? null) === (b ?? null)) return true;
-  if (typeof a === "string" && typeof b === "string" && /^\d{4}-\d\d-\d\d/.test(a) && /^\d{4}-\d\d-\d\d/.test(b)) return new Date(a).getTime() === new Date(b).getTime();
-  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-}
-
-/** Does a node already say everything `set` would make it say? */
-export function alreadySays(node: Record<string, unknown>, set: Record<string, unknown>): boolean {
-  return Object.entries(set).every(([k, v]) => {
-    if (k === "props" && v && typeof v === "object") {
-      const props = (node.props ?? {}) as Record<string, unknown>;
-      return Object.entries(v as Record<string, unknown>).every(([pk, pv]) => valueEq(props[pk], pv));
-    }
-    if (k === "label" && typeof v === "string" && typeof node.label === "string") return norm(v) === norm(node.label);
-    return valueEq(node[k], v);
-  });
-}
-
-/**
- * Replay each op onto the graph now. outstanding = still to do; landed = the graph already says it (somebody got there
- * first, or it was delivered); conflicted = the graph moved where the op can't be replayed (something it needs is gone
- * or no longer visible, or a thing with that name was added outside this proposal). Conflicted ops are never delivered.
- */
-export function verdictsFor(changes: ChangeRowLike[], now: Now, opts: { includedOnly?: boolean } = {}): Record<string, { verdict: Verdict; why: string }> {
-  const out: Record<string, { verdict: Verdict; why: string }> = {};
-  const live = (id: string | null | undefined) => {
-    const n = id ? now.nodes.get(id) : undefined;
-    return n && !n.mergedInto ? n : undefined;
-  };
-  const addedHere = new Set(changes.filter((c) => c.op === "addNode" && c.nodeId && (!opts.includedOnly || c.included)).map((c) => c.nodeId!));
-  for (const c of changes) {
-    const say = (verdict: Verdict, why: string) => { out[c.id] = { verdict, why }; };
-    switch (c.op) {
-      case "addNode": {
-        if (c.nodeId && now.nodes.has(c.nodeId)) { say("landed", "exists"); break; }
-        const label = String(p(c, "label") ?? "");
-        const other = now.names.get(`${String(p(c, "type") ?? "")}:${norm(label)}`);
-        if (label && other && other !== c.nodeId) { say("conflicted", "sameName"); break; }
-        say("outstanding", "toAdd");
-        break;
-      }
-      case "updateNode": {
-        const n = live(c.nodeId);
-        if (!n) { say("conflicted", "gone"); break; }
-        const set = (p<Record<string, unknown>>(c, "set") ?? {});
-        say(alreadySays(n as unknown as Record<string, unknown>, set) ? "landed" : "outstanding", "toChange");
-        break;
-      }
-      case "retireNode": {
-        const n = live(c.nodeId);
-        if (!n || n.props?.retired === true) { say("landed", "gone"); break; }
-        say("outstanding", "toRetire");
-        break;
-      }
-      case "mergeNodes": {
-        const keepId = String(p(c, "keepId") ?? ""), dropId = String(p(c, "dropId") ?? "");
-        const drop = now.nodes.get(dropId);
-        if (drop?.mergedInto === keepId) { say("landed", "merged"); break; }
-        if (!live(keepId) || !live(dropId)) { say("conflicted", "gone"); break; }
-        if (live(keepId)!.type !== live(dropId)!.type) { say("conflicted", "differentTypes"); break; }
-        say("outstanding", "toMerge");
-        break;
-      }
-      case "addEdge": {
-        const fromId = String(p(c, "fromId") ?? ""), toId = String(p(c, "toId") ?? ""), relation = String(p(c, "relation") ?? "");
-        const endOk = (id: string) => !!live(id) || addedHere.has(id);
-        if (!endOk(fromId) || !endOk(toId)) { say("conflicted", "endGone"); break; }
-        if (c.edgeId && now.edges.has(c.edgeId) && !INACTIVE.has(now.edges.get(c.edgeId)!.status)) { say("landed", "exists"); break; }
-        if (now.triples.has(`${fromId}|${relation}|${toId}`)) { say("landed", "exists"); break; }
-        say("outstanding", "toConnect");
-        break;
-      }
-      case "updateEdge": {
-        const e = c.edgeId ? now.edges.get(c.edgeId) : undefined;
-        if (!e) { say("conflicted", "gone"); break; }
-        const set = (p<Record<string, unknown>>(c, "set") ?? {});
-        say(alreadySays(e as unknown as Record<string, unknown>, set) ? "landed" : "outstanding", "toChange");
-        break;
-      }
-      case "removeEdge": {
-        const e = c.edgeId ? now.edges.get(c.edgeId) : undefined;
-        say(!e || INACTIVE.has(e.status) ? "landed" : "outstanding", "toRemove");
-        break;
-      }
-      case "addKind":
-        say(now.meta.has(`kinds:${p(c, "nodeType")}:${p(c, "key")}`) ? "landed" : "outstanding", "model");
-        break;
-      case "addRelationType":
-        say(now.meta.has(`relations:${p(c, "key")}`) ? "landed" : "outstanding", "model");
-        break;
-      case "addAttribute":
-        say(now.meta.has(`attributes:${p(c, "nodeType")}:${p(c, "kindKey") ?? "*"}:${p(c, "key")}`) ? "landed" : "outstanding", "model");
-        break;
-      case "addReminder":
-        say(p(c, "aboutNodeId") && !live(String(p(c, "aboutNodeId"))) && !addedHere.has(String(p(c, "aboutNodeId"))) ? "conflicted" : "outstanding", "toRemind");
-        break;
-      default:
-        say("outstanding", "other");
-    }
-  }
-  return out;
-}
-
 /* ── Sentences ───────────────────────────────────────────────────────────────────────────────────────── */
 
 /**
@@ -216,7 +87,7 @@ export function summaryOf(c: ChangeRowLike, names: (id: string) => string | null
 export function toStored(op: ChangeOp, mint: () => string): { op: string; nodeId: string | null; edgeId: string | null; payload: Record<string, unknown> } {
   const { op: name, ...rest } = op as ChangeOp & Record<string, unknown>;
   const payload: Record<string, unknown> = { ...rest };
-  delete payload.note; delete payload.receipt;
+  delete payload.note; delete payload.receipt; delete payload.resolution;
   let nodeId: string | null = null, edgeId: string | null = null;
   if (name === "addNode") { nodeId = (op as { nodeId?: string }).nodeId ?? mint(); delete payload.nodeId; }
   else if (name === "updateNode" || name === "retireNode") { nodeId = (op as { nodeId: string }).nodeId; delete payload.nodeId; }

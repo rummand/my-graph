@@ -12,6 +12,9 @@ import { currentScope, historyStore, type HistoryScope } from "@/lib/history/con
 import { recordMeta, snapshotMeta } from "@/lib/history/record";
 import { abandon, amendPendingUpdate, getOne, list, propose } from "./store";
 import { deliver } from "./deliver";
+import type { OpVerdict, ReasonGroup, RemapEntry, SetSummary, Verdict } from "./rebase";
+
+export type { OpVerdict, ReasonCode, ReasonDetails, ReasonGroup, RemapEntry, Resolution, SetSummary, Verdict } from "./rebase";
 
 export type ChangeOp =
   | { op: "addNode"; nodeId?: string; type: string; kind?: string | null; label: string; summary?: string; props?: Record<string, unknown>; aliases?: string[]; startAt?: string | null; endAt?: string | null; visibility?: "private" | "parents" | "household" }
@@ -41,8 +44,16 @@ export type ChangeSetView = {
   id: string; title: string; description: string | null; status: "draft" | "delivered" | "abandoned"; origin: ChangeSetOrigin;
   createdAt: Date; deliveredAt: Date | null; createdByName: string | null;
   changes: { id: string; seq: number; op: string; summary: string; note: string | null; receipt: Receipt; included: boolean; nodeId: string | null; edgeId: string | null; payload: Record<string, unknown> }[];
-  /** Per-op verdict against the graph now: outstanding | landed | conflicted. */
-  verdicts: Record<string, "outstanding" | "landed" | "conflicted">;
+  /** Per-op verdict against the graph now: outstanding | exists | landed | conflicted. */
+  verdicts: Record<string, Verdict>;
+  /** Per-op reason code and the details a person needs to decide (drafts only). */
+  reasons?: Record<string, OpVerdict>;
+  /** Counts for the one-line status and the review's headline (drafts only). */
+  summary?: SetSummary | null;
+  /** The review's groups, by what happened (drafts only). */
+  groups?: ReasonGroup[];
+  /** Delivered: the adds that used something already in the graph instead ("used the existing BEK 260"). */
+  remapped?: RemapEntry[];
   /** Hash of the ops as they stand; pass it back on deliver so an approval of an older version is refused. */
   fingerprint?: string | null;
   /** Partly delivered: the follow-up set the rest waits in ("Rest of …"), and, on a follow-up, the set it continues. */
@@ -59,7 +70,7 @@ export async function proposeChanges(v: Viewer, input: { title: string; descript
  * Applies a change set (all included ops, or only `onlyChangeIds`) in one transaction, recording history and provenance.
  * The person delivering must be allowed to write; ops that conflict are refused, not half-applied.
  */
-export async function deliverChangeSet(v: Viewer, id: string, opts: { onlyChangeIds?: string[]; fingerprint?: string } = {}): Promise<{ ok: boolean; applied: number; conflicts: string[]; error?: string; restId?: string | null }> {
+export async function deliverChangeSet(v: Viewer, id: string, opts: { onlyChangeIds?: string[]; fingerprint?: string } = {}): Promise<{ ok: boolean; applied: number; conflicts: string[]; error?: string; restId?: string | null; reasons?: Record<string, OpVerdict>; connected?: number; evidence?: number }> {
   return deliver(v, id, opts);
 }
 

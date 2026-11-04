@@ -16,18 +16,24 @@
  */
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { changes, changeSets, reminders, sources, type Locator } from "@/db/schema";
+import { changes, changeSets, provenance, reminders, sources, type Locator } from "@/db/schema";
 import { audit, type Viewer } from "@/lib/auth";
 import * as gbrain from "@/lib/gbrain";
 import { ensureSearchIndexesOnce } from "@/lib/gbrain/setup";
 import { historyStore, type HistoryScope } from "@/lib/history/context";
 import { recordEvent, recordMeta, snapshotMeta, stampFor } from "@/lib/history/record";
 import type { Receipt } from "./index";
-import { fingerprintOf, restOf, restTitle, verdictsFor, type ChangeRowLike } from "./pure";
+import { fingerprintOf, planDelivery, remapMinted, restOf, restTitle, verdictsFor, type ChangeRowLike, type OpVerdict } from "./pure";
 import { applyMetaOpTx } from "./meta-tx";
 import { canWrite, isId, loadRow, nowFor, type ChangeRow, type SetRow } from "./store";
 
-export type DeliverResult = { ok: boolean; applied: number; conflicts: string[]; error?: string; stale?: boolean; skipped?: number; problems?: string[]; restId?: string | null };
+export type DeliverResult = {
+  ok: boolean; applied: number; conflicts: string[]; error?: string; stale?: boolean; skipped?: number; problems?: string[]; restId?: string | null;
+  /** The conflicted ops' reason codes and details. */
+  reasons?: Record<string, OpVerdict>;
+  /** Adds that used something already in the graph, and evidence rows recorded on things already there. */
+  connected?: number; evidence?: number;
+};
 
 const NODE_TYPES = new Set(["person", "place", "event", "topic", "document", "source", "organization", "project", "thing"]);
 const EDGE_STATUSES = new Set(["confirmed", "unconfirmed", "inferred"]);
@@ -99,26 +105,33 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
   const chosen = all.filter((c) => (only ? only.has(c.id) : c.included));
   if (!chosen.length) return { ok: false, applied: 0, conflicts: [], error: "Tick at least one change to deliver." };
 
-  // Replay onto the graph now. Only the chosen ops count as "added here" for facts that need a new node.
+  // Replay onto the graph now. Only the chosen ops count as "added here" for facts that need a new node. An add whose
+  // thing is already in the graph ("exists") is not a conflict: it is skipped, its evidence goes on the existing node,
+  // and every later op that referred to the new node is pointed at the existing one. That mapping is worked out here,
+  // at delivery, from the graph as it is now; it is not part of the ops, so it never makes an approval stale.
   const chosenLike = all.map((c) => ({ ...asLike(c), included: chosen.includes(c) }));
   const now = await nowFor(v, all, chosen.some((c) => c.op === "addKind" || c.op === "addRelationType" || c.op === "addAttribute"));
-  const verdicts = verdictsFor(chosenLike, now, { includedOnly: true });
-  const conflicts = chosen.filter((c) => verdicts[c.id]?.verdict === "conflicted").map((c) => c.id);
+  const reasons = verdictsFor(chosenLike, now, { includedOnly: true, setId: set.id, baseAt: set.baseAt });
+  const plan = planDelivery(chosenLike.filter((c) => c.included), reasons);
+  const conflicts = plan.conflicts;
   if (conflicts.length) {
-    return { ok: false, applied: 0, conflicts, error: conflicts.length === 1
-      ? "One change no longer fits the graph as it is now. Untick it or drop the proposal."
-      : `${conflicts.length} changes no longer fit the graph as it is now. Untick them or drop the proposal.` };
+    return { ok: false, applied: 0, conflicts, reasons: Object.fromEntries(conflicts.map((id) => [id, reasons[id]])), error: conflicts.length === 1
+      ? "One change needs you before this can be delivered. Open the proposal to see why."
+      : `${conflicts.length} changes need you before this can be delivered. Open the proposal to see why.` };
   }
-  const todo = chosen.filter((c) => verdicts[c.id]?.verdict !== "landed");
+  const byId = new Map(all.map((c) => [c.id, c]));
+  // The op as it will be applied: its ids pointed through the mapping (row columns kept, payload remapped).
+  const todo = plan.steps.filter((x) => x.action === "apply").map((x) => ({ ...byId.get(x.change.id)!, nodeId: x.change.nodeId, payload: x.change.payload }));
+  const evidenceSteps = plan.steps.filter((x): x is Extract<typeof x, { action: "evidence" }> => x.action === "evidence");
   const skipped = chosen.length - todo.length;
 
   // Receipts may only point at sources in this graph.
-  const sourceIds = [...new Set(todo.map((c) => (c.receipt as Receipt)?.sourceId).filter(isId))];
+  const sourceIds = [...new Set([...todo, ...evidenceSteps.map((x) => byId.get(x.change.id)!)].map((c) => (c.receipt as Receipt)?.sourceId).filter(isId))];
   const okSources = new Set(sourceIds.length
     ? (await db.select({ id: sources.id }).from(sources).where(and(inArray(sources.id, sourceIds), eq(sources.graphId, v.graphId)))).map((s) => s.id)
     : []);
 
-  let applied = 0;
+  let applied = 0, evidenceAdded = 0;
   const META = new Set(["addKind", "addRelationType", "addAttribute"]);
   const fail = (error: string, extra: Partial<DeliverResult> = {}): DeliverResult => ({ ok: false, applied: 0, conflicts: [], error, ...extra });
 
@@ -260,15 +273,31 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
         applied++;
       }
 
-      // 2d. What wasn't chosen keeps waiting, in "Rest of <title>".
+      // 2c'. Things already in the graph: this document's evidence goes on them (a provenance row each), so nothing it
+      //      says is lost even though nothing new is written.
+      for (const x of evidenceSteps) {
+        const c = byId.get(x.change.id)!;
+        const prov = provFor(v, set, c, okSources);
+        const what = x.subject.type === "node" ? "Also named" : "Also stated";
+        await tx.insert(provenance).values({
+          householdId: household, graphId: v.graphId, subjectType: x.subject.type, subjectId: x.subject.id,
+          sourceId: prov.sourceId ?? null, chunkId: prov.chunkId ?? null, locator: { ...(prov.locator ?? {}), alreadyInGraph: true } as Locator, quote: prov.quote ?? null,
+          activity: prov.activity, agentType: prov.agentType, agentId: prov.agentId, confidence: Math.max(0, Math.min(1, prov.confidence ?? 1)),
+          note: `${what} in the proposal “${set.title.slice(0, 120)}”, delivered by ${v.name}; it was already in the graph.${c.note ? ` ${c.note.slice(0, 300)}` : ""}`,
+        });
+        evidenceAdded++;
+      }
+
+      // 2d. What wasn't chosen keeps waiting, in "Rest of <title>". Ops there that referred to a new node which turned
+      //     out to exist now refer to the existing one, so they don't read as "gone" later.
       if (rest.length) {
         const [follow] = await tx.insert(changeSets).values({
           graphId: set.graphId, title: restTitle(set.title, restPrefix), description: set.description, status: "draft", origin: set.origin,
           createdBy: set.createdBy, forUserId: set.forUserId, evidence: { ...(set.evidence ?? {}), restOf: set.id, restIn: undefined },
         }).returning({ id: changeSets.id });
         restId = follow.id;
-        for (const c of restOf(rest.map(asLike), new Set())) {
-          await tx.update(changes).set({ changeSetId: follow.id, seq: c.seq, included: true }).where(eq(changes.id, c.id));
+        for (const c of remapMinted(restOf(rest.map(asLike), new Set()), plan.mapping)) {
+          await tx.update(changes).set({ changeSetId: follow.id, seq: c.seq, included: true, nodeId: c.nodeId, payload: c.payload }).where(eq(changes.id, c.id));
         }
         const moved = await tx.select().from(changes).where(eq(changes.changeSetId, follow.id));
         await tx.update(changeSets).set({ fingerprint: fingerprintOf(moved) }).where(eq(changeSets.id, follow.id));
@@ -276,7 +305,12 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
       const after = await tx.select().from(changes).where(eq(changes.changeSetId, set.id));
       await tx.update(changeSets).set({
         status: "delivered", deliveredAt: new Date(), deliveredBy: v.id, fingerprint: fingerprintOf(after), updatedAt: new Date(),
-        ...(restId ? { evidence: { ...(set.evidence ?? {}), restIn: restId } } : {}),
+        ...(restId || plan.remapped.length || plan.alreadyTrue.length ? { evidence: {
+          ...(set.evidence ?? {}),
+          ...(restId ? { restIn: restId } : {}),
+          ...(plan.remapped.length ? { remapped: plan.remapped } : {}),
+          ...(plan.alreadyTrue.length ? { alreadyTrue: plan.alreadyTrue } : {}),
+        } } : {}),
       }).where(eq(changeSets.id, set.id));
     }));
   } catch (e) {
@@ -296,8 +330,8 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
     applied++;
   }
 
-  void audit(v, "changes.deliver", { type: "change_set", id: set.id }, { applied, skipped, title: set.title.slice(0, 120), origin: set.origin, restId }).catch(() => {});
-  return { ok: true, applied, conflicts: [], skipped, restId };
+  void audit(v, "changes.deliver", { type: "change_set", id: set.id }, { applied, skipped, connected: plan.remapped.length, evidence: evidenceAdded, title: set.title.slice(0, 120), origin: set.origin, restId }).catch(() => {});
+  return { ok: true, applied, conflicts: [], skipped, restId, connected: plan.remapped.length, evidence: evidenceAdded };
 }
 
 class DeliverRefused extends Error {

@@ -6,17 +6,20 @@
  * graph. A proposal carries quotes from its evidence, so it is never shown more widely than that.
  */
 import { randomUUID } from "node:crypto";
-import { and, desc, eq, inArray, isNull, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
-import { changes, changeSets, users } from "@/db/schema";
+import { changes, changeSets, edges, graphEvents, nodes, provenance, sources, users } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import { scopeOf } from "@/lib/graphs/pure";
 import { accessContext } from "@/lib/gbrain";
-import { nodeReadSql, sourceReadSql, type AccessCtx } from "@/lib/gbrain/access";
-import { activeTriples, namesOfType, readableSnapshots } from "@/lib/gbrain/versioning";
+import { edgeSelfReadSql, liveNodeSql, nodeEditSql, nodeReadSql, sourceReadSql, type AccessCtx } from "@/lib/gbrain/access";
+import { readableSnapshots } from "@/lib/gbrain/versioning";
 import { getMeta } from "@/lib/meta";
 import type { ChangeInput, ChangeSetOrigin, ChangeSetView, Receipt } from "./index";
-import { ALL_OPS, canSeeSet, emptyNow, fingerprintOf, mergeUpdateSet, norm, summaryOf, toStored, verdictsFor, type ChangeRowLike, type Now, type Verdict } from "./pure";
+import {
+  ALL_OPS, canSeeSet, emptyNow, fingerprintOf, groupReasons, matchExisting, mergeUpdateSet, summarize, summaryOf, toStored, verdictsFor,
+  type ChangeRowLike, type Now, type Origin, type RemapEntry, type Resolution, type Verdict,
+} from "./pure";
 
 export class ChangeError extends Error {
   constructor(public status: 400 | 403 | 404 | 409 | 422, message: string) { super(message); this.name = "ChangeError"; }
@@ -117,26 +120,81 @@ async function loadRow(v: Viewer, id: string): Promise<SetRow | null> {
 /** The graph now, as the viewer sees it, for these change sets' verdicts and names. */
 export async function nowFor(v: Viewer, list: ChangeRow[], withMeta: boolean): Promise<Now> {
   const now = emptyNow();
+  const ctx = await accessContext(v);
   const nodeIds = new Set<string>(), edgeIds = new Set<string>(), types = new Set<string>();
+  const minted = new Set(list.filter((c) => c.op === "addNode" && c.nodeId).map((c) => c.nodeId!));
   for (const c of list) {
     const p = c.payload as Record<string, unknown>;
     if (c.nodeId) nodeIds.add(c.nodeId);
     if (c.edgeId) edgeIds.add(c.edgeId);
     for (const k of ["fromId", "toId", "keepId", "dropId", "aboutNodeId"]) if (isId(p[k])) nodeIds.add(p[k] as string);
+    const use = (p.resolution as Record<string, unknown> | undefined)?.use;
+    if (isId(use)) nodeIds.add(use);
     if (c.op === "addNode" && typeof p.type === "string") types.add(p.type);
   }
   const snaps = await readableSnapshots(v, { nodeIds: [...nodeIds], edgeIds: [...edgeIds] });
   for (const [id, n] of snaps.nodes) now.nodes.set(id, n);
   for (const [id, e] of snaps.edges) now.edges.set(id, e);
+
+  // The graph index an "Add" is matched against: live, readable nodes of the types the sets add.
+  if (types.size && v.graphId) {
+    const rows = await db.select({ id: nodes.id, type: nodes.type, kind: nodes.kind, label: nodes.label, aliases: nodes.aliases }).from(nodes)
+      .where(and(eq(nodes.graphId, v.graphId), isNull(nodes.mergedInto), inArray(nodes.type, [...types] as never[]), nodeReadSql(ctx, "nodes"), liveNodeSql("nodes"))).limit(20_000);
+    now.index = rows.filter((r) => !minted.has(r.id)).map((r) => ({ id: r.id, type: r.type, kind: r.kind ?? null, label: r.label, aliases: r.aliases ?? [] }));
+  }
+  // What the adds match, and what merged nodes became, as full snapshots (their names show in the review).
+  const matched = new Set<string>();
+  for (const c of list) {
+    if (c.op !== "addNode" || (c.nodeId && now.nodes.has(c.nodeId))) continue;
+    const m = matchExisting(c.payload as Record<string, unknown>, now.index);
+    if (m.kind === "exists") matched.add(m.node.id);
+    else if (m.kind !== "none") for (const n of m.candidates) matched.add(n.id);
+  }
+  let extra = [...matched].filter((id) => !now.nodes.has(id));
+  for (let round = 0; round < 4; round++) {
+    for (const n of now.nodes.values()) if (n.mergedInto && !now.nodes.has(n.mergedInto)) extra.push(n.mergedInto);
+    extra = [...new Set(extra)].filter((id) => !now.nodes.has(id));
+    if (!extra.length) break;
+    for (const [id, n] of (await readableSnapshots(v, { nodeIds: extra })).nodes) now.nodes.set(id, n);
+    extra = [];
+  }
   // The ends of facts the ops touch, so "Lars · leads · EAM Platform" can be named.
   const ends = [...snaps.edges.values()].flatMap((e) => [e.fromId, e.toId]).filter((id) => !now.nodes.has(id));
   if (ends.length) for (const [id, n] of (await readableSnapshots(v, { nodeIds: ends })).nodes) now.nodes.set(id, n);
-  for (const t of await activeTriples(v, [...nodeIds])) now.triples.add(t);
-  if (types.size) {
-    for (const n of await namesOfType(v, [...types])) {
-      for (const name of [n.label, ...(n.aliases ?? [])]) now.names.set(`${n.type}:${norm(name)}`, n.id);
-    }
+
+  // Referenced but not readable: in this graph (no permission) or not at all (gone).
+  const unseen = [...nodeIds].filter((id) => !now.nodes.has(id) && !minted.has(id));
+  if (unseen.length && v.graphId) {
+    for (const r of await db.select({ id: nodes.id }).from(nodes).where(and(inArray(nodes.id, unseen), eq(nodes.graphId, v.graphId)))) now.hidden.add(r.id);
   }
+  // Readable things the ops would change but the viewer may not.
+  const targets = [...new Set(list.flatMap((c) => {
+    const p = c.payload as Record<string, unknown>;
+    return c.op === "updateNode" || c.op === "retireNode" ? [c.nodeId] : c.op === "mergeNodes" ? [p.keepId, p.dropId] : [];
+  }).filter((id): id is string => isId(id) && now.nodes.has(id)))];
+  if (targets.length) {
+    const editable = new Set((await db.select({ id: nodes.id }).from(nodes).where(and(inArray(nodes.id, targets), nodeEditSql(ctx, "nodes")))).map((r) => r.id));
+    for (const id of targets) if (!editable.has(id)) now.readOnly.add(id);
+  }
+  // Facts among everything in play (with their ids, so a fact that is already true gets this evidence).
+  const inPlay = [...now.nodes.keys()];
+  if (inPlay.length) {
+    const rows = await db.select({ id: edges.id, fromId: edges.fromId, relation: edges.relation, toId: edges.toId }).from(edges)
+      .where(and(inArray(edges.fromId, inPlay), inArray(edges.toId, inPlay), notInArray(edges.status, ["rejected", "superseded"]), edgeSelfReadSql(ctx, "edges")))
+      .orderBy(asc(edges.createdAt));
+    for (const r of rows) { const k = `${r.fromId}|${r.relation}|${r.toId}`; if (!now.triples.has(k)) now.triples.set(k, r.id); }
+  }
+  // History of what the ops point at: who retired, merged, removed or changed it, and when.
+  const watched = [...new Set([
+    ...[...nodeIds].filter((id) => !minted.has(id) && !now.hidden.has(id)),
+    ...list.filter((c) => c.op === "updateNode" && c.nodeId).map((c) => c.nodeId!),
+  ])];
+  if (watched.length && v.graphId) {
+    const rows = await db.select({ subjectId: graphEvents.subjectId, kind: graphEvents.kind, field: graphEvents.field, at: graphEvents.at, by: graphEvents.actorName, changeSetId: graphEvents.changeSetId })
+      .from(graphEvents).where(and(eq(graphEvents.graphId, v.graphId), inArray(graphEvents.subjectId, watched))).orderBy(desc(graphEvents.at)).limit(3000);
+    for (const r of rows) now.events.set(r.subjectId, [...(now.events.get(r.subjectId) ?? []), { kind: r.kind, field: r.field, at: r.at.toISOString(), by: r.by, changeSetId: r.changeSetId }]);
+  }
+  if (matched.size) now.origins = await originsOf(v, ctx, [...matched]);
   if (withMeta) {
     try {
       const m = await getMeta(v);
@@ -146,6 +204,46 @@ export async function nowFor(v: Viewer, list: ChangeRow[], withMeta: boolean): P
     } catch { /* model unavailable: model ops read as outstanding */ }
   }
   return now;
+}
+
+/**
+ * Where existing nodes came from, from history: the proposal that created them (named only when the viewer may see
+ * it) and the document behind it, or else the first readable document that names them.
+ */
+async function originsOf(v: Viewer, ctx: AccessCtx, ids: string[]): Promise<Map<string, Origin>> {
+  const out = new Map<string, Origin>();
+  if (!v.graphId || !ids.length) return out;
+  const created = await db.select({ subjectId: graphEvents.subjectId, changeSetId: graphEvents.changeSetId, at: graphEvents.at, by: graphEvents.actorName })
+    .from(graphEvents).where(and(eq(graphEvents.graphId, v.graphId), inArray(graphEvents.subjectId, ids), eq(graphEvents.kind, "created"))).orderBy(asc(graphEvents.at));
+  const setIds = [...new Set(created.map((r) => r.changeSetId).filter((x): x is string => !!x))];
+  const sets = new Map((setIds.length
+    ? await db.select({ id: changeSets.id, title: changeSets.title, evidence: changeSets.evidence }).from(changeSets).where(and(inArray(changeSets.id, setIds), await visibleSql(v)))
+    : []).map((s) => [s.id, s]));
+  const firstSource = new Map<string, string>();
+  for (const r of await db.select({ subjectId: provenance.subjectId, sourceId: provenance.sourceId }).from(provenance)
+    .where(and(eq(provenance.subjectType, "node"), inArray(provenance.subjectId, ids), isNotNull(provenance.sourceId))).orderBy(asc(provenance.createdAt))) {
+    if (r.sourceId && !firstSource.has(r.subjectId)) firstSource.set(r.subjectId, r.sourceId);
+  }
+  for (const r of created) {
+    if (out.has(r.subjectId)) continue;
+    const set = r.changeSetId ? sets.get(r.changeSetId) : undefined;
+    const ev = (set?.evidence ?? {}) as Record<string, unknown>;
+    const sourceId = (isId(ev.sourceId) ? ev.sourceId : null) ?? firstSource.get(r.subjectId) ?? null;
+    out.set(r.subjectId, { changeSetId: set?.id ?? null, changeSetTitle: set?.title ?? null, sourceId, sourceTitle: null, at: r.at.toISOString(), by: r.by });
+  }
+  for (const id of ids) {
+    if (!out.has(id) && firstSource.has(id)) out.set(id, { changeSetId: null, changeSetTitle: null, sourceId: firstSource.get(id)!, sourceTitle: null, at: null, by: null });
+  }
+  const srcIds = [...new Set([...out.values()].map((o) => o.sourceId).filter((x): x is string => !!x))];
+  if (srcIds.length) {
+    const titles = new Map((await db.select({ id: sources.id, title: sources.title }).from(sources).where(and(inArray(sources.id, srcIds), sourceReadSql(ctx, "sources")))).map((s) => [s.id, s.title]));
+    for (const o of out.values()) {
+      if (!o.sourceId) continue;
+      if (titles.has(o.sourceId)) o.sourceTitle = titles.get(o.sourceId)!;
+      else o.sourceId = null; // not the viewer's to read: say nothing about it
+    }
+  }
+  return out;
 }
 
 async function relationLabels(v: Viewer): Promise<(key: string) => string> {
@@ -185,7 +283,9 @@ async function views(v: Viewer, sets: SetRow[]): Promise<ChangeSetView[]> {
       return e ? `${nodeName(e.fromId) ?? "…"} · ${rel(e.relation)} · ${nodeName(e.toId) ?? "…"}` : nodeName(id);
     };
     const verdicts: Record<string, Verdict> = {};
-    if (s.status === "draft") for (const [id, r] of Object.entries(verdictsFor(list.map(asLike), now))) verdicts[id] = r.verdict;
+    const reasons = s.status === "draft" ? verdictsFor(list.map(asLike), now, { includedOnly: true, setId: s.id, baseAt: s.baseAt }) : {};
+    for (const [id, r] of Object.entries(reasons)) verdicts[id] = r.verdict;
+    const remapped = Array.isArray((s.evidence ?? {}).remapped) ? ((s.evidence ?? {}).remapped as RemapEntry[]) : [];
     return {
       id: s.id, title: s.title, description: s.description, status: s.status, origin: s.origin as ChangeSetOrigin,
       createdAt: s.createdAt, deliveredAt: s.deliveredAt, createdByName: s.createdBy ? names.get(s.createdBy) ?? null : null,
@@ -197,6 +297,8 @@ async function views(v: Viewer, sets: SetRow[]): Promise<ChangeSetView[]> {
         included: c.included, nodeId: c.nodeId, edgeId: c.edgeId, payload: c.payload as Record<string, unknown>,
       })),
       verdicts,
+      ...(s.status === "draft" ? { reasons, summary: summarize(list, reasons), groups: groupReasons(list, reasons) } : {}),
+      ...(remapped.length ? { remapped } : {}),
     };
   });
 }
@@ -239,18 +341,50 @@ export async function abandon(v: Viewer, id: string): Promise<boolean> {
 
 /** Tick or untick one op. Changes the fingerprint, so an approval made before this is stale. */
 export async function setIncluded(v: Viewer, setId: string, changeId: string, included: boolean): Promise<{ fingerprint: string } | null> {
+  return updateChanges(v, setId, { changeIds: [changeId], included });
+}
+
+/**
+ * Tick, untick or decide several ops at once (a group's one-click resolution, or one op's own control). A resolution
+ * is stored on the op (`payload.resolution`; null clears it), so it is fingerprinted like a tick: an approval made
+ * before it is stale. Returns null when the set or none of the ops is the viewer's to change.
+ */
+export async function updateChanges(v: Viewer, setId: string, input: { changeIds: string[]; included?: boolean; resolution?: Resolution | null; resolutions?: Record<string, Resolution | null> }): Promise<{ fingerprint: string } | null> {
   const row = await loadRow(v, setId);
   if (!row) return null;
   if (row.status !== "draft") throw new ChangeError(409, "This proposal has already been decided.");
-  if (!isId(changeId)) return null;
+  const ids = [...new Set(input.changeIds)].filter(isId);
+  if (!ids.length) return null;
+  for (const r of [input.resolution, ...Object.values(input.resolutions ?? {})]) if (r?.use && !isId(r.use)) throw new ChangeError(400, "That isn't something in the graph.");
   return db.transaction(async (tx) => {
-    const r = await tx.update(changes).set({ included }).where(and(eq(changes.id, changeId), eq(changes.changeSetId, row.id))).returning({ id: changes.id });
-    if (!r.length) return null;
+    const hit = await tx.select().from(changes).where(and(inArray(changes.id, ids), eq(changes.changeSetId, row.id))).for("update");
+    if (!hit.length) return null;
+    for (const c of hit) {
+      const patch: Partial<typeof changes.$inferInsert> = {};
+      if (typeof input.included === "boolean") patch.included = input.included;
+      const given = input.resolutions && c.id in input.resolutions ? input.resolutions[c.id] : input.resolution;
+      if (given !== undefined) {
+        const payload = { ...((c.payload ?? {}) as Record<string, unknown>) };
+        const r = given ? cleanResolution(given) : null;
+        if (r) payload.resolution = r; else delete payload.resolution;
+        patch.payload = payload;
+      }
+      if (Object.keys(patch).length) await tx.update(changes).set(patch).where(eq(changes.id, c.id));
+    }
     const all = await tx.select().from(changes).where(eq(changes.changeSetId, row.id));
     const fingerprint = fingerprintOf(all);
     await tx.update(changeSets).set({ fingerprint, updatedAt: new Date() }).where(eq(changeSets.id, row.id));
     return { fingerprint };
   });
+}
+
+function cleanResolution(r: Resolution): Resolution | null {
+  const out: Resolution = {};
+  if (r.use) out.use = r.use;
+  else if (r.asNew) out.asNew = true;
+  if (r.follow) out.follow = true;
+  if (r.keep === "graph" || r.keep === "proposal") out.keep = r.keep;
+  return Object.keys(out).length ? out : null;
 }
 
 export { loadRow };
@@ -296,8 +430,6 @@ export type ReviewContext = {
   relations: Record<string, string>;
   /** Kind labels by `type:key`. */
   kinds: Record<string, string>;
-  /** Why each op got its verdict (a key under changes.why). */
-  why: Record<string, string>;
   /** Titles of the sources the receipts point at (readable ones only). */
   sources: Record<string, string>;
   canDeliver: boolean;
@@ -306,8 +438,8 @@ export type ReviewContext = {
 export async function reviewContext(v: Viewer, cs: ChangeSetView): Promise<ReviewContext> {
   const rows = cs.changes.map((c) => ({ ...c, changeSetId: cs.id })) as unknown as ChangeRow[];
   const now = await nowFor(v, rows, cs.status === "draft");
-  const why: Record<string, string> = {};
-  if (cs.status === "draft") for (const [id, r] of Object.entries(verdictsFor(cs.changes, now))) why[id] = r.why;
+  // A delivered set's adds that used existing things link to those.
+  if (cs.remapped?.length) for (const [id, n] of (await readableSnapshots(v, { nodeIds: cs.remapped.map((r) => r.to) })).nodes) now.nodes.set(id, n);
   const nodes: ReviewContext["nodes"] = {};
   for (const [id, n] of now.nodes) nodes[id] = { label: n.label, type: n.type, kind: n.kind, summary: n.summary, startAt: n.startAt, endAt: n.endAt, visibility: n.visibility, props: n.props };
   const edges: ReviewContext["edges"] = {};
@@ -329,5 +461,5 @@ export async function reviewContext(v: Viewer, cs: ChangeSetView): Promise<Revie
     const ctx = await accessContext(v);
     for (const s of await db.select({ id: src.id, title: src.title }).from(src).where(and(inArray(src.id, sourceIds), sourceReadSql(ctx, "sources")))) sourcesOut[s.id] = s.title;
   }
-  return { nodes, edges, relations, kinds, why, sources: sourcesOut, canDeliver: canWrite(v) };
+  return { nodes, edges, relations, kinds, sources: sourcesOut, canDeliver: canWrite(v) };
 }

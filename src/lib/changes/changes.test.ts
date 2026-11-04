@@ -2,38 +2,45 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { canSeeSet, emptyNow, fingerprintOf, project, summaryOf, toStored, verdictsFor, type ChangeRowLike, type Now } from "./pure";
+import {
+  canSeeSet, emptyNow, fingerprintOf, groupReasons, matchExisting, planDelivery, project, remapMinted, summarize, summaryOf, toStored, verdictsFor,
+  type ChangeRowLike, type NodeCand, type Now,
+} from "./pure";
 import { restoreOps } from "@/lib/history/read-pure";
 import { edgeSnap, nodeSnap, type GraphState } from "@/lib/history/pure";
 
 const row = (id: string, seq: number, op: string, extra: Partial<ChangeRowLike> = {}): ChangeRowLike =>
   ({ id, seq, op, nodeId: null, edgeId: null, payload: {}, included: true, ...extra });
 
-function nowWith(nodes: { id: string; type?: string; label: string; mergedInto?: string | null; props?: Record<string, unknown> }[], triples: string[] = []): Now {
+type NodeIn = { id: string; type?: string; label: string; kind?: string | null; aliases?: string[]; mergedInto?: string | null; props?: Record<string, unknown> };
+function nowWith(nodes: NodeIn[], triples: string[] = []): Now {
   const n = emptyNow();
   for (const x of nodes) {
-    n.nodes.set(x.id, { id: x.id, type: x.type ?? "person", label: x.label, aliases: [], summary: null, kind: null, props: x.props ?? {}, startAt: null, endAt: null, visibility: "private", sensitive: false, mergedInto: x.mergedInto ?? null });
-    if (!x.mergedInto) n.names.set(`${x.type ?? "person"}:${x.label.toLowerCase()}`, x.id);
+    n.nodes.set(x.id, { id: x.id, type: x.type ?? "person", label: x.label, aliases: x.aliases ?? [], summary: null, kind: x.kind ?? null, props: x.props ?? {}, startAt: null, endAt: null, visibility: "private", sensitive: false, mergedInto: x.mergedInto ?? null });
+    if (!x.mergedInto && x.props?.retired !== true) n.index.push({ id: x.id, type: x.type ?? "person", kind: x.kind ?? null, label: x.label, aliases: x.aliases ?? [] });
   }
-  for (const t of triples) n.triples.add(t);
+  triples.forEach((t, i) => n.triples.set(t, `e-existing-${i}`));
   return n;
 }
 
 describe("verdicts", () => {
-  it("a new node is outstanding, landed once it exists, conflicted when someone else added the same name", () => {
+  it("a new node is outstanding, landed once it exists, and 'exists' (deliverable) when someone else added the same name", () => {
     const c = row("c1", 1, "addNode", { nodeId: "n9", payload: { type: "person", label: "Anna" } });
     expect(verdictsFor([c], nowWith([]))["c1"].verdict).toBe("outstanding");
     expect(verdictsFor([c], nowWith([{ id: "n9", label: "Anna" }]))["c1"].verdict).toBe("landed");
-    expect(verdictsFor([c], nowWith([{ id: "n1", label: "Anna" }]))["c1"]).toEqual({ verdict: "conflicted", why: "sameName" });
+    const v = verdictsFor([c], nowWith([{ id: "n1", label: "Anna" }]))["c1"];
+    expect(v.verdict).toBe("exists");
+    expect(v.code).toBe("exists");
+    expect(v.details?.existing).toMatchObject({ id: "n1", label: "Anna", via: "label" });
   });
   it("a fact needs both ends in the graph or added by the same proposal", () => {
     const add = row("c1", 1, "addNode", { nodeId: "n9", payload: { type: "place", label: "School" } });
     const fact = row("c2", 2, "addEdge", { edgeId: "e9", payload: { fromId: "n1", toId: "n9", relation: "attends" } });
     const now = nowWith([{ id: "n1", label: "Anna" }]);
     expect(verdictsFor([add, fact], now)["c2"].verdict).toBe("outstanding");
-    expect(verdictsFor([fact], now)["c2"]).toEqual({ verdict: "conflicted", why: "endGone" });
-    // Unticking the node makes the fact conflict when only the ticked ones count.
-    expect(verdictsFor([{ ...add, included: false }, fact], now, { includedOnly: true })["c2"].verdict).toBe("conflicted");
+    expect(verdictsFor([fact], now)["c2"]).toMatchObject({ verdict: "conflicted", code: "target_missing" });
+    // Unticking the node makes the fact depend on something left out when only the ticked ones count.
+    expect(verdictsFor([{ ...add, included: false }, fact], now, { includedOnly: true })["c2"]).toMatchObject({ verdict: "conflicted", code: "depends_on_left_out", details: { dependsOn: { changeId: "c1", label: "School" } } });
     expect(verdictsFor([fact], nowWith([{ id: "n1", label: "Anna" }, { id: "n9", type: "place", label: "School" }], ["n1|attends|n9"]))["c2"].verdict).toBe("landed");
   });
   it("updates land when the graph already says it, conflict when the thing is gone", () => {
@@ -45,7 +52,7 @@ describe("verdicts", () => {
   it("merges: landed when done, conflicted across types", () => {
     const now = nowWith([{ id: "a", label: "A" }, { id: "b", label: "B", mergedInto: "a" }, { id: "p", type: "place", label: "P" }]);
     expect(verdictsFor([row("c", 1, "mergeNodes", { payload: { keepId: "a", dropId: "b" } })], now)["c"].verdict).toBe("landed");
-    expect(verdictsFor([row("c", 1, "mergeNodes", { payload: { keepId: "a", dropId: "p" } })], now)["c"]).toEqual({ verdict: "conflicted", why: "differentTypes" });
+    expect(verdictsFor([row("c", 1, "mergeNodes", { payload: { keepId: "a", dropId: "p" } })], now)["c"]).toMatchObject({ verdict: "conflicted", code: "different_types" });
   });
 });
 
@@ -135,6 +142,7 @@ describe("who may deliver", () => {
     "lib/history/context.ts", // a comment naming it
     "lib/meta/emergent.ts", // a comment naming it
     "app/api/changes/[id]/deliver/route.ts", // a person presses Deliver
+    "app/api/changes/deliver-ready/route.ts", // a person presses Deliver all ready and confirms the counts
     "lib/mentions/annotate.ts", // a person presses Send on their own message
     "lib/automations/apply.ts", // a person approves a suggestion
   ]);
@@ -286,5 +294,188 @@ describe("people and members' own nodes are written through gbrain or the histor
     const src = read("../graphs/self.ts");
     expect(src).toMatch(/recordRows\(tx, graph\.id, \{ nodes: \[\[null, nodeSnap\(row\)\]\] \}/);
     expect(src).toMatch(/recordSnapshots\(ex, row\.graphId, before/);
+  });
+});
+
+/* ── Rebase instead of conflict ──────────────────────────────────────────────────────────────────────── */
+
+const cand = (id: string, label: string, extra: Partial<NodeCand> = {}): NodeCand => ({ id, type: "topic", kind: null, label, aliases: [], ...extra });
+
+describe("matchExisting", () => {
+  const index = [cand("bek", "BEK 260", { kind: "regulation" }), cand("anna", "Anna", { type: "person" })];
+  it("matches the same type and name, whatever the case and spacing", () => {
+    expect(matchExisting({ type: "topic", label: "bek  260" }, index)).toMatchObject({ kind: "exists", node: { id: "bek" }, via: "label" });
+    expect(matchExisting({ type: "topic", label: "BEK 261" }, index)).toEqual({ kind: "none" });
+    expect(matchExisting({ type: "person", label: "BEK 260" }, index)).toEqual({ kind: "none" });
+  });
+  it("matches an alias on either side", () => {
+    const idx = [cand("i16", "§16-informationsstrømme", { aliases: ["Paragraf 16 informationsstrømme"] })];
+    expect(matchExisting({ type: "topic", label: "paragraf 16 informationsstrømme" }, idx)).toMatchObject({ kind: "exists", node: { id: "i16" }, via: "alias" });
+    expect(matchExisting({ type: "topic", label: "Informationsstrømme", aliases: ["§16-informationsstrømme"] }, idx)).toMatchObject({ kind: "exists", via: "label" });
+  });
+  it("a different kind is a kind mismatch; a missing kind on either side is not", () => {
+    expect(matchExisting({ type: "topic", label: "BEK 260", kind: "regulation" }, index)).toMatchObject({ kind: "exists" });
+    expect(matchExisting({ type: "topic", label: "BEK 260" }, index)).toMatchObject({ kind: "exists" });
+    expect(matchExisting({ type: "topic", label: "BEK 260", kind: "project" }, index)).toMatchObject({ kind: "kind_mismatch", candidates: [{ id: "bek" }] });
+  });
+  it("several matches are ambiguous, never picked", () => {
+    const idx = [cand("a", "Energinet"), cand("b", "energinet")];
+    expect(matchExisting({ type: "topic", label: "Energinet" }, idx)).toMatchObject({ kind: "ambiguous", candidates: [{ id: "a" }, { id: "b" }] });
+    // A label match beats an alias match, so one exact name is still safe.
+    expect(matchExisting({ type: "topic", label: "Energinet" }, [cand("a", "Energinet"), cand("c", "TSO", { aliases: ["Energinet"] })])).toMatchObject({ kind: "exists", node: { id: "a" } });
+  });
+  it("never a retired or merged node", () => {
+    expect(matchExisting({ type: "topic", label: "BEK 260" }, [cand("old", "BEK 260", { retired: true })])).toEqual({ kind: "none" });
+    expect(matchExisting({ type: "topic", label: "BEK 260" }, [cand("old", "BEK 260", { mergedInto: "x" })])).toEqual({ kind: "none" });
+  });
+});
+
+describe("remapMinted", () => {
+  it("points edges, updates, merges and reminders at the existing node; the add keeps its own id", () => {
+    const ops = [
+      row("a", 1, "addNode", { nodeId: "new", payload: { type: "topic", label: "BEK 260" } }),
+      row("e", 2, "addEdge", { edgeId: "e1", payload: { fromId: "doc", toId: "new", relation: "mentions" } }),
+      row("e2", 3, "addEdge", { edgeId: "e2", payload: { fromId: "new", toId: "other", relation: "part_of" } }),
+      row("u", 4, "updateNode", { nodeId: "new", payload: { set: { summary: "x" } } }),
+      row("m", 5, "mergeNodes", { nodeId: "keep", payload: { keepId: "keep", dropId: "new" } }),
+      row("r", 6, "addReminder", { nodeId: "new", payload: { title: "Read it", dueAt: "2026-12-01", aboutNodeId: "new" } }),
+    ];
+    const out = remapMinted(ops, { new: "bek" });
+    expect(out[0].nodeId).toBe("new");
+    expect(out[1].payload).toMatchObject({ fromId: "doc", toId: "bek" });
+    expect(out[2].payload).toMatchObject({ fromId: "bek", toId: "other" });
+    expect(out[3].nodeId).toBe("bek");
+    expect(out[4].payload).toMatchObject({ keepId: "keep", dropId: "bek" });
+    expect(out[5]).toMatchObject({ nodeId: "bek", payload: { aboutNodeId: "bek" } });
+    expect(ops[1].payload.toId).toBe("new"); // the input is untouched
+    expect(remapMinted(ops, {})).toBe(ops);
+  });
+});
+
+describe("reason codes", () => {
+  const base = [
+    { id: "keep", label: "Ny Skole", type: "place" },
+    { id: "drop", label: "Ny skole (gammel)", type: "place", mergedInto: "keep" },
+    { id: "ret", label: "Svømning", type: "topic", props: { retired: true, retiredAt: "2026-11-01T10:00:00Z" } },
+    { id: "anna", label: "Anna", props: { phone: "1" } },
+    { id: "bek", label: "BEK 260", type: "topic", kind: "regulation" },
+    { id: "bek2", label: "Energinet", type: "organization" },
+    { id: "bek3", label: "Energinet", type: "organization" },
+  ];
+  const now = nowWith(base);
+  now.hidden.add("secret");
+  now.readOnly.add("anna");
+  now.events.set("ret", [{ kind: "updated", field: "props.retired", at: "2026-11-01T10:00:00Z", by: "Mette", changeSetId: null }]);
+  now.events.set("drop", [{ kind: "merged", field: "mergedInto", at: "2026-11-02T10:00:00Z", by: "Dan", changeSetId: null }]);
+
+  it("target_merged names what it was merged into; following the merge makes it deliverable", () => {
+    const c = row("c", 1, "addEdge", { payload: { fromId: "anna", toId: "drop", relation: "attends" } });
+    expect(verdictsFor([c], now)["c"]).toMatchObject({ verdict: "conflicted", code: "target_merged", details: { mergedInto: { id: "keep", label: "Ny Skole" }, by: "Dan" } });
+    const followed = verdictsFor([{ ...c, payload: { ...c.payload, resolution: { follow: true } } }], now)["c"];
+    expect(followed).toMatchObject({ verdict: "outstanding", details: { remap: { drop: "keep" } } });
+  });
+  it("target_retired says who and when", () => {
+    const c = row("c", 1, "addEdge", { payload: { fromId: "anna", toId: "ret", relation: "likes" } });
+    expect(verdictsFor([c], now)["c"]).toMatchObject({ code: "target_retired", details: { at: "2026-11-01T10:00:00Z", by: "Mette", target: { label: "Svømning" } } });
+  });
+  it("target_missing and no_permission tell deleted from not visible", () => {
+    expect(verdictsFor([row("c", 1, "updateNode", { nodeId: "gone", payload: { set: { label: "x" } } })], now)["c"].code).toBe("target_missing");
+    expect(verdictsFor([row("c", 1, "updateNode", { nodeId: "secret", payload: { set: { label: "x" } } })], now)["c"].code).toBe("no_permission");
+    expect(verdictsFor([row("c", 1, "updateNode", { nodeId: "anna", payload: { set: { summary: "x" } } })], now)["c"].code).toBe("no_permission");
+  });
+  it("value_changed shows the graph's value and the proposal's; a decision settles it", () => {
+    const n = nowWith([{ id: "lars", label: "Lars", props: { phone: "222" } }]);
+    n.events.set("lars", [{ kind: "updated", field: "props.phone", at: "2026-11-03T09:00:00Z", by: "Dan", changeSetId: "other" }]);
+    const c = row("c", 1, "updateNode", { nodeId: "lars", payload: { set: { props: { phone: "111" } } } });
+    const v = verdictsFor([c], n, { setId: "mine", baseAt: "2026-11-02T00:00:00Z" })["c"];
+    expect(v).toMatchObject({ verdict: "conflicted", code: "value_changed", details: { fields: [{ field: "props.phone", now: "222", proposed: "111" }], by: "Dan" } });
+    // A change made before the proposal, or by the proposal's own set, is not a conflict.
+    expect(verdictsFor([c], n, { setId: "mine", baseAt: "2026-11-04T00:00:00Z" })["c"].verdict).toBe("outstanding");
+    expect(verdictsFor([c], n, { setId: "other", baseAt: "2026-11-02T00:00:00Z" })["c"].verdict).toBe("outstanding");
+    const keepGraph = { ...c, payload: { ...c.payload, resolution: { keep: "graph" } } };
+    expect(verdictsFor([keepGraph], n, { setId: "mine", baseAt: "2026-11-02T00:00:00Z" })["c"]).toMatchObject({ verdict: "landed", code: "kept_graph" });
+    const useProposal = { ...c, payload: { ...c.payload, resolution: { keep: "proposal" } } };
+    expect(verdictsFor([useProposal], n, { setId: "mine", baseAt: "2026-11-02T00:00:00Z" })["c"].verdict).toBe("outstanding");
+  });
+  it("ambiguous_existing and kind_mismatch list the candidates; choosing one or 'add as new' settles it", () => {
+    const amb = row("a", 1, "addNode", { nodeId: "n1", payload: { type: "organization", label: "Energinet" } });
+    expect(verdictsFor([amb], now)["a"]).toMatchObject({ code: "ambiguous_existing", details: { candidates: [{ id: "bek2" }, { id: "bek3" }] } });
+    expect(verdictsFor([{ ...amb, payload: { ...amb.payload, resolution: { use: "bek3" } } }], now)["a"]).toMatchObject({ verdict: "exists", details: { existing: { id: "bek3", via: "chosen" } } });
+    expect(verdictsFor([{ ...amb, payload: { ...amb.payload, resolution: { asNew: true } } }], now)["a"]).toMatchObject({ verdict: "outstanding", code: "to_add" });
+    const km = row("k", 1, "addNode", { nodeId: "n2", payload: { type: "topic", label: "BEK 260", kind: "project" } });
+    expect(verdictsFor([km], now)["k"]).toMatchObject({ verdict: "conflicted", code: "kind_mismatch", details: { candidates: [{ id: "bek", kind: "regulation" }] } });
+  });
+});
+
+describe("delivering onto things that already exist", () => {
+  // Document A delivered "BEK 260" and "§16-informationsstrømme" earlier; document B proposes the same plus facts.
+  const now = nowWith([
+    { id: "docB", label: "Konvention 16", type: "document" },
+    { id: "bek", label: "BEK 260", type: "topic" },
+    { id: "i16", label: "§16-informationsstrømme", type: "topic" },
+  ], ["bek|regulates|i16"]);
+  now.origins.set("bek", { changeSetId: "setA", changeSetTitle: "From 'Energinet-ADR.pdf'", sourceId: "srcA", sourceTitle: "Energinet-ADR.pdf", at: "2026-11-04T08:00:00Z", by: "Anna" });
+  const ops = [
+    row("c1", 1, "addNode", { nodeId: "m-bek", payload: { type: "topic", label: "bek 260" } }),
+    row("c2", 2, "addNode", { nodeId: "m-i16", payload: { type: "topic", label: "§16-informationsstrømme" } }),
+    row("c3", 3, "addNode", { nodeId: "m-new", payload: { type: "topic", label: "Datadeling" } }),
+    row("c4", 4, "addEdge", { edgeId: "x4", payload: { fromId: "docB", toId: "m-bek", relation: "mentions" } }),
+    row("c5", 5, "addEdge", { edgeId: "x5", payload: { fromId: "m-bek", toId: "m-i16", relation: "regulates" } }),
+    row("c6", 6, "addEdge", { edgeId: "x6", payload: { fromId: "m-new", toId: "m-i16", relation: "part_of" } }),
+    row("c7", 7, "updateNode", { nodeId: "m-bek", payload: { set: { summary: "Bekendtgørelse om …" } } }),
+  ];
+  const reasons = verdictsFor(ops, now, { includedOnly: true });
+
+  it("the adds whose things exist are 'exists'; facts to them are pointed there; a fact already true is landed", () => {
+    expect(reasons.c1).toMatchObject({ verdict: "exists", details: { existing: { id: "bek", origin: { sourceTitle: "Energinet-ADR.pdf" } } } });
+    expect(reasons.c2.verdict).toBe("exists");
+    expect(reasons.c3.verdict).toBe("outstanding");
+    expect(reasons.c4).toMatchObject({ verdict: "outstanding", details: { remap: { "m-bek": "bek" } } });
+    expect(reasons.c5).toMatchObject({ verdict: "landed", code: "already_true", details: { edgeId: "e-existing-0" } });
+    expect(reasons.c6.verdict).toBe("outstanding");
+    expect(reasons.c7).toMatchObject({ verdict: "outstanding", details: { remap: { "m-bek": "bek" } } });
+  });
+  it("the plan skips the adds, keeps their evidence on the existing nodes, and applies the rest pointed at them", () => {
+    const plan = planDelivery(ops, reasons);
+    expect(plan.conflicts).toEqual([]);
+    expect(plan.mapping).toEqual({ "m-bek": "bek", "m-i16": "i16" });
+    expect(plan.remapped.map((r) => [r.changeId, r.to, r.existingLabel])).toEqual([["c1", "bek", "BEK 260"], ["c2", "i16", "§16-informationsstrømme"]]);
+    const byChange = Object.fromEntries(plan.steps.map((s) => [s.change.id, s]));
+    expect(byChange.c1).toMatchObject({ action: "evidence", subject: { type: "node", id: "bek" } });
+    expect(byChange.c2).toMatchObject({ action: "evidence", subject: { type: "node", id: "i16" } });
+    expect(byChange.c3.action).toBe("apply");
+    expect(byChange.c4).toMatchObject({ action: "apply", change: { payload: { fromId: "docB", toId: "bek" } } });
+    expect(byChange.c5).toMatchObject({ action: "evidence", subject: { type: "edge", id: "e-existing-0" } });
+    expect(byChange.c6).toMatchObject({ action: "apply", change: { payload: { fromId: "m-new", toId: "i16" } } });
+    expect(byChange.c7).toMatchObject({ action: "apply", change: { nodeId: "bek" } });
+    expect(plan.alreadyTrue).toEqual([{ changeId: "c5", edgeId: "e-existing-0" }]);
+  });
+  it("the mapping is not part of the fingerprint: an approval stays valid", () => {
+    // Verdicts are computed at delivery from the graph; the stored ops (and so the fingerprint) never change.
+    const before = fingerprintOf(ops);
+    planDelivery(ops, reasons);
+    expect(fingerprintOf(ops)).toBe(before);
+  });
+  it("summarises and groups: the matches by where they came from", () => {
+    const s = summarize(ops, reasons);
+    expect(s).toMatchObject({ total: 7, included: 7, ready: 7, exists: 2, landed: 1, toDo: 4, needsYou: 0, deliverable: true, nothingNew: false });
+    const groups = groupReasons(ops, reasons);
+    expect(groups.map((g) => [g.code, g.changeIds.length])).toEqual([["exists", 1], ["exists", 1], ["landed", 1]]);
+    expect(groups[0].origin?.sourceTitle).toBe("Energinet-ADR.pdf");
+  });
+  it("a set that only says what the graph already says is 'nothing new': evidence only", () => {
+    const same = [ops[0], ops[1], ops[4]];
+    const r = verdictsFor(same, now, { includedOnly: true });
+    const s = summarize(same, r);
+    expect(s).toMatchObject({ nothingNew: true, deliverable: true, toDo: 0 });
+    const plan = planDelivery(same, r);
+    expect(plan.steps.every((x) => x.action === "evidence")).toBe(true);
+  });
+  it("problems need a person: counted, grouped first, and never in the plan", () => {
+    const bad = [...ops, row("c8", 8, "addEdge", { payload: { fromId: "docB", toId: "nowhere", relation: "mentions" } })];
+    const r = verdictsFor(bad, now, { includedOnly: true });
+    expect(summarize(bad, r)).toMatchObject({ needsYou: 1, deliverable: false });
+    expect(groupReasons(bad, r)[0]).toMatchObject({ code: "target_missing", changeIds: ["c8"] });
+    expect(planDelivery(bad, r).conflicts).toEqual(["c8"]);
   });
 });

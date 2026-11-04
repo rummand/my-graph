@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/auth", async (orig) => ({ ...(await orig<typeof import("@/lib/auth")>()), audit: async () => {}, getViewer: async () => null }));
 import { db, sql } from "@/db";
-import { changeSets, households, metaKinds, sources, users } from "@/db/schema";
+import { changeSets, edges, households, metaKinds, nodes, provenance, sources, users } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { viewerFor } from "@/lib/graphs/store";
 import { getNode, listNodes, search, upsertNode } from "@/lib/gbrain";
@@ -93,5 +93,44 @@ describe.skipIf(!enabled)("versioning (database)", () => {
     expect(after.changes[0].payload.set).toEqual({ props: { phone: "1", email: "l@x.dk" } });
     expect(after.fingerprint).not.toBe(before);
     expect(await amendPendingLinkUpdate(mum, { identityId: "id-2", nodeId: node.id, set: { label: "x" } })).toBeNull();
+  });
+  it("two documents propose the same topic: the second connects to the first's node, keeps its evidence, and adds no duplicates", async () => {
+    const [srcA] = await db.insert(sources).values({ householdId: hh, graphId: mum.graphId, ownerId: mum.id, kind: "upload", title: "ADR-Governance.pdf", visibility: "household" } as never).returning();
+    const [srcB] = await db.insert(sources).values({ householdId: hh, graphId: mum.graphId, ownerId: mum.id, kind: "upload", title: "Konvention 16.docx", visibility: "household" } as never).returning();
+    const { node: doc } = await upsertNode(mum, { type: "document", label: "Konvention 16" }, me());
+    const ops = (sourceId: string, quote: string) => [
+      { op: "addNode" as const, type: "topic", label: "BEK 260 remap", receipt: { sourceId, quote } },
+      { op: "addNode" as const, type: "topic", label: "§16 remap", receipt: { sourceId, quote } },
+      { op: "addEdge" as const, fromId: "", toId: "", relation: "regulates", receipt: { sourceId, quote } },
+      { op: "addEdge" as const, fromId: doc.id, toId: "", relation: "mentions", receipt: { sourceId, quote } },
+    ];
+    const propose = async (title: string, sourceId: string, quote: string) => {
+      const ids = ["00000000-0000-4000-8000-", "00000000-0000-4000-9000-"].map((p) => `${p}${Math.random().toString(16).slice(2, 14).padEnd(12, "0")}`);
+      const o = ops(sourceId, quote);
+      Object.assign(o[0], { nodeId: ids[0] }); Object.assign(o[1], { nodeId: ids[1] });
+      Object.assign(o[2], { fromId: ids[0], toId: ids[1] }); Object.assign(o[3], { toId: ids[0] });
+      return (await proposeChanges(mum, { title, origin: "ingest", evidence: { sourceId }, changes: o }))!;
+    };
+    const a = await propose("From ADR", srcA.id, "BEK 260 regulates §16");
+    const b = await propose("From Konvention 16", srcB.id, "BEK 260 again");
+    expect((await deliverChangeSet(mum, a.id)).ok).toBe(true);
+
+    const second = (await getChangeSet(mum, b.id))!;
+    expect(second.summary).toMatchObject({ exists: 2, needsYou: 0, deliverable: true });
+    expect(Object.values(second.verdicts)).toEqual(["exists", "exists", "landed", "landed"]);
+    expect(second.groups?.[0]).toMatchObject({ code: "exists", origin: { changeSetTitle: "From ADR", sourceTitle: "ADR-Governance.pdf" } });
+
+    const r = await deliverChangeSet(mum, b.id, { fingerprint: second.fingerprint ?? undefined });
+    expect(r).toMatchObject({ ok: true, connected: 2 });
+    const bek = await db.select().from(nodes).where(and(eq(nodes.graphId, mum.graphId), eq(nodes.label, "BEK 260 remap")));
+    expect(bek).toHaveLength(1);
+    const facts = await db.select().from(edges).where(and(eq(edges.graphId, mum.graphId), eq(edges.fromId, bek[0].id), eq(edges.relation, "regulates")));
+    expect(facts).toHaveLength(1);
+    // The second document is evidence on the node and on the fact that was already true.
+    const nodeProv = await db.select().from(provenance).where(eq(provenance.subjectId, bek[0].id));
+    expect(nodeProv.map((p) => p.sourceId)).toEqual(expect.arrayContaining([srcA.id, srcB.id]));
+    expect((await db.select().from(provenance).where(eq(provenance.subjectId, facts[0].id))).map((p) => p.sourceId)).toEqual(expect.arrayContaining([srcA.id, srcB.id]));
+    const delivered = (await getChangeSet(mum, b.id))!;
+    expect(delivered.remapped?.map((x) => x.to)).toContain(bek[0].id);
   });
 });

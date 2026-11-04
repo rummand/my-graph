@@ -46,3 +46,11 @@ export function query<T extends z.ZodType>(req: Request, schema: T): z.infer<T> 
 
 export const idParams = z.object({ id: z.uuid({ message: "Not a valid id" }) });
 export const isoDate = z.string().trim().max(40).refine((s) => !Number.isNaN(Date.parse(s)), "Not a date").transform((s) => new Date(s));
+
+/** A person's decision on one op (see Resolution in ./rebase). */
+export const resolutionSchema = z.object({
+  use: z.uuid().optional(),
+  asNew: z.boolean().optional(),
+  follow: z.boolean().optional(),
+  keep: z.enum(["proposal", "graph"]).optional(),
+}).strict();

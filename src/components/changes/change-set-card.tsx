@@ -18,6 +18,30 @@ function opLabel(op: string, t: TFn): string {
 }
 
 /**
+ * The one-line status under a waiting proposal's title: "113 changes, ready to deliver", "…, 18 match things already
+ * in the graph", "…, 3 need you", or "nothing new" when everything in it is already in the graph.
+ */
+export function StatusLine({ cs, t }: { cs: Pick<ChangeSetView, "changes" | "summary">; t: TFn }) {
+  const s = cs.summary;
+  if (!s) return null;
+  const parts: { text: string; warn?: boolean }[] = [{ text: t("changes.count", { count: s.total }) }];
+  if (!s.included) parts.push({ text: t("changes.line.nothingTicked") });
+  else if (s.nothingNew) parts.push({ text: t("changes.line.nothingNew") });
+  else {
+    if (s.exists) parts.push({ text: t("changes.line.exists", { count: s.exists }) });
+    if (s.needsYou) parts.push({ text: t("changes.line.needsYou", { count: s.needsYou }), warn: true });
+    if (!s.exists && !s.needsYou) parts.push({ text: t("changes.line.ready") });
+  }
+  return (
+    <p className="mt-1 text-sm">
+      {parts.map((x, i) => (
+        <span key={i} className={x.warn ? "font-medium text-warn" : i === 0 ? "text-fg" : "text-muted"}>{i > 0 ? ", " : ""}{x.text}</span>
+      ))}
+    </p>
+  );
+}
+
+/**
  * One proposal with its changes and their receipts. Server-safe. `actions` adds Deliver all / Review / Drop for a
  * proposal still waiting (Today, a library item); the full review with tick boxes is on /changes/[id].
  */
@@ -37,6 +61,7 @@ export function ChangeSetCard({ cs, t, locale, compact = false, actions = false,
         </div>
         <Badge tone={cs.status === "draft" ? "warn" : cs.status === "delivered" ? "accent" : "neutral"}>{t(`changes.status.${cs.status}`)}</Badge>
       </header>
+      {cs.status === "draft" && <StatusLine cs={cs} t={t} />}
       {cs.description && <p className="mt-3 max-w-[65ch] text-[15px]">{cs.description}</p>}
       <ul className="mt-4 divide-y divide-line/70">
         {shown.map((c) => {
@@ -49,8 +74,8 @@ export function ChangeSetCard({ cs, t, locale, compact = false, actions = false,
                   {c.nodeId ? <Link href={`/node/${c.nodeId}`} className="hover:underline">{c.summary}</Link> : c.summary}
                 </span>
                 {!c.included && <Badge>{t("changes.excluded")}</Badge>}
-                {verdict === "conflicted" && <Badge tone="danger">{t("changes.verdict.conflicted")}</Badge>}
-                {verdict === "landed" && cs.status === "draft" && <Badge tone="accent">{t("changes.verdict.landed")}</Badge>}
+                {verdict === "conflicted" && c.included && <Badge tone="warn">{t("changes.verdict.conflicted")}</Badge>}
+                {(verdict === "landed" || verdict === "exists") && cs.status === "draft" && <Badge tone="accent">{t(`changes.verdict.${verdict}`)}</Badge>}
               </div>
               {c.note && <p className="mt-1 text-sm text-fg/85">{c.note}</p>}
               {!compact && <ReceiptLine r={c.receipt ?? {}} t={t} />}
@@ -62,7 +87,9 @@ export function ChangeSetCard({ cs, t, locale, compact = false, actions = false,
         <p className="mt-2 text-sm"><Link href={`/changes/${cs.id}`} className="text-accent hover:underline">{t("changes.count", { count: cs.changes.length })}</Link></p>
       )}
       {actions && cs.status === "draft" && (
-        <ChangeSetActions id={cs.id} fingerprint={cs.fingerprint ?? null} canDeliver={canDeliver} hasConflicts={Object.values(cs.verdicts).some((x) => x === "conflicted")} />
+        <ChangeSetActions id={cs.id} fingerprint={cs.fingerprint ?? null} canDeliver={canDeliver}
+          hasConflicts={cs.summary ? !cs.summary.deliverable : Object.values(cs.verdicts).some((x) => x === "conflicted")}
+          nothingNew={!!cs.summary?.nothingNew} partial={(cs.summary?.leftOut ?? 0) > 0} count={cs.summary?.included ?? cs.changes.length} />
       )}
     </article>
   );

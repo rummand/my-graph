@@ -9,8 +9,10 @@ const schema = z.object({
 }).strict();
 
 /**
- * POST /api/changes/:id/deliver { onlyChangeIds?, fingerprint? } → { ok, applied, conflicts, changeSet }.
- * A person decides: the ops land in one transaction with history and provenance. A stale fingerprint is refused (409).
+ * POST /api/changes/:id/deliver { onlyChangeIds?, fingerprint? } → { ok, applied, skipped, connected, evidence, restId, changeSet }.
+ * A person decides: the ops land in one transaction with history and provenance. Adds whose thing already exists are
+ * connected to it (`connected`; recorded in the set's `evidence.remapped`). A stale fingerprint is refused (409), and
+ * so are ops that need a person: 409 with `conflicts` (ids) and `reasons` (code and details per op).
  */
 export const POST = route<Ctx>(async (req, v, ctx) => {
   const { id } = idParams.parse(await ctx.params);
@@ -21,7 +23,7 @@ export const POST = route<Ctx>(async (req, v, ctx) => {
   if (!r.ok) {
     const stale = (r as { stale?: boolean }).stale;
     const status = r.conflicts.length || stale ? 409 : /can't change|not change/.test(r.error ?? "") ? 403 : 400;
-    throw new HttpError(status, r.error ?? "This couldn't be delivered.", { conflicts: r.conflicts, stale: !!stale });
+    throw new HttpError(status, r.error ?? "This couldn't be delivered.", { conflicts: r.conflicts, reasons: r.reasons ?? {}, stale: !!stale });
   }
   return { ...r, changeSet: await getChangeSet(v, id) };
 });

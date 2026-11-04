@@ -6,10 +6,13 @@ import { useT } from "@/lib/i18n/client";
 import { Button, buttonClass } from "@/components/ui";
 
 /**
- * Deliver all / Drop / Review for a proposal shown in a list (Today, a library item). Delivering sends the fingerprint
- * the list was rendered with, so a proposal that changed since is refused and the person is sent to review it.
+ * Deliver / Drop / Review for a proposal shown in a list (Today, a library item, /changes). Deliver shows only when
+ * nothing ticked needs a person (things already in the graph are connected on delivery). Delivering sends the
+ * fingerprint the list was rendered with, so a proposal that changed since is refused and the person is sent to review it.
  */
-export function ChangeSetActions({ id, fingerprint, canDeliver, hasConflicts }: { id: string; fingerprint: string | null; canDeliver: boolean; hasConflicts: boolean }) {
+export function ChangeSetActions({ id, fingerprint, canDeliver, hasConflicts, nothingNew = false, partial = false, count = 0 }: {
+  id: string; fingerprint: string | null; canDeliver: boolean; hasConflicts: boolean; nothingNew?: boolean; partial?: boolean; count?: number;
+}) {
   const t = useT();
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -27,7 +30,7 @@ export function ChangeSetActions({ id, fingerprint, canDeliver, hasConflicts }: 
     <div className="mt-3 flex flex-wrap items-center gap-2">
       {canDeliver && !hasConflicts && (
         <Button size="sm" disabled={busy} onClick={() => post("deliver", { fingerprint: fingerprint ?? undefined })}>
-          {busy ? t("changes.delivering") : t("changes.deliverAll")}
+          {busy ? t("changes.delivering") : nothingNew ? t("changes.deliverPlan.evidence") : partial ? t("changes.deliverSelected", { count }) : t("changes.deliverAll")}
         </Button>
       )}
       <Link href={`/changes/${id}`} className={buttonClass(canDeliver && !hasConflicts ? "secondary" : "primary", "sm")}>{t("changes.review")}</Link>
