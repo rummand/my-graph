@@ -23,7 +23,9 @@ import mention from "./mention";
 import artifacts from "./artifacts";
 import links from "./links";
 import docs from "./docs";
+import corpus from "./corpus";
+import compliance from "./compliance";
 
-const da: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, wiki, graph, changes, history, memory, automations, connections, graphs, onboarding, model, mention, links, artifacts, docs };
+const da: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, wiki, graph, changes, history, memory, automations, connections, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance };
 
 export default da;

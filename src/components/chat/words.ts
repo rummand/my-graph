@@ -64,6 +64,8 @@ export function stepWords(label: string, t: TFn = EN_T, opts: { family?: boolean
   if ((m = label.match(/^Checked the timeline \((\d+) events?\)$/))) return t("chat.steps.timelineEvents", { count: n(m[1]) });
   if ((m = label.match(/^Checked (\d+) open reminders?$/))) return t("chat.steps.reminders", { count: n(m[1]) });
   if ((m = label.match(/^Proposed (\d+) changes? for approval$/))) return t("chat.steps.proposed", { count: n(m[1]) });
+  if ((m = label.match(/^Checked against (\d+) corp(?:us|ora)$/))) return t("compliance.steps.checked", { count: n(m[1]) }, label);
+  if ((m = label.match(/^Read (\d+) rules? from the corpora$/))) return t("compliance.steps.readRules", { count: n(m[1]) }, label);
   if ((m = label.match(/^Recalled (.+)$/))) {
     const parts = splitList(m[1]).map((p) => {
       const x = p.match(/^(\d+) (family rules?|rules?|preferences?|notes?)$/);

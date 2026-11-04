@@ -6,7 +6,7 @@ import { clsx } from "clsx";
 import { AnimatePresence, motion } from "motion/react";
 import { useT } from "@/lib/i18n/client";
 import {
-  BookOpen, Brain, CalendarRange, FileText, FileStack, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, Users, Workflow, X, type LucideIcon,
+  BookOpen, Brain, Scale, CalendarRange, FileText, FileStack, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 
 /** `key` is the label under shell.nav.* (or `label`, a full message key, for items whose copy lives in their own namespace). */
@@ -22,6 +22,7 @@ const SECONDARY: NavItem[] = [
   { href: "/library", key: "library", icon: FolderOpen },
   { href: "/wiki", key: "wiki", icon: FileText, hideFor: ["guest"] },
   { href: "/artifacts", key: "artifacts", icon: FileStack, hideFor: ["guest"], label: "artifacts.nav" },
+  { href: "/corpora", key: "corpora", icon: Scale, hideFor: ["guest", "child"], label: "corpus.nav" },
   { href: "/graph", key: "connections", icon: Network },
   { href: "/changes", key: "changes", icon: GitPullRequestArrow, hideFor: ["guest"], label: "changes.nav" },
   { href: "/history", key: "history", icon: History, hideFor: ["guest"], label: "history.nav" },

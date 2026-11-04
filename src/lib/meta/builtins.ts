@@ -79,6 +79,11 @@ export const BUILTIN_KINDS: BuiltinKind[] = [
   { nodeType: "topic", key: "finances", label: "Finances", icon: "wallet" },
   { nodeType: "topic", key: "household", label: "Household", icon: "home" },
   { nodeType: "topic", key: "legal", label: "Legal", icon: "scale" },
+
+  // Documents. A corpus is a body of rules the graph follows: legislation, an authority's guide, internal governance,
+  // guardrails (src/lib/corpus). It is a document, not a topic: it is written, issued by someone, versioned and in
+  // force from a date, its rules are cited from its text, and document kinds stay in every graph template.
+  { nodeType: "document", key: "corpus", label: "Corpus", pluralLabel: "Corpora", icon: "scale", description: "A body of rules to follow: legislation, an authority's guide, internal governance or guardrails." },
 ];
 
 const PP = ["person"];
@@ -113,6 +118,7 @@ export const BUILTIN_RELATIONS: BuiltinRelation[] = [
   { key: "derived_from", label: "derived from", inverseLabel: "source of", category: "document", fromTypes: ANY, toTypes: ["document", "source"] },
   { key: "version_of", label: "version of", inverseLabel: "has version", category: "document", fromTypes: ["document"], toTypes: ["document"] },
   { key: "supports", label: "supports", inverseLabel: "supported by", category: "document", fromTypes: ["document", "source"], toTypes: ANY },
+  { key: "governs", label: "governs", inverseLabel: "governed by", category: "document", fromTypes: ["document"], toTypes: ANY },
 ];
 
 export const BUILTIN_ATTRIBUTES: BuiltinAttribute[] = [
@@ -140,6 +146,11 @@ export const BUILTIN_ATTRIBUTES: BuiltinAttribute[] = [
   // Teacher
   { nodeType: P, kindKey: "teacher", key: "subject", label: "Subject", dataType: "text" },
   { nodeType: P, kindKey: "teacher", key: "class", label: "Class", dataType: "text" },
+  // Corpus (a body of rules)
+  { nodeType: "document", kindKey: "corpus", key: "authority", label: "Issued by", dataType: "text" },
+  { nodeType: "document", kindKey: "corpus", key: "binding", label: "Binding", dataType: "enum", options: ["mandatory", "advisory"] },
+  { nodeType: "document", kindKey: "corpus", key: "version", label: "Version", dataType: "text" },
+  { nodeType: "document", kindKey: "corpus", key: "effective_from", label: "In force from", dataType: "date" },
   // Babysitter
   { nodeType: P, kindKey: "babysitter", key: "rate", label: "Rate per hour (kr.)", dataType: "number" },
   { nodeType: P, kindKey: "babysitter", key: "availability", label: "Availability", dataType: "text" },

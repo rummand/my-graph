@@ -8,6 +8,7 @@ import { isUuid } from "@/lib/gbrain";
 import { getLocale, getT } from "@/lib/i18n";
 import { Badge, EmptyState } from "@/components/ui";
 import { ChangeSetReview, originLabel } from "@/components/changes";
+import { ChangeSetCompliance } from "@/components/compliance";
 import { formatDate } from "@/components/provenance/labels";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +48,7 @@ export default async function ChangeSetPage({ params }: Props) {
             {cs.description && <p className="mt-3 max-w-[65ch] break-words">{cs.description}</p>}
             {cs.status === "draft" && <p className="mt-3 text-sm text-muted">{t("changes.decideHint")}</p>}
           </header>
+          {cs.status === "draft" && <ChangeSetCompliance changeSetId={cs.id} className="mb-6" />}
           <ChangeSetReview initial={cs} context={context} />
         </>
       ) : (

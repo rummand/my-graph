@@ -25,6 +25,8 @@ import type { Visibility } from "@/lib/wiki/labels";
 import { CowritePanel, savedDocOf, type AcceptInfo, type AcceptResult } from "./cowrite/cowrite-panel";
 import { Cowrite, COWRITE_CLASSES, isCowriteTr } from "./cowrite/extension";
 import { mentionChip, PAGE_LINK_CLASS, PROSE } from "./prose";
+import { COMPLIANCE_CLASSES, ComplianceMarks } from "@/components/compliance/tiptap";
+import { LiveWikiCompliance } from "@/components/compliance/live-wiki";
 
 /* ── Suggestion data ───────────────────────────────────────────────────────────────────────────────────── */
 
@@ -202,9 +204,11 @@ export type WikiEditorProps = {
     onAccept: (fullDoc: Doc, info: AcceptInfo) => Promise<AcceptResult>;
     onPendingChange?: (pending: boolean) => void;
   };
+  /** Live compliance: the page is checked against the graph's corpora as it is written. */
+  compliance?: { pageId: string; title: () => string };
 };
 
-export function WikiEditor({ pageId, pageVisibility, family = false, initialContent, onChange, onReady, labelledBy, toolbarEnd, children, cowrite }: WikiEditorProps) {
+export function WikiEditor({ pageId, pageVisibility, family = false, initialContent, onChange, onReady, labelledBy, toolbarEnd, children, cowrite, compliance }: WikiEditorProps) {
   const t = useT();
   const tRef = useRef<TFn>(t);
   tRef.current = t;
@@ -262,6 +266,7 @@ export function WikiEditor({ pageId, pageVisibility, family = false, initialCont
       TaskList,
       TaskItem.configure({ nested: true }),
       Cowrite,
+      ComplianceMarks,
       Placeholder.configure({
         placeholder: ({ node }) => node.type.name === "heading" ? tRef.current("wiki.editor.heading") : tRef.current("wiki.editor.placeholder"),
         emptyEditorClass: "is-editor-empty",
@@ -324,7 +329,7 @@ export function WikiEditor({ pageId, pageVisibility, family = false, initialCont
     ],
     editorProps: {
       attributes: {
-        class: clsx(PROSE, COWRITE_CLASSES, "min-h-[50vh] pb-24 outline-none caret-accent",
+        class: clsx(PROSE, COWRITE_CLASSES, COMPLIANCE_CLASSES, "min-h-[50vh] pb-24 outline-none caret-accent",
           "[&_p.is-editor-empty:first-child]:before:pointer-events-none [&_p.is-editor-empty:first-child]:before:float-left [&_p.is-editor-empty:first-child]:before:h-0 [&_p.is-editor-empty:first-child]:before:text-muted [&_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)]"),
         role: "textbox",
         // Writing on the page itself: the caret shows focus, not a ring around the whole text.
@@ -375,6 +380,7 @@ export function WikiEditor({ pageId, pageVisibility, family = false, initialCont
   return (
     <div>
       <Toolbar editor={editor} end={toolbarEnd} onAsk={cowrite ? () => setAsking(true) : undefined} />
+      {compliance && <LiveWikiCompliance editor={editor} pageId={compliance.pageId} title={compliance.title} />}
       <div className={sheet}>
         {children}
         <EditorContent editor={editor} className="mt-6" />

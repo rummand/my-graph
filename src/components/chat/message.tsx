@@ -16,6 +16,7 @@ import { ProposalCard } from "./proposal-card";
 import { shortModel } from "./recency";
 import { ClarifyPicker } from "./clarify-picker";
 import { LiveSteps, WorkedLine } from "./work-steps";
+import { AnswerCompliance } from "@/components/compliance/answer";
 
 export type UiMessage = MessageView & { uid: string; streaming?: boolean; live?: Citation[]; fresh?: boolean };
 
@@ -69,6 +70,8 @@ export function Answer({ m, conversationId, onDecided, canClarify, onClarify, on
       )}
 
       {!m.streaming && <ProposedChanges steps={m.steps} />}
+
+      {!m.streaming && m.content && !m.clarify && <AnswerCompliance messageId={m.id} createdAt={m.createdAt} />}
 
       {!m.streaming && m.content && <AnswerMeta m={m} onFeedback={conversationId && !m.id.startsWith("local-") && m.id !== "pending" ? onFeedback : undefined} />}
     </motion.article>

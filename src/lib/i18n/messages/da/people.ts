@@ -374,6 +374,7 @@ const messages: MessageTree = {
     "Client contact": "Kundekontakt", "Partner contact": "Partnerkontakt", Meeting: "Møde", Deadline: "Deadline", System: "System",
     Goal: "Mål", Belonging: "Ejendel", Interest: "Interesse", Anniversary: "Årsdag", Date: "Kæresteaften", "Favourite place": "Yndlingssted",
     Wish: "Ønske", Plan: "Plan", Workstream: "Arbejdsspor", Deliverable: "Leverance", Risk: "Risiko",
+    Corpus: "Regelsæt",
   },
   kindHelp: {
     partner: "Ægtefælle, kæreste eller medforælder.",
@@ -397,6 +398,7 @@ const messages: MessageTree = {
     psychologist: "Også PPR (pædagogisk psykologisk rådgivning).",
     babysitter: "Barnepige eller fast babysitter.",
     manager: "Din chef eller leder.",
+    corpus: "Regler, I skal følge: lovgivning, en myndigheds vejledning, intern governance eller guardrails.",
   },
   rel: {
     "parent of": "forælder til", "child of": "barn af", "partner of": "partner til", "sibling of": "søskende til",
@@ -416,13 +418,14 @@ const messages: MessageTree = {
     owns: "ejer", "owned by": "ejes af", "interested in": "interesseret i", "interest of": "interesse for", "wishes for": "ønsker sig",
     "wished for by": "ønskes af", likes: "kan lide", "liked by": "værdsættes af", plans: "planlægger", "planned by": "planlægges af",
     delivers: "leverer", "delivered by": "leveres af",
+    governs: "gælder for", "governed by": "omfattet af",
   },
   attr: {
     Birthday: "Fødselsdag", Phone: "Telefon", Email: "E-mail", Address: "Adresse", "How we know them": "Hvordan vi kender dem",
     Allergies: "Allergier", Notes: "Noter", School: "Skole", Class: "Klasse", "Daycare / SFO": "Institution / SFO",
     "Shoe size": "Skostørrelse", "Clothing size": "Tøjstørrelse", Interests: "Interesser", Clinic: "Klinik",
     "Clinic phone": "Klinikkens telefon", "Practice number (ydernummer)": "Ydernummer", Subject: "Fag", Availability: "Hvornår de kan",
-    Role: "Rolle", "Work email": "Arbejdsmail", Status: "Status", Due: "Frist", "Bought on": "Købt", "Warranty until": "Garanti til",
+    Role: "Rolle", "Issued by": "Udstedt af", Binding: "Bindende", Version: "Version", "In force from": "Gælder fra", "Work email": "Arbejdsmail", Status: "Status", Due: "Frist", "Bought on": "Købt", "Warranty until": "Garanti til",
     "Target date": "Måldato", "What we like there": "Det, vi kan lide der", Likelihood: "Sandsynlighed",
   },
   yourNoun: {

@@ -13,6 +13,7 @@ import { useFormatDate, useT } from "@/lib/i18n/client";
 import { ArtifactPreview } from "./artifact-preview";
 import { ContentEditor } from "./block-editor";
 import { ExportMenu } from "./export-menu";
+import { ArtifactCompliance, PublishCompliance } from "@/components/compliance/artifact";
 
 type Loaded = { artifact: ArtifactView; set: DesignSetView };
 type Proposal = { section: Section; citations: Citation[]; before: string; after: string; diff: DiffPart[] };
@@ -226,6 +227,7 @@ export function ArtifactEditor({ initial, sets, graphName }: { initial: Loaded; 
                       {t("artifacts.editor.uncited", { count: uncited })}. {t("artifacts.editor.uncitedHint")}
                     </p>
                   )}
+                  <ArtifactCompliance artifactId={a.id} title={title} content={content} canEdit={canEdit} onFix={change} />
                   <ContentEditor content={content} onChange={change}
                     onRegenerate={(s) => setRegen({ section: s, instruction: "", busy: false, proposal: null, error: null })} />
                   <div className="border-t border-line pt-4">
@@ -255,10 +257,13 @@ export function ArtifactEditor({ initial, sets, graphName }: { initial: Loaded; 
                 </label>
               ))}
             </fieldset>
-            <div className="mt-5 flex justify-end gap-2">
-              <Button variant="ghost" onClick={() => setPublishing(false)}>{t("common.cancel", undefined, "Cancel")}</Button>
-              <Button onClick={async () => { setPublishing(false); await act("publish", { visibility }); }}>{t("artifacts.editor.publishConfirm")}</Button>
-            </div>
+            <PublishCompliance artifactId={a.id} title={title} content={content} confirmLabel={t("artifacts.editor.publishConfirm")} cancelLabel={t("common.cancel", undefined, "Cancel")}
+              onCancel={() => setPublishing(false)}
+              onPublish={async (withContent) => {
+                if (withContent) { const s = await save({ content: withContent }); if (!s) return; }
+                setPublishing(false);
+                await act("publish", { visibility });
+              }} />
           </Dialog>
         )}
         {regen && (
@@ -331,7 +336,7 @@ function Dialog({ title, children, onClose, wide }: { title: string; children: R
       <motion.div className="fixed inset-0 z-50 bg-fg/30" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
       <div className="pointer-events-none fixed inset-x-0 top-[12vh] z-50 flex justify-center px-4">
         <motion.div role="dialog" aria-modal="true" aria-label={title}
-          className={clsx("pointer-events-auto w-full rounded-lg bg-surface p-5 shadow-float", wide ? "max-w-2xl" : "max-w-md")}
+          className={clsx("pointer-events-auto max-h-[84vh] w-full overflow-y-auto rounded-lg bg-surface p-5 shadow-float", wide ? "max-w-2xl" : "max-w-md")}
           initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }} transition={{ duration: 0.18, ease: EASE }}>
           <h2 className="mb-2 text-lg font-semibold">{title}</h2>
           {children}

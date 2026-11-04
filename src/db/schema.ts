@@ -1017,3 +1017,163 @@ export const jobs = pgTable("jobs", {
   uniqueIndex("jobs_one_queued_uq").on(t.kind, t.subjectId).where(sql`status = 'queued'`),
 ]);
 
+/* ── Corpora and compliance: bodies of rules the graph follows (law, internal governance, guardrails) ───────── */
+
+/**
+ * A corpus: a body of knowledge that carries rules — legislation (BEK 260), an interpretation guide, the architecture
+ * board's ADR governance, a guardrail. It is a node in the graph (type document, kind "corpus", see the meta model)
+ * with this row for what only a corpus has. Its rules are read from its sources and only checked once a person
+ * approves them. `scope` limits where it applies: { all } or { targetTypes, nodeKinds, tags, wikiSlugs, artifactKinds }.
+ */
+export const corpora = pgTable("corpora", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** The corpus's own node (type document, kind corpus). */
+  nodeId: uuid("node_id"),
+  name: text("name").notNull(),
+  description: text("description"),
+  /** legislation | regulation | internal_governance | guardrail | policy | standard | other */
+  kind: text("kind").notNull().default("other"),
+  /** Who issues it: "Energistyrelsen", "Our architecture board". */
+  authority: text("authority"),
+  /** mandatory | advisory */
+  binding: text("binding").notNull().default("mandatory"),
+  version: text("version"),
+  effectiveFrom: timestamp("effective_from", { withTimezone: true }),
+  effectiveTo: timestamp("effective_to", { withTimezone: true }),
+  /** draft | active | retired */
+  status: text("status").notNull().default("draft"),
+  scope: jsonb("scope").$type<Record<string, unknown>>().notNull().default({ all: true }),
+  /** In the graph's default set: checked wherever no page picks its own corpora. */
+  checkByDefault: boolean("check_by_default").notNull().default(true),
+  /** Bumped whenever an active rule changes, so cached checks against the old rules are not reused. */
+  rulesVersion: integer("rules_version").notNull().default(1),
+  /** The last "Read rules": { status: running|done|failed, done, total, found, error, at, mode }. */
+  readState: jsonb("read_state").$type<Record<string, unknown>>(),
+  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("corpora_graph_idx").on(t.graphId, t.status)]);
+
+/** The documents a corpus is read from (library items, web pages). role: text | interpretation | supporting. */
+export const corpusSources = pgTable("corpus_sources", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  corpusId: uuid("corpus_id").notNull().references(() => corpora.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  sourceId: uuid("source_id").notNull().references(() => sources.id, { onDelete: "cascade" }),
+  role: text("role").notNull().default("text"),
+  /** The corpus version this source belongs to. */
+  corpusVersion: text("corpus_version"),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("corpus_sources_uq").on(t.corpusId, t.sourceId)]);
+
+/**
+ * One rule of a corpus, in plain words, with the exact passage it was read from. Read rules start `proposed` and are
+ * only checked once a person approves them (`active`). A new version of a corpus proposes a diff: `change` added |
+ * changed | removed, with `supersedesId` pointing at the rule it replaces or retires.
+ */
+export const corpusRules = pgTable("corpus_rules", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  corpusId: uuid("corpus_id").notNull().references(() => corpora.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** "§16 stk. 2", "ADR-4.2". */
+  ref: text("ref").notNull(),
+  /** Grouping on the corpus page ("§ 16", "ADR-4"). */
+  section: text("section"),
+  title: text("title").notNull(),
+  /** The rule in plain words, in the reader's language. */
+  text: text("text").notNull(),
+  /** must | must_not | should | should_not | may */
+  modality: text("modality").notNull().default("must"),
+  /** Narrows the corpus scope for this rule (same shape as corpora.scope). */
+  appliesTo: jsonb("applies_to").$type<Record<string, unknown>>().notNull().default({}),
+  /** What compliance looks like, and what evidence would show it. */
+  checkHint: text("check_hint"),
+  /** blocker | major | minor | info */
+  severity: text("severity").notNull().default("major"),
+  sourceId: uuid("source_id").references(() => sources.id, { onDelete: "set null" }),
+  chunkId: uuid("chunk_id"),
+  locator: jsonb("locator").$type<Locator>().notNull().default({}),
+  /** The exact passage, in the source's own language. */
+  quote: text("quote"),
+  embedding: vector("embedding", { dimensions: 1024 }),
+  /** proposed | active | retired | dropped */
+  status: text("status").notNull().default("proposed"),
+  /** On a new version: added | changed | removed (null on a first read). */
+  change: text("change"),
+  supersedesId: uuid("supersedes_id"),
+  corpusVersion: text("corpus_version"),
+  decidedBy: uuid("decided_by"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("corpus_rules_corpus_idx").on(t.corpusId, t.status), index("corpus_rules_graph_idx").on(t.graphId, t.status)]);
+
+/**
+ * What a check found: one rule against one text (a wiki page, a document, a chat answer, a change set). Advisory —
+ * nothing is blocked silently. `span` says where in the checked text ({ start, end, text, block }). open → fixed when
+ * the text no longer breaks the rule; accepted when a person keeps the deviation, with their reason.
+ */
+export const complianceFindings = pgTable("compliance_findings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  /** wiki | artifact | message | change_set | node */
+  targetType: text("target_type").notNull(),
+  targetId: uuid("target_id").notNull(),
+  targetVersion: integer("target_version"),
+  ruleId: uuid("rule_id").notNull().references(() => corpusRules.id, { onDelete: "cascade" }),
+  corpusId: uuid("corpus_id").notNull().references(() => corpora.id, { onDelete: "cascade" }),
+  /** compliant | non_compliant | missing | unclear */
+  verdict: text("verdict").notNull(),
+  explanation: text("explanation").notNull().default(""),
+  span: jsonb("span").$type<{ start: number; end: number; text: string; block?: string | null } | null>(),
+  suggestion: text("suggestion"),
+  /** Same rule + same passage = the same finding across checks. */
+  fingerprint: text("fingerprint").notNull(),
+  /** open | fixed | accepted */
+  status: text("status").notNull().default("open"),
+  acceptedReason: text("accepted_reason"),
+  acceptedBy: uuid("accepted_by"),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  fixedAt: timestamp("fixed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("compliance_findings_target_idx").on(t.graphId, t.targetType, t.targetId, t.status)]);
+
+/**
+ * Which corpora a text is checked against. targetType "graph" with targetId "" is the graph's default; a wiki page or
+ * document may pick its own ("Check against"). No row = the graph default.
+ */
+export const complianceTargets = pgTable("compliance_targets", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  targetType: text("target_type").notNull(),
+  targetId: text("target_id").notNull().default(""),
+  corpusIds: jsonb("corpus_ids").$type<string[]>().notNull().default([]),
+  updatedBy: uuid("updated_by"),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("compliance_targets_uq").on(t.graphId, t.targetType, t.targetId)]);
+
+/** One check, for the strip ("Checked against 2 corpora") and to keep the cost visible (model calls, cache hits). */
+export const complianceRuns = pgTable("compliance_runs", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  targetType: text("target_type").notNull(),
+  targetId: uuid("target_id").notNull(),
+  targetVersion: integer("target_version"),
+  /** running | done | failed | skipped */
+  status: text("status").notNull().default("running"),
+  corpusIds: jsonb("corpus_ids").$type<string[]>().notNull().default([]),
+  rulesChecked: integer("rules_checked").notNull().default(0),
+  paragraphs: integer("paragraphs").notNull().default(0),
+  paragraphsCached: integer("paragraphs_cached").notNull().default(0),
+  muxCalls: integer("mux_calls").notNull().default(0),
+  /** { blocker, major, minor, info, missing } open findings after the check. */
+  counts: jsonb("counts").$type<Record<string, number>>().notNull().default({}),
+  ms: integer("ms"),
+  error: text("error"),
+  createdBy: uuid("created_by"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+}, (t) => [index("compliance_runs_target_idx").on(t.graphId, t.targetType, t.targetId, t.createdAt)]);

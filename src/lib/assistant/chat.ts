@@ -39,6 +39,7 @@ import { isSensitivity, sensitivityBadge, type Sensitivity } from "./sensitivity
 import { foldState } from "./state";
 import { voiceOf } from "./locale";
 import { itemSteps, memoryStep, offStep, searchStep, webSteps } from "./steps";
+import { checkAnswer, rulesForQuestion } from "@/lib/compliance/assistant";
 import { addMessage, addState, conversationRows, createConversation, ownConversation, raiseConversationSensitivity, renameConversation, touchConversation } from "./store";
 
 export class ChatInputError extends Error {
@@ -167,6 +168,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         const mentioned = await safe(resolveMentions(v, question), [], "mentions");
         if (mentioned.length) void recordMentions(v, { inType: "message", inId: turn.userMessageId, text: question }).catch(() => {});
         const plain = plainQuestion(question);
+        const rulesPromise = safe(rulesForQuestion(v, plain), null, "corpus rules");
 
         // Retrieval and memory run together; each step is shown as soon as it finishes.
         const empty: Retrieval = { items: [], hits: 0, people: [] };
@@ -222,6 +224,12 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         const hints = amb.map((a) => `"${a.name}" matches ${a.options.length} people ${voice.family ? "the family knows" : "in this graph"}: ${a.options.map((o) => o.label).join(", ")}. If it matters for the answer and the conversation doesn't say which, ask.`);
         if (mentioned.length) hints.push(`The person pointed at ${mentioned.map((m) => `"${m.label}"`).join(", ")} in the graph with @mentions: the question is about ${mentioned.length === 1 ? "that" : "those"}, not someone else with the same name.`);
         hints.push(...webHints({ need: need.use, allowed: webOk, web, today: longDay(now, tz) }));
+        // The rules the graph follows (its corpora), when the question needs them: answered with references.
+        const ruleCtx = await rulesPromise;
+        if (ruleCtx?.hint) {
+          hints.push(ruleCtx.hint);
+          step({ kind: "read", label: `Read ${ruleCtx.rules.length} ${ruleCtx.rules.length === 1 ? "rule" : "rules"} from the corpora`, count: ruleCtx.rules.length });
+        }
         const messages = buildMessages({
           viewerName: v.name, today: longDay(now, tz), timeZone: tz, context: ctx.text, history: turn.history, question,
           graphKind: v.graphKind, graphName: v.graphName, locale: voice.locale,
@@ -338,6 +346,12 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
           degraded, title, proposals, clarify, steps, thoughtMs, stopped, text: parsed.text, changeSetId,
         };
         send("done", done);
+        // Compliance: the answer and its proposals against the graph's corpora, after the answer (never slows it).
+        // The chat picks the result up from /api/compliance/findings; the step "Checked against N corpora" is added then.
+        if (!stopped && !degraded) {
+          void checkAnswer(v, saved.id, { corpusIds: ruleCtx?.named ? ruleCtx.corpora.map((c) => c.id) : null })
+            .catch((e) => console.warn("[assistant] compliance check failed:", e instanceof Error ? e.message : e));
+        }
       } catch (e) {
         console.error("[assistant] turn failed:", e);
         send("error", { message: "Something went wrong on our side while answering. Your question was saved; please try again." });

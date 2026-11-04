@@ -21,6 +21,7 @@ import { clearCowrite } from "./cowrite/extension";
 import { DocView, isEmptyDoc, type MentionInfo } from "./doc-view";
 import { makeWhen } from "./when";
 import { WikiEditor } from "./wiki-editor";
+import { CheckAgainst, ReadCompliance } from "@/components/compliance/wiki-side";
 
 export type ClientPage = {
   id: string; slug: string; title: string; content: Doc; visibility: Visibility; version: number;
@@ -274,6 +275,7 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
           {editing ? (
             <WikiEditor pageId={page.id} pageVisibility={page.visibility} family={family} initialContent={doc.current} onChange={onDocChange} onReady={onReady} labelledBy={titleId}
               cowrite={{ slug: page.slug, openSignal: askSignal, onAccept: acceptDraft, onPendingChange: onDraftPending }}
+              compliance={{ pageId: page.id, title: () => titleRef.current }}
               toolbarEnd={<>
                 <SaveIndicator state={state} onRetry={() => void save()} />
                 <Button size="sm" onClick={() => void done()} disabled={state.kind === "conflict" || draftPending}
@@ -292,6 +294,7 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
             <>
               <h1 id={`${titleId}-h`} className="max-w-[68ch] break-words text-[28px]/[1.2] font-semibold tracking-[-0.02em]">{page.title}</h1>
               {byline}
+              <ReadCompliance pageId={page.id} canEdit={page.can.edit} onEdit={page.can.edit ? beginEditing : undefined} />
               {isEmptyDoc(page.content) ? (
                 <div className="mt-8 max-w-[68ch] font-read text-[17px] leading-[1.75] text-muted">
                   <p>{t("wiki.page.empty")}</p>
@@ -345,6 +348,7 @@ export function WikiPageClient({ initial, startEditing, startAsking = false, men
             <p className="flex items-start gap-2 text-muted"><VisIcon aria-hidden className="mt-0.5 size-4 shrink-0" />{visibilitySentence(t, page.visibility, family)}</p>
           )}
         </section>
+        <CheckAgainst pageId={page.id} canEdit={page.can.edit} />
         {children}
         <section className="space-y-1" aria-label={t("wiki.page.more")}>
           <Link href={historyHref} className="-ml-2 flex h-8 items-center gap-2 rounded-md px-2 text-muted transition-colors hover:bg-surface-2 hover:text-fg">
