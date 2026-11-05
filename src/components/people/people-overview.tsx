@@ -12,7 +12,7 @@ import { AttentionList, attentionText } from "./attention-strip";
 import { PersonAvatar } from "./avatar";
 import { CirclesLegend, CirclesView } from "./circles-view";
 import { api, useFmt, When } from "./format";
-import { PeopleTable } from "./people-table";
+import { lastTouch, PeopleTable } from "./people-table";
 
 const VIEW_KEY = "people.view";
 type View = "circles" | "list";
@@ -57,6 +57,8 @@ export function PeopleOverview({ initial, canManageModel, graph }: {
   const [circles, setCircles] = useState<Set<string>>(new Set());
   const [kind, setKind] = useState("");
   const [q, setQ] = useState("");
+  // Faded people (no contact for a long time) are hidden until asked for; search always finds them.
+  const [showFaded, setShowFaded] = useState(false);
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const f = useFmt();
@@ -87,30 +89,36 @@ export function PeopleOverview({ initial, canManageModel, graph }: {
     } catch (e) { setError((e as Error).message); }
   });
 
+  const isFaded = (p: Overview["people"][number]) => p.closeness?.band === "faded" && !p.isViewer && p.id !== data.center?.id;
+  const fadedCount = data.people.filter(isFaded).length;
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return data.people.filter((p) => {
+      if (!showFaded && !needle && p.closeness?.band === "faded" && !p.isViewer && p.id !== data.center?.id) return false;
       if (circles.size && !circles.has(circleOf(p.circle))) return false;
       if (kind && p.kind !== kind) return false;
-      if (needle && ![p.label, p.kindLabel, p.kindLabel && kindName(t, p.kindLabel), p.relation?.label].some((s) => s?.toLowerCase().includes(needle))) return false;
+      if (needle && ![p.label, p.kindLabel, p.kindLabel && kindName(t, p.kindLabel), p.relation?.label, ...(p.roles ?? []).map((r) => r.text)].some((s) => s?.toLowerCase().includes(needle))) return false;
       return true;
     });
-  }, [data.people, circles, kind, q, circleOf, t]);
+  }, [data.people, data.center, circles, kind, q, circleOf, t, showFaded]);
   const listPeople = filtered.filter((p) => !p.isViewer);
   const byId = useMemo(() => new Map(data.people.map((p) => [p.id, p])), [data.people]);
   const overdue = useMemo(() => new Map(data.attention.flatMap((a) => (a.reason === "contact" ? [[a.personId, a.daysSince] as const] : []))), [data.attention]);
 
   const circleCounts = useMemo(() => {
     const m = new Map<string, number>();
-    for (const p of data.people) if (p.id !== data.center?.id) m.set(circleOf(p.circle), (m.get(circleOf(p.circle)) ?? 0) + 1);
+    for (const p of data.people) {
+      if (p.id === data.center?.id || (!showFaded && p.closeness?.band === "faded" && !p.isViewer)) continue;
+      m.set(circleOf(p.circle), (m.get(circleOf(p.circle)) ?? 0) + 1);
+    }
     return m;
-  }, [data.people, data.center, circleOf]);
+  }, [data.people, data.center, circleOf, showFaded]);
   const toggleCircle = (c: string) => setCircles((s) => { const n = new Set(s); if (n.has(c)) n.delete(c); else n.add(c); return n; });
   const filtering = circles.size > 0 || !!kind || !!q;
   const clear = () => { setCircles(new Set()); setKind(""); setQ(""); };
   const centerName = data.center && !data.center.isViewer ? data.center.label : t("people.youLower");
-  const recent = useMemo(() => data.people.filter((p) => p.lastContactAt && p.id !== data.center?.id)
-    .sort((a, b) => b.lastContactAt!.localeCompare(a.lastContactAt!)).slice(0, 5), [data.people, data.center]);
+  const recent = useMemo(() => data.people.filter((p) => lastTouch(p) && p.id !== data.center?.id && !p.isViewer)
+    .sort((a, b) => lastTouch(b)!.localeCompare(lastTouch(a)!)).slice(0, 5), [data.people, data.center]);
 
   if (data.people.length <= (data.center ? 1 : 0)) {
     const you = data.center?.isViewer ? data.center : null;
@@ -167,6 +175,12 @@ export function PeopleOverview({ initial, canManageModel, graph }: {
                 </button>
               );
             })}
+            {fadedCount > 0 && (
+              <button type="button" aria-pressed={showFaded} onClick={() => setShowFaded((x) => !x)} title={t("closeness.fadedHint")}
+                className="inline-flex h-8 items-center rounded-full px-2.5 text-sm text-muted transition-colors hover:text-fg">
+                {showFaded ? t("closeness.hideFaded") : t("closeness.showFaded", { count: fadedCount })}
+              </button>
+            )}
             {filtering && (
               <button type="button" onClick={clear} className="inline-flex h-8 items-center gap-1 rounded-full px-2.5 text-sm text-muted hover:text-fg">
                 <X className="size-3.5" aria-hidden="true" />{t("people.overview.clear")}
@@ -214,7 +228,7 @@ export function PeopleOverview({ initial, canManageModel, graph }: {
                     <Link href={`/people/${p.id}`} className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-surface-2/70">
                       <PersonAvatar id={p.id} label={p.label} size={26} />
                       <span className="min-w-0 flex-1 truncate text-sm">{p.label}</span>
-                      <When iso={p.lastContactAt} className={clsx("shrink-0 text-[13px] tabular-nums", overdue.has(p.id) ? "text-warn" : "text-muted")} />
+                      <When iso={lastTouch(p)} className={clsx("shrink-0 text-[13px] tabular-nums", overdue.has(p.id) ? "text-warn" : "text-muted")} />
                     </Link>
                   </li>
                 ))}

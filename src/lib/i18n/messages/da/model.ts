@@ -74,8 +74,8 @@ const messages: MessageTree = {
   editor: {
     sections: "Modellens afsnit",
     kinds: "Typer",
-    kindsHint: "Hvad nogen eller noget er: en kollega, en underviser, en leverandør.",
-    kindsHintFamily: "Bedsteforælder, lærer, læge: hvad nogen eller noget er.",
+    kindsHint: "Hvad noget er: en skole, en kundevirksomhed, en leverandør. Det, folk gør (lærer, kollega), er roller ovenfor.",
+    kindsHintFamily: "Skole, klinik, fødselsdag: hvad noget er. Det, folk gør (læge, lærer), er roller ovenfor.",
     relations: "Relationer",
     relationsHint: "Hvordan to ting hænger sammen, læst begge veje.",
     details: "Detaljer",

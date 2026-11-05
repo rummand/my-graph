@@ -12,7 +12,7 @@ export * from "./rebase";
 
 export const NODE_OPS = new Set(["addNode", "updateNode", "retireNode", "mergeNodes"]);
 export const EDGE_OPS = new Set(["addEdge", "updateEdge", "removeEdge"]);
-export const META_OPS = new Set(["addKind", "addRelationType", "addAttribute"]);
+export const META_OPS = new Set(["addKind", "addRelationType", "addAttribute", "addRole"]);
 export const ALL_OPS = new Set([...NODE_OPS, ...EDGE_OPS, ...META_OPS, "addReminder", "editWiki"]);
 
 /* ── Who sees a change set ───────────────────────────────────────────────────────────────────────────── */
@@ -71,12 +71,20 @@ export function summaryOf(c: ChangeRowLike, names: (id: string) => string | null
     case "updateNode": return name(c.nodeId);
     case "retireNode": return name(c.nodeId);
     case "mergeNodes": return `${name(c.payload.dropId)} → ${name(c.payload.keepId)}`;
-    case "addEdge": return `${name(c.payload.fromId)} · ${relationLabel(s("relation"))} · ${name(c.payload.toId)}`;
+    case "addEdge": {
+      // A role held: "Lars · doctor · Lægehuset Vejle", or just "Lars · doctor" when where isn't known (the edge points back).
+      if (s("relation").startsWith("role:")) {
+        const role = relationLabel(s("relation")).replace(/\s+(at|of|for|in|på|i|hos|til|af)$/, "");
+        return c.payload.fromId === c.payload.toId ? `${name(c.payload.fromId)} · ${role}` : `${name(c.payload.fromId)} · ${role} · ${name(c.payload.toId)}`;
+      }
+      return `${name(c.payload.fromId)} · ${relationLabel(s("relation"))} · ${name(c.payload.toId)}`;
+    }
     case "updateEdge":
     case "removeEdge": return s("name") || name(c.edgeId);
     case "addKind": return s("label") || s("key");
     case "addRelationType": return s("inverseLabel") && s("inverseLabel") !== s("label") ? `${s("label")} / ${s("inverseLabel")}` : s("label") || s("key");
     case "addAttribute": return s("label") || s("key");
+    case "addRole": return s("label") || s("key");
     case "addReminder": return s("title");
     case "editWiki": return s("title") || s("slug");
     default: return c.op;
@@ -161,7 +169,8 @@ export function project(state: GraphState, changes: ChangeRowLike[], at = new Da
         const id = c.edgeId ?? c.id;
         edges.set(id, {
           id, graphId: "", ownerId: "", householdId: "", fromId, toId, relation: String(pl.relation ?? ""), status: String(pl.status ?? "unconfirmed"),
-          confidence: typeof pl.confidence === "number" ? pl.confidence : 1, visibility: "private", validFrom: null, validTo: null,
+          confidence: typeof pl.confidence === "number" ? pl.confidence : 1, visibility: "private",
+          validFrom: typeof pl.validFrom === "string" ? pl.validFrom : null, validTo: typeof pl.validTo === "string" ? pl.validTo : null,
         });
         out.addedEdges.add(id);
         break;

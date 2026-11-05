@@ -7,6 +7,7 @@ import type { MessageTree } from "../../core";
  */
 const messages: MessageTree = {
   titles: {
+    rolesFromKinds: "Kinds that are really roles",
     fromSource: "From “{title}”",
     fromMeeting: "From the meeting “{title}”",
     addFromSource: "Add {what}, from “{title}”",

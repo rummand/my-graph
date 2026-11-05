@@ -8,9 +8,9 @@ import { MentionMenu } from "@/components/mention/mention-menu";
 import { useMentionTypeahead, type PickedMention } from "@/components/mention/use-mention-typeahead";
 import { typeColor, typeTint } from "@/components/mention/colors";
 import { fetchMentionables } from "@/components/mention/api";
-import type { AnnotateResult } from "@/lib/mentions/annotate";
 import type { Mentionable } from "@/lib/mentions";
-import { locateSpans, segments, toMarkup } from "@/lib/mentions/markup";
+import { segments, toMarkup } from "@/lib/mentions/markup";
+import { tagFor, type LiveSpan } from "@/lib/mentions/live/merge";
 import type { DomainPlan, PlannedEntity, PlannedFact } from "@/lib/meta/domain";
 import { normalizeTerm } from "@/lib/meta/synonyms";
 import type { MetaKind, MetaModel } from "@/lib/meta/types";
@@ -18,9 +18,9 @@ import { useT } from "@/lib/i18n/client";
 import type { TFn } from "@/lib/i18n/core";
 import { tagWords } from "./words";
 import { Dictation } from "./dictation";
+import { useLiveHighlights } from "./use-live-highlights";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
-const PAUSE_MS = 900;
 const PREF_KEY = "mg.composer.highlights";
 
 /** What Send hands the chat: the question with mention markup, and (when highlights are on) what to add first. */
@@ -41,10 +41,12 @@ function writePref(on: boolean) {
 /**
  * The question box, pinned under the thread. Grows with what you type, up to about ten lines.
  *
- * Live highlights: after a typing pause the text is read by a fast model (POST /api/annotate). Things already in the
- * graph get a soft underline in their type colour ("links to Emma"); new things and new kinds get a tag ("new
- * Project", "new kind: Department"). The strip above Send says what Send will add, and each item can be changed,
- * merged with something that exists, or removed. @ opens a typeahead over the graph. Highlights can be switched off.
+ * Live highlights (useLiveHighlights): things already in the graph get a soft underline in their type colour ("links to
+ * Emma") as their name is typed; dates, times, emails, phones, links and money get a faint dotted line; names that
+ * look new a faint dashed one. Each finished sentence is then read by a fast model: new things and new kinds get a
+ * tag ("new Project", "new kind: Department"). The strip above Send says what Send will add, and each item can be
+ * changed, merged with something that exists, or removed. @ opens a typeahead over the graph. Highlights can be
+ * switched off.
  */
 export function Composer({ value, onChange, onSend, onStop, streaming, stopping = false, sensitive, empty, inputRef, top, inputId = "chat-input" }: {
   value: string;
@@ -64,13 +66,10 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
   const [mentions, setMentions] = useState<PickedMention[]>([]);
   const [created, setCreated] = useState<string[]>([]);
   const [on, setOn] = useState(true);
-  const [result, setResult] = useState<AnnotateResult | null>(null);
-  const [reading, setReading] = useState(false);
   const [edits, setEdits] = useState<Record<string, Edit>>({});
   const [removedFacts, setRemovedFacts] = useState<Set<string>>(new Set());
   const [scrollTop, setScrollTop] = useState(0);
   const menuId = useId();
-  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => { setOn(readPref()); }, []);
 
@@ -83,34 +82,12 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
 
   // Forget picked mentions and edits whose words are gone; reset everything when the box is emptied (after Send).
   useEffect(() => {
-    if (!value.trim()) { setMentions([]); setCreated([]); setEdits({}); setRemovedFacts(new Set()); setResult(null); return; }
+    if (!value.trim()) { setMentions([]); setCreated([]); setEdits({}); setRemovedFacts(new Set()); return; }
     setMentions((ms) => (ms.every((m) => value.includes(`@${m.label}`)) ? ms : ms.filter((m) => value.includes(`@${m.label}`))));
   }, [value]);
 
-  // Read the text after a typing pause.
-  useEffect(() => {
-    if (!on || streaming) return;
-    const text = value.trim();
-    if (text.length < 12) { setResult(null); return; }
-    const t = window.setTimeout(async () => {
-      abortRef.current?.abort();
-      const ac = new AbortController();
-      abortRef.current = ac;
-      setReading(true);
-      try {
-        const res = await fetch("/api/annotate", {
-          method: "POST", headers: { "content-type": "application/json" }, signal: ac.signal,
-          body: JSON.stringify({ text: value, mentions: mentions.map((m) => ({ label: m.label, nodeId: m.nodeId })) }),
-        });
-        if (res.ok) setResult(await res.json());
-      } catch { /* aborted or offline: keep the last highlights */ } finally {
-        if (abortRef.current === ac) setReading(false);
-      }
-    }, PAUSE_MS);
-    return () => window.clearTimeout(t);
-  }, [value, on, streaming, mentions]);
-
-  useEffect(() => () => abortRef.current?.abort(), []);
+  const live = useLiveHighlights({ value, enabled: on, paused: streaming, sensitive, mentions, created });
+  const readOnly = live.lex?.readOnly ?? false;
 
   const ta = useMentionTypeahead({
     value, inputRef, onChange,
@@ -118,21 +95,23 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
     onCreate: (label) => setCreated((c) => (c.includes(label) ? c : [...c, label])),
   });
 
-  /** The plan after the person's edits, limited to what is still in the text. */
-  const plan = useMemo<DomainPlan | null>(() => {
-    if (!result) return created.length ? { kinds: [], relations: [], entities: created.map(forcedEntity), facts: [], attributes: [] } : null;
-    const base = result.plan;
-    const entities: PlannedEntity[] = [];
-    for (const e of base.entities) {
+  /** The plan after the person's edits (what is in the text now, from all three tiers). */
+  const edited = useMemo(() => {
+    const byRef = new Map<string, PlannedEntity>();
+    for (const e of live.plan.entities) {
       const ed = edits[entKey(e)];
       if (ed?.removed) continue;
-      if (ed?.merge) entities.push({ ...e, nodeId: ed.merge.nodeId, label: ed.merge.label, type: ed.merge.type as PlannedEntity["type"], existing: true, newKind: false, kindKey: null, kindLabel: null });
-      else if (ed?.kind) entities.push({ ...e, ...ed.kind, type: ed.kind.type as PlannedEntity["type"] });
-      else entities.push(e);
+      if (ed?.merge) byRef.set(e.ref, { ...e, nodeId: ed.merge.nodeId, label: ed.merge.label, type: ed.merge.type as PlannedEntity["type"], existing: true, newKind: false, kindKey: null, kindLabel: null });
+      else if (ed?.kind) byRef.set(e.ref, { ...e, ...ed.kind, type: ed.kind.type as PlannedEntity["type"] });
+      else byRef.set(e.ref, e);
     }
-    for (const c of created) if (!entities.some((e) => entKey(e) === normalizeTerm(c))) entities.push(forcedEntity(c, entities.length));
-    const located = new Set(locateSpans(value, entities.map((e) => ({ ref: e.ref, surface: e.surface, alternatives: [e.label, `@${e.label}`] }))).map((s) => s.ref));
-    const kept = entities.filter((e) => located.has(e.ref));
+    return byRef;
+  }, [live.plan, edits]);
+
+  const plan = useMemo<DomainPlan | null>(() => {
+    const base = live.plan;
+    if (!base.entities.length) return null;
+    const kept = [...edited.values()];
     const refs = new Set(["you", ...kept.map((e) => e.ref)]);
     const facts = base.facts.filter((f) => refs.has(f.from) && refs.has(f.to) && !removedFacts.has(factKey(f)));
     const extraKinds = Object.values(edits).flatMap((ed) => (ed.kind?.newKind && ed.kind.kindKey ? [{ nodeType: ed.kind.type as PlannedEntity["type"], key: ed.kind.kindKey, label: ed.kind.kindLabel ?? ed.kind.kindKey, pluralLabel: `${ed.kind.kindLabel ?? ed.kind.kindKey}s`, isNew: true }] : []));
@@ -140,19 +119,20 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
       .filter((k) => kept.some((e) => e.kindKey === k.key && e.type === k.nodeType));
     const relations = base.relations.filter((r) => facts.some((f) => f.relationKey === r.key));
     return { kinds, relations, entities: kept, facts, attributes: [] };
-  }, [result, edits, removedFacts, created, value]);
+  }, [live.plan, edited, edits, removedFacts]);
 
-  const spans = useMemo(() => {
-    if (!on || !plan) return [];
-    return locateSpans(value, plan.entities.map((e) => ({ ref: e.ref, surface: e.surface, alternatives: [e.label, `@${e.label}`] })))
-      .map((s) => {
-        const e = plan.entities.find((x) => x.ref === s.ref)!;
-        const tag = e.existing ? `links to ${e.label}` : e.newKind ? `new kind: ${e.kindLabel}` : `new ${e.kindLabel ?? e.type}`;
-        return { ...s, type: e.type, tag, tone: e.existing ? "existing" : "new" as const };
-      });
-  }, [on, plan, value]);
+  /** What to paint: the merged spans, with the person's edits applied (removed things lose their mark). */
+  const allSpans = useMemo<LiveSpan[]>(() => {
+    if (!on) return [];
+    return live.spans.flatMap((s) => {
+      if (s.tone === "detail" || s.tone === "maybe" || s.tone === "mention") return [s];
+      const e = edited.get(s.ref);
+      if (!e) return [];
+      const { tone, tag } = tagFor(e);
+      return [{ ...s, type: e.type, tone, tag }];
+    });
+  }, [on, live.spans, edited]);
 
-  const readOnly = result?.readOnly ?? false;
   const counts = useMemo(() => {
     if (!plan) return null;
     const things = plan.entities.filter((e) => !e.existing).length;
@@ -174,16 +154,8 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
     }
   }
 
-  const toggle = () => { const next = !on; setOn(next); writePref(next); if (!next) setResult(null); };
-  const highlighting = on && (spans.length > 0 || mentions.length > 0);
-  const mentionSpans = useMemo(() => {
-    if (!on) return [];
-    const taken = new Set(spans.map((s) => `${s.start}`));
-    return locateSpans(value, mentions.map((m) => ({ ref: `@${m.nodeId}`, surface: `@${m.label}` })))
-      .filter((s) => !taken.has(`${s.start}`) && !spans.some((x) => s.start < x.end && s.end > x.start))
-      .map((s) => ({ ...s, type: mentions.find((m) => `@${m.nodeId}` === s.ref)?.type ?? "thing", tag: "", tone: "mention" as const }));
-  }, [on, mentions, value, spans]);
-  const allSpans = useMemo(() => [...spans, ...mentionSpans].sort((a, b) => a.start - b.start), [spans, mentionSpans]);
+  const toggle = () => { const next = !on; setOn(next); writePref(next); };
+  const highlighting = on && allSpans.length > 0;
 
   // Tags of neighbouring words can collide on one line: keep the first, hide the next (the strip lists every item).
   const mirrorRef = useRef<HTMLDivElement>(null);
@@ -212,8 +184,7 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
         <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
           <div ref={mirrorRef} className={clsx(TEXT_BOX, "whitespace-pre-wrap break-words text-transparent")} style={{ transform: `translateY(${-scrollTop}px)` }}>
             {segments(value, allSpans).map((s, i) => s.span ? (
-              <span key={i} className="relative rounded-[3px]"
-                style={{ background: typeTint(s.span.type, s.span.tone === "existing" ? 10 : s.span.tone === "mention" ? 14 : 16), boxShadow: s.span.tone === "mention" ? undefined : `inset 0 -1.5px 0 ${typeColor(s.span.type)}` } as CSSProperties}>
+              <span key={i} className="relative rounded-[3px]" data-tone={s.span.tone} style={markStyle(s.span)}>
                 {s.text}
                 {s.span.tag && (
                   <span data-tag className="absolute -top-[13px] left-0 whitespace-nowrap text-[10px] font-medium leading-none" style={{ color: typeColor(s.span.type) }}>
@@ -233,6 +204,7 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={onKeyDown}
           onSelect={ta.refresh}
+          onFocus={() => live.revalidate()}
           onBlur={() => window.setTimeout(ta.close, 120)}
           onScroll={(e) => setScrollTop(e.currentTarget.scrollTop)}
           style={{ outline: "none" }}
@@ -250,12 +222,12 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
       <AnimatePresence initial={false}>
         {willAdd && plan && counts && (
           <motion.div key="strip" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18, ease: EASE }} className="overflow-hidden">
-            <WillAdd plan={plan} counts={counts} selfLabel={result?.selfLabel ?? t("chat.composer.you")}
+            <WillAdd plan={plan} counts={counts} selfLabel={live.lex?.selfLabel ?? t("chat.composer.you")}
               onRemove={(e) => setEdits((x) => ({ ...x, [entKey(e)]: { removed: true } }))}
               onKind={(e, kind) => setEdits((x) => ({ ...x, [entKey(e)]: { removed: false, kind } }))}
               onMerge={(e, m) => setEdits((x) => ({ ...x, [entKey(e)]: { removed: false, merge: m } }))}
               onRemoveFact={(f) => setRemovedFacts((s) => new Set([...s, factKey(f)]))}
-              proposedKinds={result?.plan.kinds ?? []} canGrowModel={result?.canGrowModel ?? false} />
+              proposedKinds={live.plan.kinds} canGrowModel={live.lex?.canGrowModel ?? false} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -264,9 +236,9 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
         <p className="min-w-0 flex-1 truncate text-xs text-muted">
           {sensitive ? (
             <span className="inline-flex items-center gap-1.5"><Lock aria-hidden className="size-3.5" />{t("chat.composer.private")}</span>
-          ) : on && result?.muxDown ? (
+          ) : on && live.muxDown ? (
             <span>{t("chat.composer.muxDown")}</span>
-          ) : on && reading ? (
+          ) : on && live.reading > 0 ? (
             <span>{t("chat.composer.reading")}</span>
           ) : (
             <span className="hidden sm:inline">{t("chat.composer.hintAnswers")} <Kbd>@</Kbd> {t("chat.composer.hintMention")} <Kbd>Shift</Kbd> <Kbd>Enter</Kbd> {t("chat.composer.hintNewLine")}</span>
@@ -304,12 +276,19 @@ export function Composer({ value, onChange, onSend, onStop, streaming, stopping 
   );
 }
 
+/** How a mark looks: links and new things in their type colour, details dotted, "maybe new" dashed and faint. */
+function markStyle(s: LiveSpan): CSSProperties {
+  if (s.tone === "detail") return { textDecorationLine: "underline", textDecorationStyle: "dotted", textDecorationColor: "var(--color-muted)", textDecorationThickness: "1.5px", textUnderlineOffset: "5px" };
+  if (s.tone === "maybe") return { textDecorationLine: "underline", textDecorationStyle: "dashed", textDecorationColor: typeTint("thing", 45), textDecorationThickness: "1px", textUnderlineOffset: "5px" };
+  return {
+    background: typeTint(s.type, s.tone === "existing" ? 10 : s.tone === "mention" ? 14 : 16),
+    boxShadow: s.tone === "mention" ? undefined : `inset 0 -1.5px 0 ${typeColor(s.type)}`,
+  };
+}
+
 /** Text box metrics shared by the textarea and its mirror so highlights sit exactly under the letters. */
 const TEXT_BOX = "px-4 pb-1 pt-4 text-[15.5px] leading-[2.1] [scrollbar-gutter:stable] overflow-y-auto";
 
-function forcedEntity(label: string, i = 0): PlannedEntity {
-  return { ref: `c${i}-${normalizeTerm(label)}`, label, surface: label, type: "thing", kindKey: null, kindLabel: null, newKind: false, nodeId: null, existing: false };
-}
 
 const TYPES = ["person", "organization", "project", "place", "event", "topic", "thing"];
 const typeWord = (type: string, t: TFn) => t(`chat.composer.type.${TYPES.includes(type) ? type : "thing"}`);

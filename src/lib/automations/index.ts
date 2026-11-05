@@ -38,10 +38,12 @@ export type ActivityInput = {
 export type AssistantSettings = {
   autoSaveMemories: boolean; alwaysAllow: string[]; capabilities: Record<string, boolean>;
   tone: "warm" | "brief" | "detailed"; dailySuggestionCap: number; onboardedAt: Date | null;
+  /** Today may say "You haven't been in touch with X for a while" (src/lib/people/interactions). Off by default. */
+  keepInTouchNudges?: boolean;
 };
 export const DEFAULT_SETTINGS: AssistantSettings = {
   autoSaveMemories: true, alwaysAllow: [], capabilities: { library: true, timeline: true, people: true, wiki_write: true, reminders: true },
-  tone: "warm", dailySuggestionCap: 5, onboardedAt: null,
+  tone: "warm", dailySuggestionCap: 5, onboardedAt: null, keepInTouchNudges: false,
 };
 
 /**

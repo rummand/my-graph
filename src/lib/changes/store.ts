@@ -19,6 +19,7 @@ import { accessContext } from "@/lib/gbrain";
 import { edgeSelfReadSql, liveNodeSql, nodeEditSql, nodeReadSql, sourceReadSql, type AccessCtx } from "@/lib/gbrain/access";
 import { readableSnapshots } from "@/lib/gbrain/versioning";
 import { getMeta } from "@/lib/meta";
+import { findRole, roleKeyOf, roleWords } from "@/lib/meta/roles";
 import type { ChangeInput, ChangeSetOrigin, ChangeSetView, Receipt } from "./index";
 import {
   ALL_OPS, canSeeSet, emptyNow, fingerprintOf, groupReasons, matchExisting, mergeUpdateSet, summarize, summaryOf, toStored, verdictsFor,
@@ -207,6 +208,7 @@ export async function nowFor(v: Viewer, list: ChangeRow[], withMeta: boolean): P
       for (const k of m.kinds) now.meta.add(`kinds:${k.nodeType}:${k.key}`);
       for (const r of m.relations) now.meta.add(`relations:${r.key}`);
       for (const a of m.attributes) now.meta.add(`attributes:${a.nodeType}:${a.kindKey ?? "*"}:${a.key}`);
+      for (const r of m.roles) if (!r.hidden || r.origin !== "builtin") now.meta.add(`roles:${r.key}`);
     } catch { /* model unavailable: model ops read as outstanding */ }
   }
   return now;
@@ -254,6 +256,18 @@ async function originsOf(v: Viewer, ctx: AccessCtx, ids: string[]): Promise<Map<
 }
 
 /** A translator in the viewer's own language (their setting), for titles stored with a key. Works outside requests. */
+async function readerLocale(v: Viewer): Promise<string> {
+  const [u] = await db.select({ locale: users.locale }).from(users).where(eq(users.id, v.id)).limit(1).catch(() => []);
+  return isLocale(u?.locale) ? u.locale : "en";
+}
+
+/** "role:doctor" → "doctor at" / "læge på" (what a role-held fact says, read from the person's side). */
+function roleRelationLabel(m: import("@/lib/meta").MetaModel, relation: string, lang: string): string {
+  const key = roleKeyOf(relation) ?? relation;
+  const w = roleWords(findRole(m, key), lang, key);
+  return `${w.label.toLowerCase()} ${w.preposition}`;
+}
+
 export async function readerT(v: Viewer): Promise<TFn> {
   const [u] = await db.select({ locale: users.locale }).from(users).where(eq(users.id, v.id)).limit(1).catch(() => []);
   return tFor(isLocale(u?.locale) ? u.locale : "en");
@@ -274,7 +288,7 @@ async function views(v: Viewer, sets: SetRow[]): Promise<ChangeSetView[]> {
   if (!sets.length) return [];
   const rows = await db.select().from(changes).where(inArray(changes.changeSetId, sets.map((s) => s.id))).orderBy(changes.changeSetId, changes.seq);
   const drafts = new Set(sets.filter((s) => s.status === "draft").map((s) => s.id));
-  const now = await nowFor(v, rows, rows.some((r) => drafts.has(r.changeSetId) && (r.op === "addKind" || r.op === "addRelationType" || r.op === "addAttribute")));
+  const now = await nowFor(v, rows, rows.some((r) => drafts.has(r.changeSetId) && (r.op === "addKind" || r.op === "addRelationType" || r.op === "addAttribute" || r.op === "addRole")));
   const rel = await relationLabels(v);
   const t = await readerT(v);
   const creators = [...new Set(sets.map((s) => s.createdBy).filter((x): x is string => !!x))];
@@ -475,7 +489,9 @@ export async function reviewContext(v: Viewer, cs: ChangeSetView): Promise<Revie
     const m = await getMeta(v);
     const keys = new Set(cs.changes.flatMap((c) => [c.payload.relation, (c.payload.set as Record<string, unknown> | undefined)?.relation]).filter((k): k is string => typeof k === "string"));
     for (const e of Object.values(edges)) keys.add(e.relation);
-    for (const k of keys) relations[k] = m.relationLabel(k);
+    // A role held reads in the reader's language ("doctor at" / "læge på").
+    const lang = keys.size && [...keys].some((k) => k.startsWith("role:")) ? await readerLocale(v) : "en";
+    for (const k of keys) relations[k] = k.startsWith("role:") ? roleRelationLabel(m.model, k, lang) : m.relationLabel(k);
     for (const k of m.kinds) kinds[`${k.nodeType}:${k.key}`] = k.label;
   } catch { /* labels fall back to keys */ }
   const sourceIds = [...new Set(cs.changes.map((c) => c.receipt?.sourceId).filter(isId))];

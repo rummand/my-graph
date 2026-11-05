@@ -6,6 +6,7 @@ import type { MessageTree } from "../../core";
  */
 const messages: MessageTree = {
   titles: {
+    rolesFromKinds: "Typer, der i virkeligheden er roller",
     fromSource: "Fra „{title}“",
     fromMeeting: "Fra mødet „{title}“",
     addFromSource: "Tilføj {what}, fra „{title}“",

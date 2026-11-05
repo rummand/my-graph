@@ -168,3 +168,60 @@ export const BUILTIN_ATTRIBUTES: BuiltinAttribute[] = [
   { nodeType: P, kindKey: "babysitter", key: "rate", label: "Rate per hour (kr.)", dataType: "number" },
   { nodeType: P, kindKey: "babysitter", key: "availability", label: "Availability", dataType: "text" },
 ];
+
+/* ── Roles ──────────────────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * Built-in roles: positions and functions people hold, apart from who they are. Keys match the person kinds they
+ * replace (a "doctor" kind becomes the doctor role), so details a kind carried (clinic, subject …) stay with the role.
+ * `impliedBy` names a relation that already says the role (parent ← parent_of): those are shown as roles but stay
+ * relations. `contexts`: what the role can be held in (empty = anything).
+ */
+export type BuiltinRole = {
+  key: string; label: string; pluralLabel: string; preposition: string; inverseLabel?: string;
+  da: { label: string; plural: string; preposition: string; inverse?: string };
+  circle: string; contexts?: string[]; impliedBy?: string; parentKey?: string; icon?: string; description?: string;
+};
+
+const ORGS_PLACES = ["organization", "place", "project", "person"];
+
+export const BUILTIN_ROLES: BuiltinRole[] = [
+  // Family (the relations stay the facts; the role is how they read)
+  { key: "parent", label: "Parent", pluralLabel: "Parents", preposition: "of", inverseLabel: "child", da: { label: "Forælder", plural: "Forældre", preposition: "til", inverse: "barn" }, circle: "family", contexts: PP, impliedBy: "parent_of:out", icon: "users" },
+  { key: "child", label: "Child", pluralLabel: "Children", preposition: "of", inverseLabel: "parent", da: { label: "Barn", plural: "Børn", preposition: "af", inverse: "forælder" }, circle: "family", contexts: PP, impliedBy: "parent_of:in", icon: "baby" },
+  { key: "partner", label: "Partner", pluralLabel: "Partners", preposition: "of", inverseLabel: "partner", da: { label: "Partner", plural: "Partnere", preposition: "til", inverse: "partner" }, circle: "family", contexts: PP, impliedBy: "partner_of:any", icon: "heart", description: "Spouse, partner or co-parent." },
+  { key: "sibling", label: "Sibling", pluralLabel: "Siblings", preposition: "of", da: { label: "Søskende", plural: "Søskende", preposition: "til" }, circle: "family", contexts: PP, impliedBy: "sibling_of:any", icon: "users" },
+  { key: "grandparent", label: "Grandparent", pluralLabel: "Grandparents", preposition: "of", inverseLabel: "grandchild", da: { label: "Bedsteforælder", plural: "Bedsteforældre", preposition: "til", inverse: "barnebarn" }, circle: "family", contexts: PP, impliedBy: "grandparent_of:out", icon: "users", description: "Mormor, morfar, farmor, farfar." },
+  { key: "aunt_uncle", label: "Aunt or uncle", pluralLabel: "Aunts and uncles", preposition: "of", da: { label: "Moster, faster eller onkel", plural: "Mostre, fastre og onkler", preposition: "til" }, circle: "family", contexts: PP },
+  { key: "cousin", label: "Cousin", pluralLabel: "Cousins", preposition: "of", da: { label: "Fætter eller kusine", plural: "Fætre og kusiner", preposition: "til" }, circle: "family", contexts: PP },
+  { key: "in_law", label: "In-law", pluralLabel: "In-laws", preposition: "of", da: { label: "Svigerfamilie", plural: "Svigerfamilie", preposition: "til" }, circle: "family", contexts: PP, description: "Svigerforældre, svoger, svigerinde." },
+  // Close and social
+  { key: "close_friend", label: "Close friend", pluralLabel: "Close friends", preposition: "of", da: { label: "Nær ven", plural: "Nære venner", preposition: "af" }, circle: "close", contexts: PP, icon: "heart-handshake" },
+  { key: "friend", label: "Friend", pluralLabel: "Friends", preposition: "of", da: { label: "Ven", plural: "Venner", preposition: "af" }, circle: "social", contexts: PP, impliedBy: "friend_of:any", icon: "smile" },
+  { key: "neighbour", label: "Neighbour", pluralLabel: "Neighbours", preposition: "of", da: { label: "Nabo", plural: "Naboer", preposition: "til" }, circle: "social", contexts: ["person", "place"], impliedBy: "neighbour_of:any", icon: "home" },
+  { key: "childs_friend", label: "Child's friend", pluralLabel: "Children's friends", preposition: "of", da: { label: "Barns ven", plural: "Børns venner", preposition: "af" }, circle: "social", contexts: PP, icon: "smile", description: "Playdates, birthdays, legeaftaler." },
+  { key: "childs_friend_parent", label: "Parent of a child's friend", pluralLabel: "Parents of children's friends", preposition: "of", da: { label: "Forælder til et barns ven", plural: "Forældre til børns venner", preposition: "til" }, circle: "social", contexts: PP },
+  { key: "coach", label: "Coach", pluralLabel: "Coaches", preposition: "at", inverseLabel: "coach", da: { label: "Træner", plural: "Trænere", preposition: "i", inverse: "træner" }, circle: "social", contexts: ORGS_PLACES, icon: "trophy", description: "Træner or instructor in a club or forening." },
+  { key: "landlord", label: "Landlord", pluralLabel: "Landlords", preposition: "of", inverseLabel: "landlord", da: { label: "Udlejer", plural: "Udlejere", preposition: "af", inverse: "udlejer" }, circle: "other", contexts: ["place", "thing", "person", "organization"], icon: "home" },
+  { key: "tenant", label: "Tenant", pluralLabel: "Tenants", preposition: "of", inverseLabel: "tenant", da: { label: "Lejer", plural: "Lejere", preposition: "i", inverse: "lejer" }, circle: "other", contexts: ["place", "thing", "person"], icon: "home" },
+  // School and daycare
+  { key: "teacher", label: "Teacher", pluralLabel: "Teachers", preposition: "at", inverseLabel: "teacher", da: { label: "Lærer", plural: "Lærere", preposition: "på", inverse: "lærer" }, circle: "school", contexts: ORGS_PLACES, icon: "graduation-cap" },
+  { key: "class_teacher", label: "Class teacher", pluralLabel: "Class teachers", preposition: "of", inverseLabel: "class teacher", da: { label: "Klasselærer", plural: "Klasselærere", preposition: "for", inverse: "klasselærer" }, circle: "school", contexts: ORGS_PLACES, parentKey: "teacher", icon: "graduation-cap", description: "Klasselærer or kontaktlærer." },
+  { key: "pedagogue", label: "Pedagogue", pluralLabel: "Pedagogues", preposition: "at", inverseLabel: "pedagogue", da: { label: "Pædagog", plural: "Pædagoger", preposition: "i", inverse: "pædagog" }, circle: "school", contexts: ORGS_PLACES, icon: "graduation-cap", description: "Pædagog in vuggestue, børnehave, SFO or fritidsklub." },
+  { key: "school_leader", label: "Principal", pluralLabel: "Principals", preposition: "of", inverseLabel: "principal", da: { label: "Skoleleder", plural: "Skoleledere", preposition: "på", inverse: "skoleleder" }, circle: "school", contexts: ORGS_PLACES, icon: "graduation-cap", description: "Skoleleder, afdelingsleder or daycare manager." },
+  { key: "classmate", label: "Classmate", pluralLabel: "Classmates", preposition: "of", da: { label: "Klassekammerat", plural: "Klassekammerater", preposition: "til" }, circle: "school", contexts: ORGS_PLACES, icon: "school" },
+  // Care and health
+  { key: "doctor", label: "Doctor", pluralLabel: "Doctors", preposition: "at", inverseLabel: "doctor", da: { label: "Læge", plural: "Læger", preposition: "på", inverse: "læge" }, circle: "care", contexts: ORGS_PLACES, icon: "stethoscope", description: "Egen læge (GP) or a specialist." },
+  { key: "dentist", label: "Dentist", pluralLabel: "Dentists", preposition: "at", inverseLabel: "dentist", da: { label: "Tandlæge", plural: "Tandlæger", preposition: "på", inverse: "tandlæge" }, circle: "care", contexts: ORGS_PLACES, icon: "stethoscope" },
+  { key: "nurse", label: "Nurse", pluralLabel: "Nurses", preposition: "at", inverseLabel: "nurse", da: { label: "Sygeplejerske", plural: "Sygeplejersker", preposition: "på", inverse: "sygeplejerske" }, circle: "care", contexts: ORGS_PLACES, icon: "stethoscope" },
+  { key: "health_visitor", label: "Health visitor", pluralLabel: "Health visitors", preposition: "for", inverseLabel: "health visitor", da: { label: "Sundhedsplejerske", plural: "Sundhedsplejersker", preposition: "for", inverse: "sundhedsplejerske" }, circle: "care", contexts: ORGS_PLACES, icon: "stethoscope" },
+  { key: "psychologist", label: "Psychologist or therapist", pluralLabel: "Psychologists and therapists", preposition: "at", inverseLabel: "therapist", da: { label: "Psykolog eller terapeut", plural: "Psykologer og terapeuter", preposition: "hos", inverse: "psykolog" }, circle: "care", contexts: ORGS_PLACES, icon: "brain", description: "Including PPR (pædagogisk psykologisk rådgivning)." },
+  { key: "babysitter", label: "Babysitter", pluralLabel: "Babysitters", preposition: "for", da: { label: "Babysitter", plural: "Babysittere", preposition: "for" }, circle: "care", contexts: ORGS_PLACES, icon: "baby" },
+  { key: "clinician", label: "Clinician", pluralLabel: "Clinicians", preposition: "at", da: { label: "Behandler", plural: "Behandlere", preposition: "i" }, circle: "care", contexts: ORGS_PLACES, icon: "stethoscope", description: "A psychologist, therapist, doctor or nurse in a practice." },
+  { key: "client", label: "Client", pluralLabel: "Clients", preposition: "of", inverseLabel: "client", da: { label: "Klient", plural: "Klienter", preposition: "hos", inverse: "klient" }, circle: "clients", contexts: ["person", "organization"], icon: "user" },
+  { key: "patient", label: "Patient", pluralLabel: "Patients", preposition: "of", inverseLabel: "patient", da: { label: "Patient", plural: "Patienter", preposition: "hos", inverse: "patient" }, circle: "patients", contexts: ["person", "organization", "place"], icon: "user" },
+  // Work
+  { key: "colleague", label: "Colleague", pluralLabel: "Colleagues", preposition: "at", da: { label: "Kollega", plural: "Kolleger", preposition: "i" }, circle: "work", contexts: ORGS_PLACES, impliedBy: "colleague_of:any", icon: "briefcase" },
+  { key: "manager", label: "Manager", pluralLabel: "Managers", preposition: "at", inverseLabel: "manager", da: { label: "Leder", plural: "Ledere", preposition: "i", inverse: "leder" }, circle: "work", contexts: ORGS_PLACES, impliedBy: "manager_of:out", icon: "briefcase", description: "Chef or leder." },
+  { key: "employee", label: "Employee", pluralLabel: "Employees", preposition: "at", inverseLabel: "employee", da: { label: "Ansat", plural: "Ansatte", preposition: "i", inverse: "ansat" }, circle: "work", contexts: ["organization", "place", "project"], icon: "briefcase" },
+];

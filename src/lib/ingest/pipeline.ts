@@ -32,6 +32,7 @@ import { parseEmail } from "./email";
 import { decodeText, extractText } from "./extract-text";
 import { buildExtractionMessages, parseExtraction, type Extraction } from "./extraction";
 import { participantsOf, resolveThreads, splitMbox, threadKeyFor, type Participant } from "./mail";
+import { roleOpsFromPeople } from "./roles";
 import { CONTAINER_KINDS, detectFileType, kindFromMime, MAX_UPLOAD_BYTES, MBOX_MIME } from "./mime";
 import { buildProposalOps, correspondentOps, describeCounts, edgeKey, type KnownNode } from "./proposals";
 import { readZip } from "./zip";
@@ -672,6 +673,10 @@ export async function proposeFromSource(
   // In a meeting, "Speaker 4" names nobody: what the reading proposed about such a label is dropped.
   if (rec && recording) plan.counts.people -= recording.tidy(plan.changes, rec.edgeKeys);
   await assignKinds(v, plan.changes);
+  // Roles are not kinds: a new person called "Dr. …" or "klasselærer" holds that role (proposed, unconfirmed).
+  const roleOps = roleOpsFromPeople(plan.changes, edgesNow);
+  plan.changes.push(...roleOps);
+  plan.counts.roles = (plan.counts.roles ?? 0) + roleOps.length;
   const changes = [...(rec?.changes ?? []), ...people, ...plan.changes, ...extra];
   if (recording) recording.refine(changes);
   const tally = (op: string) => changes.filter((c) => c.op === op).length;
@@ -700,7 +705,10 @@ export async function proposeFromSource(
   return { changeSetId: r.id, proposedAt: now, proposed: counts, proposedTotal: changes.length };
 }
 
-/** Give proposed nodes a kind from the meta model (teacher, school, …), as the old direct writes did. */
+/**
+ * Give proposed nodes a kind from the meta model (school, appointment, …), as the old direct writes did. Person kinds
+ * that are roles (teacher, doctor …) are hidden in the model, so suggestKind never offers them; roles come as edges.
+ */
 async function assignKinds(v: Viewer, changes: ChangeInput[]): Promise<void> {
   let meta_: MetaHelpers | null = null;
   try { meta_ = await getMeta(v); } catch { return; }

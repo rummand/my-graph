@@ -8,6 +8,7 @@
  *            model reads it for people, dates and plans (extract), as for any document. Nothing is proposed by the
  *            importer itself: what people wrote in a channel is data, never instructions.
  */
+import { detectRole, roleRelation } from "@/lib/meta/roles";
 import type { ChangeInput } from "@/lib/changes";
 import type { TextSegment } from "@/lib/ingest/chunk";
 import { edgeKey, matchByLabel, matchPerson } from "../match";
@@ -80,6 +81,12 @@ function readMembers(d: Extract<SlackPayload, { kind: "members" }>, ctx: ImportC
     }
     if (!relationProposed) { changes.push({ ...MEMBER_OF, fromTypes: [...MEMBER_OF.fromTypes], toTypes: [...MEMBER_OF.toTypes], receipt: { sourceId: ctx.sourceId, quote: head } }); relationProposed = true; }
     changes.push({ op: "addEdge", fromId: personId, toId: orgId, relation: "member_of", confidence: 1, status: "confirmed", receipt });
+    // What they are there is a role: their Slack title when it names one ("Manager"), else a colleague in the workspace.
+    const job = detectRole(m.title ?? null);
+    const role = roleRelation(job && !job.family ? job.role : "colleague");
+    if (!ctx.existingEdges.has(edgeKey(personId, role, orgId))) {
+      changes.push({ op: "addEdge", fromId: personId, toId: orgId, relation: role, confidence: job ? 0.9 : 0.7, status: job ? "confirmed" : "unconfirmed", receipt });
+    }
     linked++;
   }
   if (left) warnings.push(`${left} more members weren't proposed this time; deliver or drop these first.`);

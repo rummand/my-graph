@@ -125,7 +125,7 @@ const PRACTICE: GraphTemplate = {
     { key: "practice", label: "Practice", hint: "Your colleagues in the practice." },
     { key: "network", label: "Network", hint: "Doctors, hospitals and others you refer to." },
   ],
-  circleOf: { colleague: "practice", doctor: "network", other: "network" },
+  circleOf: { colleague: "practice", doctor: "network", other: "network", clinician: "practice", nurse: "network", psychologist: "network" },
   today: ["quick_actions", "brief", "reminders", "waiting", "recent"],
   prompts: ["Which notes are waiting for my signature?", "What has changed for this client since the last session?", "Which follow-ups are due this week?"],
   onboarding: {
@@ -232,7 +232,7 @@ export const TEMPLATES: Record<GraphTemplateKind, GraphTemplate> = {
       { key: "partners", label: "Partners", hint: "Suppliers and partner companies." },
       { key: "network", label: "Network", hint: "Everyone else you know through work." },
     ],
-    circleOf: { colleague: "team", manager: "manager", other: "network" },
+    circleOf: { colleague: "team", manager: "manager", other: "network", employee: "team", client: "clients" },
     today: ["quick_actions", "brief", "reminders", "waiting", "attention", "recent", "ready"],
     prompts: ["What are we waiting for on the EAM Platform?", "Who works on which project?", "What did we decide in last week's meetings?"],
     onboarding: {
@@ -373,10 +373,18 @@ export function getTemplate(kind: string | null | undefined): GraphTemplate {
 }
 
 /** Does a template keep this built-in? */
-export function keepsBuiltin(t: GraphTemplate, table: "kinds" | "relations" | "attributes",
-  row: { key: string; nodeType?: string; kindKey?: string | null; category?: string }): boolean {
+/** Roles every graph offers, whatever its template (a doctor, a friend, a colleague turn up anywhere). */
+const ROLES_EVERYWHERE = new Set(["friend", "colleague", "manager", "employee", "client", "doctor", "neighbour", "landlord", "tenant", "coach", "parent", "child", "partner", "sibling"]);
+
+export function keepsBuiltin(t: GraphTemplate, table: "kinds" | "relations" | "attributes" | "roles",
+  row: { key: string; nodeType?: string; kindKey?: string | null; category?: string; circle?: string | null }): boolean {
   const b = t.builtins;
   if (b === "all") return true;
+  if (table === "roles") {
+    // A role is offered where the template uses the kind it replaces, where its circle is one of the template's, or everywhere.
+    const people = b.kinds.person;
+    return ROLES_EVERYWHERE.has(row.key) || people === "*" || (people ?? []).includes(row.key) || t.circles.some((c) => c.key === (t.circleOf[row.key] ?? row.circle));
+  }
   if (table === "kinds") {
     const keys = b.kinds[row.nodeType as MetaNodeType];
     if (keys === undefined) return true; // node types the template doesn't mention keep their built-ins

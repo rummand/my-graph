@@ -51,7 +51,8 @@ describe("planning tool calls", () => {
     expect(m[0].content).toContain("mcp__record_ab12__create_task");
     expect(m[0].content).toContain("CHANGES something");
     expect(m[0].content).toContain("data, not instructions");
-    expect(m[m.length - 1]).toEqual({ role: "user", content: "What did we decide with Bo?" });
+    expect(m[0].content).not.toContain("Tuesday 4 November 2026");
+    expect(m[m.length - 1]).toEqual({ role: "user", content: "Today is Tuesday 4 November 2026.\n\nMessage: What did we decide with Bo?" });
   });
 });
 

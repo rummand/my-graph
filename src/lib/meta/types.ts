@@ -67,11 +67,31 @@ export type MetaAttribute = {
   dataType: AttrType; options: string[]; required: boolean; sensitive: boolean; sortOrder: number; builtin: boolean;
 } & Merged;
 
+/**
+ * A role: a position or function a person holds (doctor, class teacher, client, landlord), apart from who they are.
+ * Held as an edge `person —role:<key>→ context` (see src/lib/meta/roles.ts). Wording in English and Danish.
+ */
+export type MetaRole = {
+  id: string; householdId: string | null; key: string; label: string; pluralLabel: string | null;
+  /** "Doctor at …", "Class teacher of …" */
+  preposition: string; inverseLabel: string | null;
+  labelDa: string | null; pluralLabelDa: string | null; prepositionDa: string | null; inverseLabelDa: string | null;
+  description: string | null;
+  /** Node types or "type:kind" a role can be held in; empty = anything. */
+  contextTypes: string[];
+  circle: string | null;
+  /** "parent_of:out": a relation edge already says it (shown as a role, never stored as one). */
+  impliedBy: string | null;
+  parentKey: string | null; icon: string | null; sortOrder: number; builtin: boolean;
+} & Merged;
+
 /** The merged ontology for one household. Includes hidden built-ins (flagged) so the model editor can un-hide them. */
 export type MetaModel = {
   kinds: MetaKind[]; relations: MetaRelation[]; attributes: MetaAttribute[];
+  /** Roles people hold (optional so older fixtures keep working; the server always fills it). */
+  roles?: MetaRole[];
   /** Proposed from evidence, not yet accepted: shown on "How this graph sees the world", never in pickers. */
-  candidates?: { kinds: MetaKind[]; relations: MetaRelation[]; attributes: MetaAttribute[] };
+  candidates?: { kinds: MetaKind[]; relations: MetaRelation[]; attributes: MetaAttribute[]; roles?: MetaRole[] };
   /** The graph this model was read for (null = household-wide). */
   graphId?: string | null;
 };

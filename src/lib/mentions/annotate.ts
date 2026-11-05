@@ -1,7 +1,8 @@
 /**
- * Live highlights for the composer (server). While someone writes, `annotate` reads the text with a fast model through
- * mux and answers what it would add: links to existing things, new things (with a kind, maybe a new kind) and facts
- * between them and "you". Nothing is written. When mux is down, existing things are still linked by name.
+ * Live highlights for the composer (server). The composer itself works in three tiers (see ./live): graph names on
+ * every keystroke, then each sentence through a fast model (POST /api/annotate/stream, cached per sentence), then a
+ * whole-text facts pass after a pause. `annotate` answers the same for the whole text in one call, for older clients.
+ * Nothing is written. When mux is down, existing things are still linked by name.
  *
  * On Send, `commitAnnotations` turns what the person kept into a change set (origin "chat") with a receipt per op and
  * delivers it straight away: pressing Send is the person's decision.
@@ -16,10 +17,12 @@ import { isMuxDown } from "@/lib/mux";
 import { getMeta } from "@/lib/meta";
 import { opsFromPlan, planSummary, type DomainPlan, type PlannedEntity } from "@/lib/meta/domain";
 import { applyMetaOp, canDecideModel } from "@/lib/meta/emergent";
-import { extractDomain, knownNodesIn, planFor } from "@/lib/meta/suggest";
 import { findSynonymKind, findSynonymRelation } from "@/lib/meta/synonyms";
-import { NODE_TYPE_LABELS, type MetaNodeType } from "@/lib/meta/types";
-import { findWord, locateSpans, type Span } from "./markup";
+import type { MetaNodeType } from "@/lib/meta/types";
+import { findWord, type Span } from "./markup";
+import { mergeLive } from "./live/merge";
+import { splitSentences } from "./live/sentences";
+import { loadLexicon, readSentence } from "./live/server";
 
 export type AnnotationSpan = Span & { tone: "existing" | "new" | "newKind"; tag: string; type: string };
 
@@ -35,57 +38,36 @@ export type AnnotateResult = {
   selfLabel: string;
 };
 
-const EMPTY_PLAN: DomainPlan = { kinds: [], relations: [], entities: [], facts: [], attributes: [] };
-
-function tagOf(e: PlannedEntity): { tone: AnnotationSpan["tone"]; tag: string } {
-  if (e.existing) return { tone: "existing", tag: `links to ${e.label}` };
-  if (e.newKind) return { tone: "newKind", tag: `new kind: ${e.kindLabel}` };
-  return { tone: "new", tag: `new ${e.kindLabel ?? NODE_TYPE_LABELS[e.type as MetaNodeType]?.one ?? "thing"}` };
-}
-
-export async function annotate(v: Viewer, input: { text: string; mentions?: { label: string; nodeId: string }[] }): Promise<AnnotateResult> {
+/**
+ * The whole text at once (POST /api/annotate, kept for older clients such as the iPhone app). Built on the live
+ * pieces: graph names by the matcher, then each sentence through the cached per-sentence model tier, merged.
+ */
+export async function annotate(v: Viewer, input: { text: string; mentions?: { label: string; nodeId: string }[]; sensitive?: boolean }): Promise<AnnotateResult> {
   const text = input.text.slice(0, 4000);
   const readOnly = !scopeOf(v).canWrite;
-  const meta = await getMeta(v);
-  let known = await knownNodesIn(v, text);
+  const lex = await loadLexicon(v);
   // Mentions the person picked are links for sure (if they can see the node).
   const picked = (input.mentions ?? []).filter((m) => z.uuid().safeParse(m.nodeId).success).slice(0, 20);
   const visible = picked.length ? await readableNodeIds(v, picked.map((m) => m.nodeId)) : new Set<string>();
-  const selfLabel = known.find((k) => k.id === v.personNodeId)?.label ?? v.name;
-
-  let muxDown = false;
-  let plan: DomainPlan = EMPTY_PLAN;
-  if (text.trim().length >= 12) {
-    try {
-      const x = await extractDomain(v, text, { route: "fast", meta, known, mode: "live", agent: "my-graph-live-highlights" });
-      const r = await planFor(v, meta, x, known, text);
-      plan = r.plan; known = r.known;
-    } catch (e) {
-      if (isMuxDown(e)) muxDown = true;
-      else console.error("[annotate]", e);
-    }
-  }
-
-  // Links that need no model: picked mentions and known names in the text.
-  const entities = [...plan.entities];
-  for (const m of picked) {
-    if (!visible.has(m.nodeId) || entities.some((e) => e.nodeId === m.nodeId)) continue;
-    const k = known.find((n) => n.id === m.nodeId);
-    entities.push({ ref: `m-${m.nodeId}`, label: m.label, surface: `@${m.label}`, type: (k?.type ?? "thing") as MetaNodeType, kindKey: k?.kind ?? null, kindLabel: null, newKind: false, nodeId: m.nodeId, existing: true });
-  }
-  for (const k of known) {
-    if (k.id === v.personNodeId || entities.some((e) => e.nodeId === k.id)) continue;
-    if (findWord(text, k.label) < 0) continue;
-    entities.push({ ref: `k-${k.id}`, label: k.label, surface: k.label, type: k.type as MetaNodeType, kindKey: k.kind ?? null, kindLabel: k.kind ? meta.kind(k.type, k.kind)?.label ?? null : null, newKind: false, nodeId: k.id, existing: true });
-  }
-  plan = { ...plan, entities };
-
-  const located = locateSpans(text, entities.map((e) => ({ ref: e.ref, surface: e.surface, alternatives: [e.label, `@${e.label}`] })));
-  const spans: AnnotationSpan[] = located.map((s) => {
-    const e = entities.find((x) => x.ref === s.ref)!;
-    return { ...s, ...tagOf(e), type: e.type };
+  const mentions = picked.filter((m) => visible.has(m.nodeId)).flatMap((m) => {
+    const i = findWord(text, `@${m.label}`);
+    const type = lex.entries.find((e) => e.id === m.nodeId)?.type ?? "thing";
+    return i < 0 ? [] : [{ start: i, end: i + m.label.length + 1, nodeId: m.nodeId, label: m.label, type }];
   });
-  return { spans, plan, summary: planSummary(plan), readOnly, canGrowModel: canDecideModel(v), muxDown, selfLabel };
+  const sentences = splitSentences(text);
+  let muxDown = false;
+  const results = readOnly || text.trim().length < 12 ? sentences.map(() => null) : await Promise.all(sentences.map(async (s) => {
+    if (s.text.trim().length < 6) return null;
+    try { return (await readSentence(v, lex, s.text, !!input.sensitive)).result; } catch (e) {
+      if (isMuxDown(e)) muxDown = true; else console.error("[annotate]", e);
+      return null;
+    }
+  }));
+  const links = lex.matcher.match(text).filter((m) => !m.entry.self);
+  const { plan, spans } = mergeLive({ text, sentences, results, links, mentions, linksOnly: readOnly });
+  const out: AnnotationSpan[] = spans.filter((s) => s.tone === "existing" || s.tone === "new" || s.tone === "newKind" || s.tone === "mention")
+    .map((s) => ({ ref: s.ref, start: s.start, end: s.end, text: s.text, type: s.type, tone: s.tone === "mention" ? "existing" : s.tone as AnnotationSpan["tone"], tag: s.tag || `links to ${plan.entities.find((e) => e.ref === s.ref)?.label ?? s.text}` }));
+  return { spans: out, plan, summary: planSummary(plan), readOnly, canGrowModel: canDecideModel(v), muxDown, selfLabel: lex.selfLabel };
 }
 
 /* ── Commit on Send ───────────────────────────────────────────────────────────────────────────────────── */

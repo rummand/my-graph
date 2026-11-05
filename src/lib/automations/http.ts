@@ -102,6 +102,7 @@ export const settingsPatchBody = z.object({
   capabilities: z.partialRecord(z.enum(["library", "timeline", "people", "wiki_write", "reminders", "web"]), z.boolean()).optional(),
   tone: z.enum(["warm", "brief", "detailed"]).optional(),
   dailySuggestionCap: z.number().int().min(0, "Use 0 or more.").max(50, "Keep it at 50 or fewer a day.").optional(),
+  keepInTouchNudges: z.boolean().optional(),
   onboarded: z.literal(true).optional(),
 }).strict().refine((b) => Object.keys(b).length > 0, "Nothing to change.");
 

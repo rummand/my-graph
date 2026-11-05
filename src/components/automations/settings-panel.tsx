@@ -113,6 +113,11 @@ export function SettingsPanel({ initial, usage }: { initial: SettingsView; usage
           className="h-9 w-20 rounded-md bg-surface px-2 text-right text-[15px] tabular-nums ring-1 ring-inset ring-line focus:outline-none focus:ring-2 focus:ring-accent" />
       </Row>
 
+      <Row label={t("closeness.setting")} hint={t("closeness.settingHint")}>
+        <Toggle checked={!!s.keepInTouchNudges} label={t("closeness.setting")}
+          onChange={(v) => patch({ keepInTouchNudges: v }, { keepInTouchNudges: v })} />
+      </Row>
+
       <p aria-live="polite" className="min-h-5 text-sm">
         {error ? <span className="text-danger">{error}</span> : saved ? <span className="text-muted">{t("automations.settings.saved")}</span> : null}
       </p>

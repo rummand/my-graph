@@ -9,6 +9,7 @@
  *                                  own sign-in; reused only while it is valid. Never sent to a browser.
  *   peaksFor(v, id)              → the waveform, kept in recording_timelines once fetched
  */
+import { roleMention } from "@/lib/meta/roles";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { connections, edges, recordingTimelines, sources } from "@/db/schema";
@@ -222,6 +223,7 @@ export async function proposeSpeaker(v: Viewer, id: string, name: string): Promi
   if (!src) return null;
   const clean = name.replace(/\s+/g, " ").trim().slice(0, 120);
   if (!clean || GENERIC_SPEAKER.test(clean)) throw new AudioUnavailable("Give the person a name first; a numbered speaker can't be proposed.", 400);
+  if (roleMention(clean)) throw new AudioUnavailable("That is a role, not a name. Give the person's name to propose them.", 400);
   const meta = src.meta ?? {};
   const info = recordingInfo(meta) ?? { link: src.url ?? null };
   const [tl] = await db.select({ lines: recordingTimelines.lines, speakers: recordingTimelines.speakers }).from(recordingTimelines).where(eq(recordingTimelines.sourceId, id)).limit(1);

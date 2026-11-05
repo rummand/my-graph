@@ -6,6 +6,7 @@
  * document node in the graph, proposed with a "mentions" link to each person. Notes already brought in before (same
  * note id) reuse their node and only gain the links they lack.
  */
+import { roleMention } from "@/lib/meta/roles";
 import type { ChangeInput } from "@/lib/changes";
 import type { TextSegment } from "@/lib/ingest/chunk";
 import { BUILTIN_RELATIONS } from "@/lib/meta/builtins";
@@ -274,7 +275,7 @@ export function proposeFoundPeople(found: PersonFound[], ctx: ImportContext, app
       }
       continue;
     }
-    if (!p.certain) continue;
+    if (!p.certain || roleMention(p.name)) continue;
     const id = ctx.mint();
     for (const a of [p.name, ...(p.aliases ?? [])]) index.set(normName(a), id);
     changes.push({

@@ -33,7 +33,7 @@ import { degradedAnswer, type DegradedReason } from "./fallback";
 export { degradedAnswer, type DegradedReason };
 import { longDay, timeZone } from "./dates";
 import { autoApplyDecision, inferBasis } from "./policy";
-import { buildMessages, cleanTitle, fallbackTitle, titleMessages, type HistoryTurn, type Tone } from "./prompt";
+import { answerTokens, buildMessages, cleanTitle, fallbackTitle, titleMessages, type HistoryTurn, type Tone } from "./prompt";
 import * as wiki from "@/lib/pages";
 import { parseProposals, ProposalStreamFilter, type ProposalView } from "./proposals";
 import { flagsFrom, offWords, plainQuestion, retrieve, type Retrieval } from "./retrieve";
@@ -52,6 +52,7 @@ import { ACTION_CLOSE, ACTION_OPEN, actionResultMessage, actionsPrompt, findActi
 import { awaitClientAction, WAIT_MS } from "./client-actions";
 import type { ActionRecords } from "./state";
 import { randomUUID } from "node:crypto";
+import { autoCompact } from "./inbox";
 import { addMessage, addState, conversationRows, createConversation, ownConversation, raiseConversationSensitivity, renameConversation, touchConversation } from "./store";
 
 export class ChatInputError extends Error {
@@ -68,7 +69,28 @@ export type DoneEvent = {
   changeSetId?: string | null;
   /** Tools at connected MCP servers that would change something: shown as approval cards under the answer. */
   mcpApprovals: McpApproval[];
+  /** What the turn cost in tokens (every mux call it made), for measuring; the UI ignores it. */
+  usage?: TurnUsage;
 };
+
+export type TurnUsage = {
+  prompt: number; completion: number; cached: number; calls: number;
+  answer: { prompt: number; completion: number; cached: number; rounds: number };
+  /** Per agent ("my-graph:tools", "my-graph:chat-title" …). */
+  agents: Record<string, { prompt: number; completion: number; cached: number; calls: number }>;
+};
+
+/** The turn's calls summed; `answer` is the answer model alone (its rounds), the rest is titles and tool plans. */
+export function turnUsage(calls: mux.UsageRecord[]): TurnUsage {
+  const all = mux.sumUsage(calls);
+  const a = mux.sumUsage(calls.filter((c) => c.agent === "my-graph:assistant"));
+  if (calls.length && process.env.MG_DEBUG_TOKENS) console.log(`[assistant] turn tokens: prompt=${all.promptTokens} cached=${all.cachedTokens} completion=${all.completionTokens} calls=${all.calls}`);
+  return {
+    prompt: all.promptTokens, completion: all.completionTokens, cached: all.cachedTokens, calls: all.calls,
+    answer: { prompt: a.promptTokens, completion: a.completionTokens, cached: a.cachedTokens, rounds: a.calls },
+    agents: Object.fromEntries(Object.entries(all.byAgent).map(([k, x]) => [k, { prompt: x.promptTokens, completion: x.completionTokens, cached: x.cachedTokens, calls: x.calls }])),
+  };
+}
 
 function reasonOf(e: unknown): DegradedReason {
   if (e instanceof mux.MuxAuthError) return e.type === "not_configured" ? "not_configured" : "rejected";
@@ -80,10 +102,10 @@ async function safe<T>(p: Promise<T>, fallback: T, what: string): Promise<T> {
   try { return await p; } catch (e) { console.error(`[assistant] ${what} failed:`, e); return fallback; }
 }
 
-async function writeTitle(v: Viewer, question: string, sensitive: boolean): Promise<string> {
+async function writeTitle(v: Viewer, question: string, sensitive: boolean, traceId: string): Promise<string> {
   try {
     const r = await Promise.race([
-      mux.complete({ route: "fast", messages: titleMessages(question), maxTokens: 24, temperature: 0.2, meta: { userId: v.id, agent: "my-graph:chat-title", sensitive, graphId: v.graphId } }),
+      mux.complete({ route: "fast", messages: titleMessages(question), maxTokens: 24, temperature: 0.2, meta: { userId: v.id, agent: "my-graph:chat-title", sensitive, graphId: v.graphId, traceId } }),
       new Promise<null>((res) => setTimeout(() => res(null), 8000)),
     ]);
     return r ? cleanTitle(r.text, question) : fallbackTitle(question);
@@ -169,7 +191,8 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
   stops.set(key, stopper);
   const both = AbortSignal.any([signal, stopper.signal]);
   return new ReadableStream<Uint8Array>({
-    async start(controller) {
+    // Every mux call of the turn (answer rounds, title, tool plan …) is metered; the sum goes out with `done`.
+    start: (controller) => mux.meterUsage(async (usageCalls) => {
       let closed = false;
       const send = (event: string, data: unknown) => {
         if (closed) return;
@@ -262,7 +285,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
               conversationId: turn.conversationId, sensitive,
             })), null, "web facts")
           : Promise.resolve(null);
-        if (turn.isNew) titlePromise = writeTitle(v, question, sensitive);
+        if (turn.isNew) titlePromise = writeTitle(v, question, sensitive, turn.conversationId);
         send("sources", { sources: ctx.citations, route });
 
         const amb = ambiguousNames(question, found.people);
@@ -284,8 +307,9 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
           viewerName: v.name, today: longDay(now, tz), timeZone: tz, context: ctx.text + tools.context, history: turn.history, question,
           graphKind: v.graphKind, graphName: v.graphName, locale: voice.locale,
           tone: (settings.tone as Tone) ?? "warm", memory: mem.text, off, hints, summary: turn.summary, canRemember: memOk && canWrite,
-          pageActions: actionsPrompt(pageActions),
+          pageActions: actionsPrompt(pageActions), pageActionRules: true,
         });
+        if (process.env.MG_DEBUG_PROMPT) dumpPrompt(turn.conversationId, messages);
         let raw = "";
         const actionCalls: { name: string; status: string; note: string | null }[] = [];
         /** The round being written now (added to `raw` when it ends, or when the stream breaks off). */
@@ -302,8 +326,9 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
             const filter = new ProposalStreamFilter();
             const roundStop = new AbortController();
             const gen = mux.stream({
-              route, messages: convo, maxTokens: 1500, temperature: 0.3, signal: AbortSignal.any([both, roundStop.signal]),
-              meta: { userId: v.id, agent: "my-graph:assistant", traceId: turn.conversationId, sensitive, graphId: v.graphId },
+              route, messages: convo, maxTokens: answerTokens(settings.tone), temperature: 0.3, signal: AbortSignal.any([both, roundStop.signal]),
+              // affinity = the session: every round and every turn stays on one model, whose prompt cache holds the prefix.
+              meta: { userId: v.id, agent: "my-graph:assistant", traceId: turn.conversationId, affinity: turn.conversationId, sensitive, graphId: v.graphId },
             });
             let roundRaw = "";
             let lead = raw.trim() ? "\n\n" : "";
@@ -455,11 +480,14 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         const done: DoneEvent = {
           messageId: saved.id, citations, model: meta.model, route: meta.route ?? (degraded ? null : route), requestId: meta.requestId,
           degraded, title, proposals, clarify, steps, thoughtMs, stopped, text: parsed.text, changeSetId, mcpApprovals,
+          usage: turnUsage(usageCalls),
         };
         send("done", done);
         // Compliance: the answer and its proposals against the graph's corpora, after the answer (never slows it).
         // The chat picks the result up from /api/compliance/findings; the step "Checked against N corpora" is added then.
         if (!stopped && !degraded) {
+          // A long session: summarise its older turns now, so the next questions send a short, stable history.
+          void autoCompact(v, turn.conversationId);
           void checkAnswer(v, saved.id, { corpusIds: ruleCtx?.named ? ruleCtx.corpora.map((c) => c.id) : null })
             .catch((e) => console.warn("[assistant] compliance check failed:", e instanceof Error ? e.message : e));
         }
@@ -470,7 +498,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         if (stops.get(key) === stopper) stops.delete(key);
         close();
       }
-    },
+    }),
   });
 }
 
@@ -481,6 +509,16 @@ export function wikiTitleKey(title: string): string {
 }
 
 const stoppedEarly = (s: AbortSignal) => s.aborted;
+
+/** MG_DEBUG_PROMPT=1: each turn's messages to $TMPDIR/mg-prompts (to check the prefix stays byte-identical). */
+function dumpPrompt(conversationId: string, messages: mux.MuxMessage[]) {
+  void import("node:fs/promises").then(async (fs) => {
+    const dir = `${process.env.TMPDIR ?? "/tmp"}/mg-prompts`;
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(`${dir}/${conversationId}-${Date.now()}.json`, JSON.stringify(messages, null, 1));
+  }).catch(() => {});
+}
+
 
 /** How an earlier answer's page actions read in the history the model gets. */
 export function actionsNote(calls: NonNullable<ReturnType<ActionRecords["get"]>>): string {

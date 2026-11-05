@@ -196,7 +196,10 @@ describe("slack importer", () => {
     const ops = plan.changes;
     expect(ops.filter((c) => c.op === "addNode").map((c) => c.label)).toEqual(["Acme", "Anna Holm"]);
     expect(ops.find((c) => c.op === "addRelationType")).toMatchObject({ key: "member_of" });
-    expect(ops.filter((c) => c.op === "addEdge").map((c) => [c.fromId, c.toId])).toEqual([["n2", "n1"], ["p-bo", "n1"]]);
+    expect(ops.filter((c) => c.op === "addEdge" && c.relation === "member_of").map((c) => [c.fromId, c.toId])).toEqual([["n2", "n1"], ["p-bo", "n1"]]);
+    // Being in the workspace is a role held there (a colleague at Acme), never a kind of person.
+    expect(ops.filter((c) => c.op === "addEdge" && c.relation === "role:colleague").map((c) => [c.fromId, c.toId])).toEqual([["n2", "n1"], ["p-bo", "n1"]]);
+    expect(ops.filter((c) => c.op === "addNode").every((c) => !c.kind)).toBe(true);
     expect(plan).toMatchObject({ extract: false, counts: { people: 1, matched: 1 } });
   });
 

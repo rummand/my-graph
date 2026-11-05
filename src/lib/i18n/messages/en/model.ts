@@ -75,8 +75,8 @@ const messages: MessageTree = {
   editor: {
     sections: "Model sections",
     kinds: "Kinds",
-    kindsHint: "What someone or something is: a colleague, a teacher, a supplier.",
-    kindsHintFamily: "Grandparent, teacher, doctor: what someone or something is.",
+    kindsHint: "What something is: a school, a client company, a supplier. What people do (teacher, colleague) are roles, above.",
+    kindsHintFamily: "School, clinic, birthday: what something is. What people do (doctor, teacher) are roles, above.",
     relations: "Relations",
     relationsHint: "How two things are connected, read both ways.",
     details: "Details",

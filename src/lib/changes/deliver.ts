@@ -110,7 +110,7 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
   // and every later op that referred to the new node is pointed at the existing one. That mapping is worked out here,
   // at delivery, from the graph as it is now; it is not part of the ops, so it never makes an approval stale.
   const chosenLike = all.map((c) => ({ ...asLike(c), included: chosen.includes(c) }));
-  const now = await nowFor(v, all, chosen.some((c) => c.op === "addKind" || c.op === "addRelationType" || c.op === "addAttribute"));
+  const now = await nowFor(v, all, chosen.some((c) => c.op === "addKind" || c.op === "addRelationType" || c.op === "addAttribute" || c.op === "addRole"));
   const reasons = verdictsFor(chosenLike, now, { includedOnly: true, setId: set.id, baseAt: set.baseAt });
   const plan = planDelivery(chosenLike.filter((c) => c.included), reasons);
   const conflicts = plan.conflicts;
@@ -132,7 +132,7 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
     : []);
 
   let applied = 0, evidenceAdded = 0;
-  const META = new Set(["addKind", "addRelationType", "addAttribute"]);
+  const META = new Set(["addKind", "addRelationType", "addAttribute", "addRole"]);
   const fail = (error: string, extra: Partial<DeliverResult> = {}): DeliverResult => ({ ok: false, applied: 0, conflicts: [], error, ...extra });
 
   // 1. Wiki edits first (they can't join the transaction); each one knows how to undo itself.
@@ -203,6 +203,14 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
           } else if (c.op === "addRelationType") {
             const r = await applyMetaOpTx(tx, v, { op: "addRelationType", key: String(p.key), label: String(p.label), inverseLabel: String(p.inverseLabel ?? p.label), fromTypes: p.fromTypes as string[] | undefined, toTypes: p.toTypes as string[] | undefined, symmetric: !!p.symmetric, category: str(p.category) }, ctx);
             relKey.set(String(p.key), r.key);
+          } else if (c.op === "addRole") {
+            const r = await applyMetaOpTx(tx, v, {
+              op: "addRole", key: String(p.key), label: String(p.label), pluralLabel: str(p.pluralLabel), preposition: str(p.preposition),
+              labelDa: str(p.labelDa), pluralLabelDa: str(p.pluralLabelDa), prepositionDa: str(p.prepositionDa), circle: str(p.circle) ?? null,
+              contextTypes: Array.isArray(p.contextTypes) ? (p.contextTypes as unknown[]).filter((x): x is string => typeof x === "string") : undefined,
+              parentKey: str(p.parentKey) ?? null, description: str(p.description),
+            }, ctx);
+            relKey.set(`role:${p.key}`, `role:${r.key}`);
           } else {
             await applyMetaOpTx(tx, v, { op: "addAttribute", nodeType: String(p.nodeType), kindKey: str(p.kindKey) ?? null, key: String(p.key), label: String(p.label), type: String(p.type ?? "text") }, ctx);
           }
@@ -241,7 +249,11 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
           case "addEdge": {
             const status = typeof p.status === "string" && EDGE_STATUSES.has(p.status) ? (p.status as gbrain.EdgeStatus) : undefined;
             const relation = relKey.get(String(p.relation)) ?? String(p.relation);
-            const e = await gbrain.addEdge(v, { id: c.edgeId ?? undefined, fromId: String(p.fromId), toId: String(p.toId), relation, confidence: typeof p.confidence === "number" ? p.confidence : undefined, status }, prov);
+            const props = p.props && typeof p.props === "object" && !Array.isArray(p.props) ? (p.props as Record<string, unknown>) : undefined;
+            const e = await gbrain.addEdge(v, {
+              id: c.edgeId ?? undefined, fromId: String(p.fromId), toId: String(p.toId), relation, confidence: typeof p.confidence === "number" ? p.confidence : undefined, status,
+              ...(props ? { props } : {}), ...(p.validFrom !== undefined ? { validFrom: date(p.validFrom) ?? null } : {}), ...(p.validTo !== undefined ? { validTo: date(p.validTo) ?? null } : {}),
+            }, prov);
             // An agent's fact delivered as confirmed: the person's approval is its own provenance row, never implied.
             if (status === "confirmed" && prov.agentType === "model") await gbrain.setEdgeStatus(v, e.id, "confirmed", `Approved by ${v.name} in the proposal “${set.title.slice(0, 120)}”`);
             break;
@@ -332,6 +344,13 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
   }
 
   void audit(v, "changes.deliver", { type: "change_set", id: set.id }, { applied, skipped, connected: plan.remapped.length, evidence: evidenceAdded, title: set.title.slice(0, 120), origin: set.origin, restId }).catch(() => {});
+  // Interactions with people (src/lib/people/interactions): derived from what was just delivered, best effort, after commit.
+  const evidenceSource = typeof (set.evidence as Record<string, unknown> | null)?.sourceId === "string" ? String((set.evidence as Record<string, unknown>).sourceId) : null;
+  void import("@/lib/people/interactions/derive").then((m) => m.deriveAfterDelivery(v.graphId, {
+    sourceId: evidenceSource,
+    nodeIds: todo.filter((c) => c.op === "addNode" && c.nodeId).map((c) => c.nodeId!),
+    edgeIds: todo.filter((c) => c.op === "addEdge" && c.edgeId).map((c) => c.edgeId!),
+  })).catch((e) => console.error("[interactions] could not derive after delivery", e));
   return { ok: true, applied, conflicts: [], skipped, restId, connected: plan.remapped.length, evidence: evidenceAdded };
 }
 

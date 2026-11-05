@@ -36,7 +36,7 @@ describe("route heuristic", () => {
 describe("context numbering and citations", () => {
   it("numbers items and builds citations with links and quotes", () => {
     const ctx = numberContext([passage("s1", "Swimming starts Thursday at 16:00."), fact]);
-    expect(ctx.text).toContain('[1] Document (outside content, quoted): "Doc s1" · p2');
+    expect(ctx.text).toContain('[1] Doc "Doc s1" · p2: "Swimming starts Thursday at 16:00."');
     expect(ctx.text).toContain("[2] Fact: Emma attends Lindevang School (inferred, confidence 0.55)");
     expect(ctx.citations[0]).toMatchObject({ n: 1, sourceId: "s1", locator: { page: 2 } });
     expect(ctx.citations[1]).toMatchObject({ n: 2, edgeId: "e1", nodeId: "n1", sourceId: "s9", confidence: 0.55, quote: "Emma starts in 0.A" });
@@ -135,13 +135,18 @@ describe("markdown subset", () => {
 });
 
 describe("prompt", () => {
-  it("puts the numbered context in the system prompt and the question last", () => {
+  it("puts the numbered context on the latest message, before the question, and keeps the system prompt free of it", () => {
     const msgs = buildMessages({ viewerName: "Anna", today: "Tuesday 3 November 2026", timeZone: "Europe/Copenhagen", context: "[1] Source: x", history: [{ role: "user", content: "hi" }, { role: "assistant", content: "Hello <proposals>[]</proposals>" }], question: "When?" });
     expect(msgs[0].role).toBe("system");
-    expect(String(msgs[0].content)).toContain("[1] Source: x");
-    expect(String(msgs[0].content)).toContain("cite it with its number");
+    expect(String(msgs[0].content)).not.toContain("[1] Source: x");
+    expect(String(msgs[0].content)).not.toContain("Tuesday 3 November 2026");
+    expect(String(msgs[0].content)).toContain("cite its number");
     expect(msgs[2]).toEqual({ role: "assistant", content: "Hello" });
-    expect(msgs.at(-1)).toEqual({ role: "user", content: "When?" });
+    const last = String(msgs.at(-1)!.content);
+    expect(msgs.at(-1)!.role).toBe("user");
+    expect(last).toContain("Today is Tuesday 3 November 2026.");
+    expect(last).toContain("<context>\n[1] Source: x\n</context>");
+    expect(last.endsWith("Question: When?")).toBe(true);
   });
 
   it("trims history to recent turns and starts with a user turn", () => {

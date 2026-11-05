@@ -8,6 +8,7 @@ import type { ChangeInput, Receipt } from "@/lib/changes";
 import type { Locator } from "@/db/schema";
 import { clampConfidence, edgeStatusFor, findQuoteChunk, matchKnownPerson, reminderDueAt, type Extraction } from "./extraction";
 import { displayName, type Participant } from "./mail";
+import { detectRole, roleMention, roleRelation } from "@/lib/meta/roles";
 
 export type KnownNode = { id: string; type: string; label: string; aliases: string[]; startAt?: string | null; email?: string | null };
 export type ChunkRef = { id: string; idx: number; text: string; locator: Locator };
@@ -15,7 +16,7 @@ export type Group = { ex: Extraction; chunks: ChunkRef[] };
 
 export type ProposalPlan = {
   changes: ChangeInput[];
-  counts: { people: number; events: number; other: number; connections: number; reminders: number; dropped: number };
+  counts: { people: number; events: number; other: number; connections: number; reminders: number; dropped: number; roles?: number };
 };
 
 const norm = (s: string) => s.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
@@ -46,7 +47,7 @@ export function buildProposalOps(input: {
 }): ProposalPlan {
   const now = input.now ?? new Date();
   const changes: ChangeInput[] = [];
-  const counts = { people: 0, events: 0, other: 0, connections: 0, reminders: 0, dropped: 0 };
+  const counts = { people: 0, events: 0, other: 0, connections: 0, reminders: 0, dropped: 0, roles: 0 };
   const people = input.known.filter((k) => k.type === "person");
   const byTypeLabel = new Map<string, KnownNode>();
   for (const k of input.known) {
@@ -77,6 +78,8 @@ export function buildProposalOps(input: {
 
     for (const ent of ex.entities) {
       const key = norm(ent.label);
+      // "the teacher", "Lægen", "Speaker 2" name nobody: a role is not a person, so no node (and no facts about it).
+      if (ent.type === "person" && roleMention(ent.label) && !labelToId.has(key) && !matchKnownPerson(ent.label, people)) { counts.dropped++; continue; }
       let id = labelToId.get(key);
       if (!id && ent.type === "person") id = matchKnownPerson(ent.label, people)?.id;
       if (!id) {
@@ -115,6 +118,27 @@ export function buildProposalOps(input: {
       const chunk = findQuoteChunk(f.quote, chunks) ?? chunks[0];
       if (addEdge(fromId, f.relation, toId, receipt(chunk, f.quote ?? null, confidence), confidence, f.quote ? "Stated in the document." : "Read from the document.")) counts.connections++;
       if (f.relation === "involves" && events.has(fromId) && typeOf.get(toId) === "person") events.get(fromId)!.personIds.add(toId);
+    }
+
+    // Roles held: "Karen Hansen er klasselærer for 3.B" → Karen —role:class_teacher→ 3.B (or back at Karen with no context).
+    for (const r of ex.roles ?? []) {
+      const hit = detectRole(r.role);
+      const personId = r.person ? resolve(r.person) : undefined;
+      if (!hit || !personId || typeOf.get(personId) !== "person") { counts.dropped++; continue; }
+      const ctxId = r.context ? resolve(r.context) : undefined;
+      const toId = ctxId && ctxId !== personId ? ctxId : personId;
+      const confidence = clampConfidence(r.confidence);
+      const chunk = findQuoteChunk(r.quote, chunks) ?? chunks[0];
+      const relation = roleRelation(hit.role);
+      const k = edgeKey(personId, relation, toId);
+      if (edges.has(k) || proposedEdges.has(k)) continue;
+      proposedEdges.add(k);
+      changes.push({
+        op: "addEdge", fromId: personId, toId, relation, confidence, status: edgeStatusFor(confidence),
+        ...(r.from ? { validFrom: r.from.toISOString() } : {}), ...(r.to ? { validTo: r.to.toISOString() } : {}),
+        note: r.quote ? "A role the document says they hold." : "Read from the document.", receipt: receipt(chunk, r.quote ?? null, confidence),
+      });
+      counts.roles++;
     }
   }
 
@@ -176,6 +200,7 @@ export function describeCounts(c: Partial<ProposalPlan["counts"]>): string {
     c.events ? `${c.events} ${c.events === 1 ? "date" : "dates"}` : null,
     c.other ? `${c.other} ${c.other === 1 ? "place or topic" : "places and topics"}` : null,
     c.connections ? `${c.connections} ${c.connections === 1 ? "connection" : "connections"}` : null,
+    c.roles ? `${c.roles} ${c.roles === 1 ? "role" : "roles"}` : null,
     c.reminders ? `${c.reminders} ${c.reminders === 1 ? "reminder" : "reminders"}` : null,
   ].filter(Boolean) as string[];
   if (!parts.length) return "nothing new";

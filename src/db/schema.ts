@@ -529,7 +529,94 @@ export const metaAttributes = pgTable("meta_attributes", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [unique("meta_attributes_graph_key_uq").on(t.householdId, t.graphId, t.nodeType, t.kindKey, t.key).nullsNotDistinct()]);
 
+/**
+ * Roles: positions and functions a person holds, apart from who they are (src/lib/meta/roles.ts). A person can hold
+ * several, each in a context (doctor AT Lægehuset Vejle, class teacher OF 3.B, client OF this practice) and for a time.
+ * A role held is an edge `person —role:<key>→ context` (validFrom/validTo, provenance and status like any fact); with
+ * no known context the edge points back at the person. Scoped like meta_kinds: built-ins have householdId null,
+ * households add their own household-wide (graphId null) or for one graph; roles grow from evidence (candidate → active).
+ */
+export const metaRoles = pgTable("meta_roles", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id").references(() => households.id, { onDelete: "cascade" }),
+  key: text("key").notNull(),
+  label: text("label").notNull(),
+  pluralLabel: text("plural_label"),
+  /** The word between the role and its context: "Doctor at …", "Class teacher of …". */
+  preposition: text("preposition").notNull().default("of"),
+  /** Read from the context's side: "Lægehuset Vejle — doctor: Lars". */
+  inverseLabel: text("inverse_label"),
+  labelDa: text("label_da"),
+  pluralLabelDa: text("plural_label_da"),
+  prepositionDa: text("preposition_da"),
+  inverseLabelDa: text("inverse_label_da"),
+  description: text("description"),
+  /** What a role can be held in: node types or "type:kind" (organization, place:school, person …); empty = anything. */
+  contextTypes: text("context_types").array().notNull().default([]),
+  /** The circle holding it puts a person in: family · close · school · care · social · work · other (or a template's). */
+  circle: text("circle"),
+  /** A relation that already says this role ("parent_of:out"): shown as a role, never stored as one. */
+  impliedBy: text("implied_by"),
+  parentKey: text("parent_key"),
+  icon: text("icon"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  builtin: boolean("builtin").notNull().default(false),
+  /** Emergent meta model: candidate (proposed from evidence) | active | hidden. */
+  status: text("status").notNull().default("active"),
+  /** builtin | template | manual | emergent */
+  origin: text("origin").notNull().default("manual"),
+  graphId: uuid("graph_id"),
+  evidenceCount: integer("evidence_count").notNull().default(0),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }),
+  changeSetId: uuid("change_set_id"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [unique("meta_roles_graph_key_uq").on(t.householdId, t.graphId, t.key).nullsNotDistinct()]);
+
 /* ── People: how they are, over time ──────────────────────────────────────────────────────────────────── */
+
+/**
+ * Interactions with a person, derived (never typed in) from what the graph holds: messages and email they sent or got,
+ * calls, meetings and events they took part in, photos with them, documents that mention them, their own edits. One
+ * row per (person, carrier). `ownerId` is whose source it is; a viewer's closeness is computed only from rows whose
+ * carrier (source or node) they may read, so one member's private messages never move another member's picture.
+ */
+export const personInteractions = pgTable("person_interactions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id").notNull(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  nodeId: uuid("node_id").notNull().references(() => nodes.id, { onDelete: "cascade" }),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+  /** message | email | call | meeting | event | photo | mention | edit */
+  kind: text("kind").notNull(),
+  /** strong | medium | weak */
+  strength: text("strength").notNull(),
+  weight: real("weight").notNull().default(1),
+  /** The carrier: a library source, or a node (an event) — whichever the viewer must be able to read. */
+  sourceId: uuid("source_id").references(() => sources.id, { onDelete: "cascade" }),
+  subjectId: uuid("subject_id"),
+  /** Copied from the carrier when recorded; reads re-check the carrier itself. */
+  visibility: visibilityEnum("visibility").notNull().default("private"),
+  sensitive: boolean("sensitive").notNull().default(false),
+  /** A few words for the person page ("Email: Pick-up on Friday"). */
+  detail: text("detail"),
+  /** One row per person and carrier: "source:<id>", "node:<id>", "event:<graph_events id>". */
+  dedupeKey: text("dedupe_key").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  unique("person_interactions_dedupe_uq").on(t.graphId, t.nodeId, t.dedupeKey),
+  index("person_interactions_node_at_idx").on(t.graphId, t.nodeId, t.at),
+  index("person_interactions_source_idx").on(t.sourceId),
+]);
+
+/** People a person keeps close on purpose: a pinned person never fades for them (per viewer, per graph). */
+export const personPins = pgTable("person_pins", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  nodeId: uuid("node_id").notNull().references(() => nodes.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [unique("person_pins_uq").on(t.graphId, t.userId, t.nodeId)]);
 
 export const observationKindEnum = pgEnum("observation_kind", ["wellbeing", "health", "milestone", "contact", "note"]);
 
@@ -699,6 +786,8 @@ export const assistantSettings = pgTable("assistant_settings", {
   tone: text("tone").notNull().default("warm"),
   /** Max proactive suggestions per day (avoid nagging). */
   dailySuggestionCap: integer("daily_suggestion_cap").notNull().default(5),
+  /** Today's check-in may say "You haven't been in touch with X for a while" (people who used to be close). Off by default. */
+  keepInTouchNudges: boolean("keep_in_touch_nudges").notNull().default(false),
   onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("assistant_settings_graph_user_uq").on(t.graphId, t.userId)]);

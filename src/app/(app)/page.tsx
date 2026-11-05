@@ -28,6 +28,7 @@ import { ReadyWhenYouAre } from "@/components/today/ready";
 import { RecentlyAdded } from "@/components/today/recent";
 import { hrefs } from "@/components/today/section";
 import { ComingUp } from "@/components/today/upcoming";
+import { KeepInTouch } from "@/components/today/keep-in-touch";
 import type { Lane } from "@/components/today/week";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -190,6 +191,7 @@ export default async function TodayPage() {
             )}
             {pendingSets.length > 0 && <div className="hidden lg:block"><ProposedChanges sets={pendingSets} now={now} tz={tz} canDeliver={canWrite} /></div>}
             {show.has("attention") && <NeedsAttention data={data} />}
+            <KeepInTouch viewer={viewer} />
             {show.has("activity") && assistant.enabled && <AssistantActivity activity={assistant.activity} now={now} tz={tz} />}
             {show.has("recent") && <RecentlyAdded data={data} now={now} tz={tz} />}
           </>

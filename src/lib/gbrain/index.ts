@@ -438,7 +438,8 @@ export async function listNodes(v: Viewer, opts?: { type?: NodeType; q?: string;
 async function addEdgeTx(tx: Tx, v: Viewer, ctx: AccessCtx, input: EdgeInput, prov: ProvenanceInput): Promise<EdgeRow> {
   const relation = normalizeRelation(input.relation);
   if (!relation) throw new GBrainError(400, "Say how the two things are related, for example parent_of or attends.");
-  if (input.fromId === input.toId) throw new GBrainError(400, "A fact needs two different things.");
+  // The one fact that may point back at its own node: a role held with no known context ("Doctor", nobody knows where).
+  if (input.fromId === input.toId && !relation.startsWith("role:")) throw new GBrainError(400, "A fact needs two different things.");
   if (input.status === "rejected" || input.status === "superseded") throw new GBrainError(400, "A new fact can't start out rejected or replaced.");
   const ends = await readableNodes(ctx, [input.fromId, input.toId], tx);
   const from = ends.find((n) => n.id === input.fromId), to = ends.find((n) => n.id === input.toId);

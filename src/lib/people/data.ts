@@ -14,10 +14,13 @@ import { attentionItems, nextBirthday } from "./attention";
 import { circleIn } from "./circles";
 import { memberCircle, relationsToCenter, relationToYou, relationToYouParts, type PathEdge, type PathNode } from "./relpath";
 import { templateFor } from "@/lib/templates";
+import { getLocale } from "@/lib/i18n";
+import { circleFromRoles, findRole, isRoleRelation, rolesHeld, roleText, roleWords, type RoleNode } from "@/lib/meta/roles";
 import { isRetired, liveNodeSql } from "@/lib/gbrain";
 import { memberSelfNodes } from "@/lib/graphs/self";
+import { closeFamilyOf, closenessFor, interactionsFor } from "./interactions/read";
 import type {
-  CenterOption, Citation, FeedItem, Observation, PeopleOverview, PersonProfile, PersonSummary, RelationshipGroup,
+  CenterOption, Citation, FeedItem, HeldRoleView, Observation, PeopleOverview, PersonProfile, PersonSummary, RelationshipGroup,
 } from "./types";
 
 /** Node columns people pages read: everything but the search vector and the 1024-float embedding (~12 KB a row as text). */
@@ -68,11 +71,18 @@ async function memberPersonIds(v: Viewer): Promise<Set<string>> {
   return new Set((await memberSelfNodes(v.graphId)).values());
 }
 
-/** The person's circle in this graph: their kind's circle, else what the relation to you says, in the graph's own circles. */
-function circleFor(meta: Meta, n: Pick<NodeRow, "kind">, relCategory: string | undefined, isMember: boolean, graphKind: Viewer["graphKind"]): string {
+/**
+ * The person's circle in this graph: a kind that says who they are (a child of the family), else the closest circle
+ * their current roles imply (a doctor → care, a colleague → work; parent_of and the like count as family roles), else
+ * what the relation to you says, in the graph's own circles. A kind that became a role (an unconverted "doctor") still
+ * places them, so nothing moves until the conversion is delivered.
+ */
+export function circleFor(meta: Meta, n: Pick<NodeRow, "kind">, relCategory: string | undefined, isMember: boolean, graphKind: Viewer["graphKind"], roles: { key: string; current: boolean }[] = []): string {
   const t = templateFor({ graphKind });
   const k = meta.kind("person", n.kind);
   if (k?.circle) return circleIn(t, k.circle);
+  const fromRoles = circleFromRoles(meta.model, roles, (r) => circleIn(t, t.circleOf[r.key] ?? r.circle));
+  if (fromRoles) return fromRoles;
   const byCat: Record<string, string> = { family: "family", school: "school", care: "care", social: "social", work: "work" };
   if (relCategory && byCat[relCategory]) return circleIn(t, byCat[relCategory]);
   // A fellow member with no recorded relation sits where the graph puts its people.
@@ -81,6 +91,7 @@ function circleFor(meta: Meta, n: Pick<NodeRow, "kind">, relCategory: string | u
 
 type Built = {
   meta: Meta;
+  locale: string;
   people: PersonSummary[];
   byId: Map<string, PersonSummary>;
   nodesById: Map<string, NodeRow>;
@@ -92,8 +103,8 @@ type Built = {
 /** Everything the overview needs, computed for one centre (default: the viewer). */
 async function buildPeople(v: Viewer, opts: { centerId?: string | null; now?: Date } = {}): Promise<Built> {
   const now = opts.now ?? new Date();
-  const [meta, persons, viewerNodeId, members] = await Promise.all([
-    getMeta(v), visibleNodes(v, ["person"]), viewerPersonId(v), memberPersonIds(v),
+  const [meta, persons, viewerNodeId, members, locale] = await Promise.all([
+    getMeta(v), visibleNodes(v, ["person"]), viewerPersonId(v), memberPersonIds(v), getLocale().catch(() => "en"),
   ]);
   const nodesById = new Map(persons.map((n) => [n.id, n]));
   const ids = persons.map((p) => p.id);
@@ -126,7 +137,22 @@ async function buildPeople(v: Viewer, opts: { centerId?: string | null; now?: Da
       .where(and(eq(reminders.ownerId, v.id), eq(reminders.done, false), inArray(reminders.aboutNodeId, ids))).groupBy(reminders.aboutNodeId),
   ]);
 
-  const liveEdges: PathEdge[] = edgeRows.filter((e) => nodesById.has(e.fromId) && nodesById.has(e.toId))
+  // Roles: role edges (to any context the viewer may see) and the relations that imply roles.
+  const roleCtxIds = [...new Set(edgeRows.filter((e) => isRoleRelation(e.relation) && nodesById.has(e.fromId) && !nodesById.has(e.toId)).map((e) => e.toId))];
+  const roleCtx = roleCtxIds.length
+    ? await db.select({ id: nodes.id, label: nodes.label, type: nodes.type }).from(nodes).where(and(inArray(nodes.id, roleCtxIds), isNull(nodes.mergedInto), liveNodeSql("nodes"), visibleWhere(v, nodes)))
+    : [];
+  const roleNodes = new Map<string, RoleNode>([...persons.map((p) => [p.id, { id: p.id, label: p.label, type: p.type }] as const), ...roleCtx.map((n) => [n.id, n] as const)]);
+  const rolesOf = new Map<string, HeldRoleView[]>();
+  for (const p of persons) {
+    const mine = edgeRows.filter((e) => e.fromId === p.id || e.toId === p.id);
+    if (!mine.length) continue;
+    const held = rolesHeld(meta.model, p.id, mine, roleNodes, now);
+    if (held.length) rolesOf.set(p.id, held.map((h) => heldView(meta, h, locale)));
+  }
+
+  // A role edge is not a relation between two people for the paths below (its context is often not a person).
+  const liveEdges: PathEdge[] = edgeRows.filter((e) => nodesById.has(e.fromId) && nodesById.has(e.toId) && !isRoleRelation(e.relation))
     .map((e) => ({ id: e.id, fromId: e.fromId, toId: e.toId, relation: e.relation, status: e.status }));
   const pathNodes = new Map<string, PathNode>(persons.map((p) => [p.id, { id: p.id, label: p.label, type: p.type, kind: p.kind }]));
   const rel = centerId ? relationsToCenter(meta.model, centerId, pathNodes, liveEdges, { centerIsViewer: centerId === viewerNodeId }) : new Map();
@@ -158,9 +184,12 @@ async function buildPeople(v: Viewer, opts: { centerId?: string | null; now?: Da
     const birthday = typeof p.props.birthday === "string" ? p.props.birthday : null;
     const nb = nextBirthday(birthday, now);
     const r = rel.get(p.id) ?? null;
+    const roles = rolesOf.get(p.id) ?? [];
+    // The list shows a role they hold in their own right (doctor at …), not one a family relation already says.
+    const shown = roles.find((x) => x.current && !x.implied) ?? null;
     return {
-      id: p.id, label: p.label, kind: p.kind, kindLabel: kind?.label ?? null,
-      circle: circleFor(meta, p, relToViewer.get(p.id)?.category, members.has(p.id), v.graphKind),
+      id: p.id, label: p.label, kind: p.kind, kindLabel: kind?.label ?? null, roles, roleText: shown?.text ?? null,
+      circle: circleFor(meta, p, relToViewer.get(p.id)?.category, members.has(p.id), v.graphKind, roles),
       visibility: p.visibility, sensitive: p.sensitive, ownerId: p.ownerId,
       householdMember: members.has(p.id), isViewer: p.id === viewerNodeId,
       relation: r, lastContactAt: iso(lastContact?.at), lastContactSource: lastContact?.src ?? null,
@@ -170,7 +199,21 @@ async function buildPeople(v: Viewer, opts: { centerId?: string | null; now?: Da
       openReminders: rem.get(p.id) ?? 0, createdAt: p.createdAt.toISOString(),
     };
   });
-  return { meta, people, byId: new Map(people.map((p) => [p.id, p])), nodesById, centerId, viewerNodeId, members };
+  // How close the viewer is to each of them, from interactions they may read (src/lib/people/interactions).
+  const near = await closenessFor(v, persons, { viewerNodeId, members, family: closeFamilyOf(viewerNodeId, edgeRows), now });
+  for (const p of people) p.closeness = near.get(p.id);
+  return { meta, locale, people, byId: new Map(people.map((p) => [p.id, p])), nodesById, centerId, viewerNodeId, members };
+}
+
+/** A held role in the reader's words, with a link to its context. */
+function heldView(meta: Meta, h: ReturnType<typeof rolesHeld>[number], locale: string): HeldRoleView {
+  const r = findRole(meta.model, h.key);
+  const ctx = h.context;
+  return {
+    key: h.key, label: roleWords(r, locale, h.key).label, text: roleText(r, h.key, ctx, locale), current: h.current, implied: h.implied, status: h.status,
+    edgeId: h.edgeId, from: h.from, to: h.to,
+    context: ctx ? { id: ctx.id, label: ctx.label, type: ctx.type, href: ctx.type === "person" ? `/people/${ctx.id}` : `/node/${ctx.id}` } : null,
+  };
 }
 
 /** GET /api/people and the /people page. `centerId` re-centres the circles on someone (e.g. a child). */
@@ -281,6 +324,8 @@ export async function personProfile(v: Viewer, id: string): Promise<PersonProfil
   // Relationships grouped by meta category (documents/time go to the feed instead).
   const groups = new Map<string, RelationshipGroup>();
   for (const e of live) {
+    // Roles they hold are shown as roles (the Roles line), not as relations to a thing.
+    if (isRoleRelation(e.relation)) continue;
     const out = e.fromId === id;
     const other = otherById.get(out ? e.toId : e.fromId)!;
     const r = findRelation(meta.model, e.relation);
@@ -327,14 +372,16 @@ export async function personProfile(v: Viewer, id: string): Promise<PersonProfil
   feed.sort((a, b2) => b2.at.localeCompare(a.at));
   milestones.sort((a, b2) => b2.at.localeCompare(a.at));
 
-  const { attributes, props } = redactForViewer(v, node.ownerId, meta.attributesFor("person", node.kind), node.props);
+  // Details a role carries (a doctor's clinic, a teacher's subject) show for people who hold it.
+  const roleKeys = (summary.roles ?? []).filter((r) => r.current).map((r) => r.key);
+  const { attributes, props } = redactForViewer(v, node.ownerId, meta.attributesFor("person", node.kind, roleKeys), node.props);
   const nodeOptions = (await visibleNodes(v, ["person", "place", "event", "topic"], 2000))
     .filter((n) => n.id !== id).map((n) => ({ id: n.id, label: n.label, type: n.type, kind: n.kind, isViewer: n.id === b.viewerNodeId }))
     .sort((a, c) => Number(c.isViewer) - Number(a.isViewer));
 
   return {
     person: { ...summary, props, summary: node.summary, aliases: node.aliases, canEdit: await canEditNode(v, node), createdAt: node.createdAt.toISOString() },
-    attributes, relationships, observations: obs, milestones, feed: feed.slice(0, 150),
+    attributes, interactions: await interactionsFor(v, id), relationships, observations: obs, milestones, feed: feed.slice(0, 150),
     relationOptions: meta.model.relations.filter((r) => !r.hidden && (r.fromTypes.length === 0 || r.fromTypes.includes("person") || r.toTypes.length === 0 || r.toTypes.includes("person"))),
     kinds: meta.kindsFor("person"), nodeOptions, provenance: nodeCites.get(id) ?? [],
     viewer: { id: v.id, role: v.role, isParent: isParentRole(v) },

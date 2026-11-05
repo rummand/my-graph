@@ -112,7 +112,8 @@ export function dotRadius(count: number, maxCount: number, min = 10, max = 19): 
   return min + (max - min) * Math.sqrt(Math.min(count, maxCount) / maxCount);
 }
 
-export type PlaceItem = { id: string; circle: string; r: number; sortKey?: string };
+/** `drift` 0..1: how far out within its ring a person sits (0 = close, 1 = faded; src/lib/people/interactions). */
+export type PlaceItem = { id: string; circle: string; r: number; sortKey?: string; drift?: number };
 export type Placed = { id: string; x: number; y: number; r: number; ring: number };
 export type RingInfo = { index: number; key: string; label: string; radius: number };
 export type Layout = { placed: Placed[]; rings: RingInfo[]; extent: number; usedSimulation: boolean };
@@ -136,7 +137,7 @@ function labelGap(label: string, radius: number): number {
 const TOP = -Math.PI / 2;
 
 /** Spread items around the ring, leaving `gap` free centred at the top (12 o'clock) for the ring label. */
-function placeRing(items: PlaceItem[], radius: number, gap: number, ring: number): Placed[] {
+function placeRing(items: PlaceItem[], radius: number, gap: number, ring: number, band = 0): Placed[] {
   const widths = items.map((it) => 2 * it.r + GAP);
   const total = widths.reduce((a, b) => a + b, 0);
   const usable = Math.PI * 2 - gap;
@@ -144,7 +145,9 @@ function placeRing(items: PlaceItem[], radius: number, gap: number, ring: number
   return items.map((it, i) => {
     const a = TOP + gap / 2 + ((acc + widths[i] / 2) / total) * usable;
     acc += widths[i];
-    return { id: it.id, x: radius * Math.cos(a), y: radius * Math.sin(a), r: it.r, ring };
+    // Drifting outward only ever increases the distance to neighbours on the same ring, so it adds no overlap.
+    const rr = radius + Math.min(1, Math.max(0, it.drift ?? 0)) * band;
+    return { id: it.id, x: rr * Math.cos(a), y: rr * Math.sin(a), r: it.r, ring };
   });
 }
 
@@ -159,8 +162,11 @@ function inLabelGap(p: Placed, radius: number, gap: number): boolean {
  * Collision-free polar layout around (0,0). `centerRadius` is the space the centre avatar needs.
  * Rings are only drawn for circles that have people, so the picture stays compact.
  */
-export function layoutCircles(items: PlaceItem[], opts: { centerRadius?: number; ringGap?: number; simulate?: boolean; rings?: RingDef[] } = {}): Layout {
+export function layoutCircles(items: PlaceItem[], opts: { centerRadius?: number; ringGap?: number; simulate?: boolean; rings?: RingDef[]; driftBand?: number } = {}): Layout {
   const centerRadius = opts.centerRadius ?? 34;
+  // Room inside each ring for people to drift outward as closeness falls (none when nobody drifts).
+  const band = items.some((i) => (i.drift ?? 0) > 0) ? opts.driftBand ?? 24 : 0;
+  const driftOf = new Map(items.map((i) => [i.id, Math.min(1, Math.max(0, i.drift ?? 0)) * band]));
   const ringGap = opts.ringGap ?? 14;
   const RINGS = opts.rings?.length ? opts.rings : RINGS_DEFAULT;
   const byRing = new Map<number, PlaceItem[]>();
@@ -178,22 +184,22 @@ export function layoutCircles(items: PlaceItem[], opts: { centerRadius?: number;
     const label = RINGS[ring].label;
     // Room for everyone plus the label gap at the top.
     let radius = Math.max(prevOuter + ringGap + rmax, (circumference + label.length * 6.4 + 18) / (2 * Math.PI) * 1.08);
-    let pts = placeRing(list, radius, labelGap(label, radius), ring);
+    let pts = placeRing(list, radius, labelGap(label, radius), ring, band);
     // Chord < arc: grow the ring until neighbours clear each other and the label.
     for (let guard = 0; (hasOverlap(pts, GAP / 2) || pts.some((p) => inLabelGap(p, radius, labelGap(label, radius) * 0.999 - 2 * p.r / radius))) && guard < 60; guard++) {
       radius *= 1.06;
-      pts = placeRing(list, radius, labelGap(label, radius), ring);
+      pts = placeRing(list, radius, labelGap(label, radius), ring, band);
     }
     placed.push(...pts);
     rings.push({ index: ring, key: RINGS[ring].key, label, radius });
-    prevOuter = radius + rmax;
+    prevOuter = radius + band + rmax;
   }
 
   let usedSimulation = false;
   if (opts.simulate !== false && placed.length > 1) {
     type SimNode = SimulationNodeDatum & { id: string; r: number; ringRadius: number; x0: number; y0: number };
     const radiusOf = new Map(rings.map((r) => [r.index, r.radius]));
-    const sim: SimNode[] = placed.map((p) => ({ id: p.id, x: p.x, y: p.y, x0: p.x, y0: p.y, r: p.r, ringRadius: radiusOf.get(p.ring)! }));
+    const sim: SimNode[] = placed.map((p) => ({ id: p.id, x: p.x, y: p.y, x0: p.x, y0: p.y, r: p.r, ringRadius: radiusOf.get(p.ring)! + (driftOf.get(p.id) ?? 0) }));
     const s = forceSimulation(sim)
       .force("collide", forceCollide<SimNode>((d) => d.r + GAP).strength(1).iterations(3))
       .force("radial", forceRadial<SimNode>((d) => d.ringRadius, 0, 0).strength(0.9))
@@ -205,7 +211,7 @@ export function layoutCircles(items: PlaceItem[], opts: { centerRadius?: number;
     const relaxed = placed.map((p, i) => ({ ...p, x: sim[i].x ?? p.x, y: sim[i].y ?? p.y }));
     // Keep each dot near its ring so the rings stay readable.
     const gapOf = new Map(rings.map((r) => [r.index, labelGap(r.label, r.radius)]));
-    const nearRing = relaxed.every((p) => Math.abs(Math.hypot(p.x, p.y) - radiusOf.get(p.ring)!) <= p.r / 2);
+    const nearRing = relaxed.every((p) => Math.abs(Math.hypot(p.x, p.y) - radiusOf.get(p.ring)! - (driftOf.get(p.id) ?? 0)) <= p.r / 2);
     const labelsClear = relaxed.every((p) => !inLabelGap(p, radiusOf.get(p.ring)!, gapOf.get(p.ring)! - 2 * p.r / radiusOf.get(p.ring)!));
     if (nearRing && labelsClear && !hasOverlap(relaxed, GAP / 2)) { placed.splice(0, placed.length, ...relaxed); usedSimulation = true; }
   }

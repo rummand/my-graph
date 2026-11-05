@@ -10,6 +10,7 @@ import { typeColor } from "@/components/mention/colors";
 import type { ModelElement, ModelOverview } from "@/lib/meta/emergent";
 import { dateLocale, useFormatDate, useLocale, useT, type TFn } from "@/lib/i18n/client";
 import { typeLabel } from "@/components/provenance/labels";
+import { ModelRoles } from "@/components/people/model-roles";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -17,6 +18,7 @@ function whatItIs(e: ModelElement, t: TFn): string {
   const type = e.nodeType ? typeLabel(e.nodeType, t).toLowerCase() : "";
   if (e.table === "kinds") return t("model.world.kindOf", { type });
   if (e.table === "relations") return t("model.world.relation");
+  if (e.table === "roles") return t("roles.model.aRole");
   return t("model.world.detailOn", { type });
 }
 
@@ -94,6 +96,8 @@ export function ModelWorld({ initial, example }: { initial: ModelOverview; examp
           )}
         </Section>
 
+        <ModelRoles roles={o.roles ?? []} canDecide={o.canDecide} onChanged={async (n) => { await reload(); if (n) setNotice(n); }} />
+
         <Quiet rows={o.quiet} />
       </div>
 
@@ -139,7 +143,7 @@ function Candidate({ e, inUse, canDecide, onDecide }: { e: ModelElement; inUse: 
     <div>
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span aria-hidden className="size-2 shrink-0 translate-y-[-1px] rounded-full" style={{ background: e.nodeType ? typeColor(e.nodeType) : "var(--accent)" }} />
-        <h3 className="font-semibold">{e.label}</h3>
+        <h3 className="font-semibold">{e.table === "roles" && locale === "da" && e.labelDa ? e.labelDa : e.label}</h3>
         <span className="text-sm text-muted">{whatItIs(e, t)}</span>
         <span className="ml-auto text-sm text-muted tabular-nums">{t("model.world.seen", { count: e.evidenceCount })}</span>
       </div>

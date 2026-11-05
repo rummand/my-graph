@@ -14,6 +14,7 @@
  *     MAX_NEW_PEOPLE new people are proposed (the ones with the most to say first). The rest stay searchable in the
  *     source, and a warning says so.
  */
+import { detectRole, roleMention, roleRelation } from "@/lib/meta/roles";
 import type { ChangeInput } from "@/lib/changes";
 import type { TextSegment } from "@/lib/ingest/chunk";
 import { contactsOf, edgeKey, matchByLabel, matchPerson, normEmail, normName, normPhone } from "../match";
@@ -47,6 +48,8 @@ const COPY = {
     orgCapped: (n: number) => `${n} more companies were only mentioned, not proposed.`,
     unlinked: (items: string) => `Also on the card, not linked: ${items}.`,
     fromCard: "From the contact card.",
+    role: "The job on the contact card.",
+    roleOnly: (n: number) => `${n} ${n === 1 ? "contact is" : "contacts are"} saved under a role (like “Lægen”) instead of a name, so no person is proposed for ${n === 1 ? "it" : "them"}. ${n === 1 ? "It is" : "They are"} still searchable in the source.`,
   },
   da: {
     title: (n: number) => `Kontakter: ${n} ${n === 1 ? "person" : "personer"}`,
@@ -56,6 +59,8 @@ const COPY = {
     orgCapped: (n: number) => `${n} firmaer mere er kun nævnt, ikke foreslået.`,
     unlinked: (items: string) => `Også på kortet, ikke forbundet: ${items}.`,
     fromCard: "Fra kontaktkortet.",
+    role: "Jobbet på kontaktkortet.",
+    roleOnly: (n: number) => `${n} ${n === 1 ? "kontakt er" : "kontakter er"} gemt under en rolle (som “Lægen”) i stedet for et navn, så der foreslås ingen person for ${n === 1 ? "den" : "dem"}. ${n === 1 ? "Den" : "De"} kan stadig findes i kilden.`,
   },
 };
 
@@ -123,7 +128,7 @@ export function planContacts(contacts: Contact[], ctx: ImportContext): ImportPla
   const segments: TextSegment[] = [];
   const changes: ChangeInput[] = [];
   const warnings: string[] = [];
-  let noName = 0, nameOnly = 0;
+  let noName = 0, nameOnly = 0, roleOnly = 0;
 
   // 1. Who is in the batch (a card with only a number is left out; duplicates within the batch fold together).
   const entries: Entry[] = [];
@@ -131,6 +136,8 @@ export function planContacts(contacts: Contact[], ctx: ImportContext): ImportPla
   for (const c of contacts) {
     const name = c.name.trim();
     if (isNotAName(name)) { noName++; continue; }
+    // A card saved as a role ("Lægen", "Tandlægen", "the plumber's") names nobody: no person for it.
+    if (roleMention(name) && !(c.organization && c.organization === c.name)) { roleOnly++; continue; }
     const emails = [...new Set(c.emails.map((x) => normEmail(x.value)).filter(Boolean))];
     const phones = [...new Set(c.phones.map((x) => normPhone(x.value)).filter((x) => x.length >= 8))];
     const dup = emails.map((x) => byEmail.get(x)).find(Boolean) ?? phones.map((x) => byPhone.get(x)).find(Boolean);
@@ -288,6 +295,19 @@ export function planContacts(contacts: Contact[], ctx: ImportContext): ImportPla
       const quote = linesOf(e.text, (l, i) => i === 0 || l.startsWith("Organization:") || l.startsWith("Job title:"));
       if (org && addEdge(e.nodeId!, "member_of", org, false, e, quote)) { worksAt++; worksAtReceipt ??= receipt(e, quote); }
     }
+    // The job is a role they hold, in the company when the card names one: "Læge" at Lægehuset Vejle → doctor there,
+    // anything else at a company → employee there. A role word with no company is held with no known context.
+    const job = detectRole(e.c.jobTitle ?? null);
+    const role = job && !job.family ? job.role : e.c.organization ? "employee" : null;
+    if (role) {
+      const org = e.c.organization ? orgFor(e.c.organization, e, null) : null;
+      const to = org ?? e.nodeId!, rel = roleRelation(role);
+      if (!exists(e.nodeId!, rel, to, false)) {
+        planned.add(edgeKey(e.nodeId!, rel, to));
+        const quote = linesOf(e.text, (l, i) => i === 0 || l.startsWith("Organization:") || l.startsWith("Job title:"));
+        edgeOps.push({ op: "addEdge", edgeId: ctx.mint(), fromId: e.nodeId!, toId: to, relation: rel, receipt: receipt(e, quote), note: L.role });
+      }
+    }
     for (const r of e.c.related) {
       const guess: RelationGuess | null = relationFor(r.label);
       const target = inBatch(r.name, e);
@@ -317,6 +337,7 @@ export function planContacts(contacts: Contact[], ctx: ImportContext): ImportPla
   changes.push(...orgOps, ...nodeOps.values(), ...edgeOps);
 
   if (noName) warnings.push(L.noName(noName));
+  if (roleOnly) warnings.push(L.roleOnly(roleOnly));
   if (nameOnly > 0) warnings.push(L.nameOnly(nameOnly));
   if (notProposed) warnings.push(L.capped(notProposed, MAX_NEW_PEOPLE));
   if (orgsSkipped) warnings.push(L.orgCapped(orgsSkipped));

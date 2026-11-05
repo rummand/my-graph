@@ -25,12 +25,15 @@ export type ChangeOp =
   | { op: "updateNode"; nodeId: string; set: Record<string, unknown> }
   | { op: "retireNode"; nodeId: string }
   | { op: "mergeNodes"; keepId: string; dropId: string }
-  | { op: "addEdge"; edgeId?: string; fromId: string; toId: string; relation: string; confidence?: number; status?: "confirmed" | "unconfirmed" | "inferred" }
+  /** `props`, `validFrom`, `validTo`: a role held ("role:doctor", src/lib/meta/roles.ts) says since when and until when. */
+  | { op: "addEdge"; edgeId?: string; fromId: string; toId: string; relation: string; confidence?: number; status?: "confirmed" | "unconfirmed" | "inferred"; props?: Record<string, unknown>; validFrom?: string | null; validTo?: string | null }
   | { op: "updateEdge"; edgeId: string; set: Record<string, unknown> }
   | { op: "removeEdge"; edgeId: string }
   | { op: "addKind"; nodeType: string; key: string; label: string; pluralLabel?: string; parentKey?: string | null; description?: string }
   | { op: "addRelationType"; key: string; label: string; inverseLabel: string; fromTypes?: string[]; toTypes?: string[]; symmetric?: boolean; category?: string }
   | { op: "addAttribute"; nodeType: string; kindKey?: string | null; key: string; label: string; type: string }
+  /** A new role people can hold (the emergent meta model); `labelDa` etc. give its Danish words. */
+  | { op: "addRole"; key: string; label: string; pluralLabel?: string; preposition?: string; labelDa?: string; pluralLabelDa?: string; prepositionDa?: string; circle?: string | null; contextTypes?: string[]; parentKey?: string | null; description?: string }
   | { op: "addReminder"; title: string; dueAt: string; aboutNodeId?: string | null; detail?: string }
   | { op: "editWiki"; slug: string; title?: string; markdown: string };
 

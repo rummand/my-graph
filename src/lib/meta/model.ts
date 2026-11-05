@@ -8,8 +8,9 @@
  */
 import { z } from "zod";
 import type {
-  AttrType, EmergentFields, MetaAttribute, MetaKind, MetaModel, MetaNodeType, MetaOrigin, MetaRelation, PropError, ValidateResult,
+  AttrType, EmergentFields, MetaAttribute, MetaKind, MetaModel, MetaNodeType, MetaOrigin, MetaRelation, MetaRole, PropError, ValidateResult,
 } from "./types";
+import { KEPT_PERSON_KINDS, findRole, roleCategory, roleKeyOf, roleWords } from "./roles";
 
 type Row = { householdId: string | null; builtin: boolean } & EmergentFields;
 
@@ -17,6 +18,7 @@ type MergedKeys = "origin" | "hidden" | "householdRowId" | "offTemplate";
 export type KindRow = Omit<MetaKind, MergedKeys>;
 export type RelationRow = Omit<MetaRelation, MergedKeys>;
 export type AttributeRow = Omit<MetaAttribute, MergedKeys>;
+export type RoleRow = Omit<MetaRole, MergedKeys>;
 
 /** A household row that hides the built-in with the same key. */
 export function isTombstone(r: { householdId: string | null; builtin: boolean }): boolean {
@@ -29,11 +31,13 @@ export function isTombstone(r: { householdId: string | null; builtin: boolean })
  */
 export type GraphLens = {
   graphId?: string | null;
-  keepBuiltin?: (table: "kinds" | "relations" | "attributes", row: { key: string; nodeType?: string; kindKey?: string | null; category?: string }) => boolean;
+  keepBuiltin?: (table: "kinds" | "relations" | "attributes" | "roles", row: { key: string; nodeType?: string; kindKey?: string | null; category?: string; circle?: string | null }) => boolean;
   /** Household rows shared between graphs (template rows with graphId null): does this graph show them? */
-  keepShared?: (table: "kinds" | "relations" | "attributes", row: { key: string; nodeType?: string; kindKey?: string | null }) => boolean;
+  keepShared?: (table: "kinds" | "relations" | "attributes" | "roles", row: { key: string; nodeType?: string; kindKey?: string | null }) => boolean;
   /** Template circle for a kind (a colleague is "team" in a Work graph). */
   circleOf?: (kind: { nodeType: string; key: string; circle: string | null }) => string | null | undefined;
+  /** Template circle for a role (a colleague is "team" in a Work graph). */
+  roleCircleOf?: (role: { key: string; circle: string | null }) => string | null | undefined;
 };
 
 /** Does a household row belong to the graph being read? Household-wide rows (graphId null) belong to every graph. */
@@ -85,13 +89,23 @@ const emergent = (r: Row, m: MergeMeta) => ({
  * the same key wins; a tombstone marks the built-in hidden (it stays in the result, flagged, so it can be restored and
  * old data still labels). Household rows for another graph are left out; candidates come back separately.
  */
-export function mergeMetaModel(householdId: string | null, rows: { kinds: KindRow[]; relations: RelationRow[]; attributes: AttributeRow[] }, lens: GraphLens = {}): MetaModel {
+export function mergeMetaModel(householdId: string | null, rows: { kinds: KindRow[]; relations: RelationRow[]; attributes: AttributeRow[]; roles?: RoleRow[] }, lens: GraphLens = {}): MetaModel {
   const keep = lens.keepBuiltin ?? (() => true);
   const shared = lens.keepShared ?? (() => true);
+  const roleKeys = new Set((rows.roles ?? []).filter((r) => r.householdId === null).map((r) => r.key));
   const k = mergeRows(rows.kinds, kindId, householdId, (r, m): MetaKind => {
     const circle = lens.circleOf?.(r) ?? r.circle;
+    // A built-in person kind that names a role (doctor, teacher, colleague …) is read as that role now: it still
+    // labels people who have it until the conversion is delivered, but is never offered as a kind again.
+    if (r.nodeType === "person" && m.origin === "builtin" && roleKeys.has(r.key) && !KEPT_PERSON_KINDS.has(r.key)) {
+      return { ...r, circle, builtin: true, ...emergent(r, { ...m, hidden: true, offTemplate: true }) };
+    }
     return { ...r, circle, builtin: m.origin !== "household", ...emergent(r, m) };
   }, lens, (r) => keep("kinds", r), (r) => shared("kinds", r));
+  const ro = mergeRows(rows.roles ?? [], (r) => r.key, householdId, (r, m): MetaRole => {
+    const circle = lens.roleCircleOf?.(r) ?? r.circle;
+    return { ...r, circle, builtin: m.origin !== "household", ...emergent(r, m) };
+  }, lens, (r) => keep("roles", r), (r) => shared("roles", r));
   const rel = mergeRows(rows.relations, (r) => r.key, householdId, (r, m): MetaRelation => ({ ...r, builtin: m.origin !== "household", ...emergent(r, m) }),
     lens, (r) => keep("relations", r), (r) => shared("relations", r));
   const a = mergeRows(rows.attributes, attributeId, householdId, (r, m): MetaAttribute => ({ ...r, builtin: m.origin !== "household", ...emergent(r, m) }),
@@ -99,9 +113,10 @@ export function mergeMetaModel(householdId: string | null, rows: { kinds: KindRo
   const byKind = (x: MetaKind, y: MetaKind) => x.nodeType.localeCompare(y.nodeType) || x.sortOrder - y.sortOrder || x.label.localeCompare(y.label);
   const kinds = k.active.sort(byKind);
   const attributes = a.active.sort((x, y) => x.sortOrder - y.sortOrder);
+  const byRole = (x: MetaRole, y: MetaRole) => x.sortOrder - y.sortOrder || x.label.localeCompare(y.label);
   return {
-    kinds, relations: rel.active, attributes, graphId: lens.graphId ?? null,
-    candidates: { kinds: k.candidates.sort(byKind), relations: rel.candidates, attributes: a.candidates },
+    kinds, relations: rel.active, attributes, roles: ro.active.sort(byRole), graphId: lens.graphId ?? null,
+    candidates: { kinds: k.candidates.sort(byKind), relations: rel.candidates, attributes: a.candidates, roles: ro.candidates.sort(byRole) },
   };
 }
 
@@ -119,7 +134,24 @@ export function findKind(m: MetaModel, type: string, key: string | null | undefi
 }
 
 export function findRelation(m: MetaModel, key: string): MetaRelation | undefined {
-  return m.relations.find((r) => r.key === key);
+  const found = m.relations.find((r) => r.key === key);
+  if (found) return found;
+  const roleKey = roleKeyOf(key);
+  return roleKey ? roleAsRelation(findRole(m, roleKey), roleKey) : undefined;
+}
+
+/**
+ * A role read as the relation of its edges ("role:doctor": "doctor at" / "has as doctor"), so every place that labels
+ * a fact reads a role held without knowing about roles. English words; the people pages word roles per language.
+ */
+export function roleAsRelation(r: MetaRole | undefined, key: string): MetaRelation {
+  const w = roleWords(r, "en", key);
+  return {
+    id: r?.id ?? `role:${key}`, householdId: r?.householdId ?? null, key: `role:${key}`, label: `${w.label.toLowerCase()} ${w.preposition}`,
+    inverseLabel: `has as ${w.inverse}`, category: roleCategory(r), fromTypes: ["person"], toTypes: r?.contextTypes ?? [], symmetric: false,
+    builtin: r?.builtin ?? false, origin: r?.origin ?? "builtin", hidden: r?.hidden ?? false, householdRowId: r?.householdRowId ?? null,
+    status: r?.status, source: r?.source, graphId: r?.graphId ?? null,
+  };
 }
 
 /**
@@ -155,8 +187,9 @@ function kindChain(m: MetaModel, type: string, kind: string | null | undefined):
  * Attributes a node of this type and kind carries: type-wide ones first, then kind-specific (including inherited via
  * parentKey). A kind-specific attribute replaces a type-wide one with the same key. Hidden attributes excluded.
  */
-export function attributesFor(m: MetaModel, type: string, kind?: string | null): MetaAttribute[] {
-  const chain = kindChain(m, type, kind);
+export function attributesFor(m: MetaModel, type: string, kind?: string | null, roles: string[] = []): MetaAttribute[] {
+  // Details a role carries (a doctor's clinic, a teacher's subject) are attributes keyed by the role, as they were by the kind.
+  const chain = [...kindChain(m, type, kind), ...roles.filter((r) => r !== kind)];
   const byKey = new Map<string, MetaAttribute>();
   const visible = m.attributes.filter((a) => a.nodeType === type && !a.hidden);
   for (const a of visible.filter((a) => a.kindKey === null)) byKey.set(a.key, a);

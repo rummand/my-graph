@@ -8,7 +8,8 @@ import type { CenterOption, PersonSummary } from "@/lib/people/types";
 import { kindName, wellbeingWord } from "@/lib/people/words";
 import { PersonAvatar } from "./avatar";
 import { useFmt, type Fmt } from "./format";
-import { relationText } from "./people-table";
+import { lastTouch, relationText } from "./people-table";
+import { BAND_DRIFT, BAND_LOOK } from "@/lib/people/interactions/pure";
 
 type Props = {
   people: PersonSummary[];
@@ -45,12 +46,13 @@ function describe(f: Fmt, p: PersonSummary, overdueDays: number | null | undefin
   const latest = p.wellbeing[p.wellbeing.length - 1];
   const parts = [
     p.label,
-    relationText(f, p) ?? (p.kindLabel ? kindName(t, p.kindLabel) : null),
+    relationText(f, p) ?? p.roleText ?? (p.kindLabel ? kindName(t, p.kindLabel) : null),
     p.householdMember ? t("people.map.memberOfGraph") : null,
-    t("people.map.lastInTouch", { when: f.ago(p.lastContactAt) }),
+    t("people.map.lastInTouch", { when: f.ago(lastTouch(p)) }),
     latest ? t(`people.feelingLower.${latest.score}`) : t("people.map.noCheckIn"),
   ];
   if (overdueDays !== undefined) parts.push(t("people.map.longer"));
+  if (p.closeness && !p.isViewer) parts.push(t(`closeness.band.${p.closeness.band}`));
   return parts.filter(Boolean).join(", ");
 }
 
@@ -79,8 +81,9 @@ export function CirclesView({ people, center, overdue, rings = RINGS, family = t
   const maxCount = useMemo(() => Math.max(0, ...others.map((p) => p.contactCount90)), [others]);
   // A short force simulation runs inside: compute once per data change, never on hover.
   const layout = useMemo(() => layoutCircles(
-    others.map((p) => ({ id: p.id, circle: p.circle, r: SLOT, sortKey: `${p.kind ?? "~"}:${p.label}` })),
-    { centerRadius: CENTER, ringGap: 2, rings },
+    // Within their ring, people sit further out the less you have been in touch (src/lib/people/interactions).
+    others.map((p) => ({ id: p.id, circle: p.circle, r: SLOT, sortKey: `${p.kind ?? "~"}:${p.label}`, drift: p.closeness ? BAND_DRIFT[p.closeness.band] : 0 })),
+    { centerRadius: CENTER, ringGap: 2, rings, driftBand: 26 },
   ), [others, rings]);
   const pos = useMemo(() => new Map(layout.placed.map((p) => [p.id, p])), [layout]);
 
@@ -121,12 +124,13 @@ export function CirclesView({ people, center, overdue, rings = RINGS, family = t
             if (!pt) return null;
             const od = overdue.get(p.id);
             const isOverdue = overdue.has(p.id);
-            const s = avatarSize(p.contactCount90, maxCount);
+            const look = p.closeness ? BAND_LOOK[p.closeness.band] : BAND_LOOK.close;
+            const s = Math.round(avatarSize(p.contactCount90, maxCount) * look.scale);
             const latest = p.wellbeing[p.wellbeing.length - 1]?.score ?? null;
             return (
               <motion.div key={p.id} className="absolute left-0 top-0"
                 initial={{ opacity: 0, scale: 0.85, x: E + pt.x, y: E + pt.y }}
-                animate={{ opacity: 1, scale: 1, x: E + pt.x, y: E + pt.y }}
+                animate={{ opacity: look.opacity, scale: 1, x: E + pt.x, y: E + pt.y }}
                 exit={{ opacity: 0, scale: 0.85, transition: { duration: 0.15 } }}
                 transition={MOVE}>
                 <Link href={`/people/${p.id}`} aria-label={describe(f, p, od)}
@@ -172,14 +176,19 @@ function Tip({ p, overdueDays }: { p: PersonSummary; overdueDays: number | null 
   return (
     <>
       <div className="font-medium">{p.label}</div>
-      <div className="text-muted">{relationText(f, p) ?? (p.kindLabel ? kindName(t, p.kindLabel) : t("people.map.noRelation"))}</div>
+      <div className="text-muted">{relationText(f, p) ?? p.roleText ?? (p.kindLabel ? kindName(t, p.kindLabel) : t("people.map.noRelation"))}</div>
       {p.householdMember && <div className="text-[13px] text-muted">{t("people.memberOfGraph")}</div>}
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[13px]">
         <dt className="text-muted">{t("people.map.inTouch")}</dt>
-        <dd className={overdueDays !== undefined ? "text-warn" : undefined} suppressHydrationWarning>{f.ago(p.lastContactAt)}</dd>
+        <dd className={overdueDays !== undefined ? "text-warn" : undefined} suppressHydrationWarning>{f.ago(lastTouch(p))}</dd>
         <dt className="text-muted">{t("people.map.feeling")}</dt>
         <dd>{latest ? wellbeingWord(t, latest.score) : <span className="text-muted">{t("people.map.noCheckInYet")}</span>}</dd>
       </dl>
+      {(p.closeness?.band === "drifting" || p.closeness?.band === "faded") && !p.isViewer && (
+        <p className="mt-2 text-[13px] text-muted" suppressHydrationWarning>
+          {t(`closeness.band.${p.closeness.band}`)} · {lastTouch(p) ? t("closeness.hint", { when: f.ago(lastTouch(p)) }) : t("closeness.neverHint")}
+        </p>
+      )}
     </>
   );
 }

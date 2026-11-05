@@ -155,6 +155,23 @@ describe("circle layout", () => {
     const minSocial = Math.min(...l.placed.filter((p) => p.id !== "f").map((p) => Math.hypot(p.x, p.y)));
     expect(Math.hypot(fam.x, fam.y)).toBeLessThan(minSocial);
   });
+  it("lets people drift outward within their ring as closeness falls, without overlap or leaving the ring", () => {
+    const items = Array.from({ length: 40 }, (_, i) => ({ id: `p${i}`, circle: ["family", "social", "work"][i % 3], r: 14, drift: (i % 4) / 3 }));
+    for (const simulate of [true, false]) {
+      const l = layoutCircles(items, { simulate });
+      expect(hasOverlap(l.placed)).toBe(false);
+      for (const ring of l.rings) {
+        const on = l.placed.filter((p) => p.ring === ring.index);
+        const near = on.filter((p) => items.find((x) => x.id === p.id)!.drift === 0).map((p) => Math.hypot(p.x, p.y));
+        const far = on.filter((p) => items.find((x) => x.id === p.id)!.drift === 1).map((p) => Math.hypot(p.x, p.y));
+        if (near.length && far.length) expect(Math.min(...far)).toBeGreaterThan(Math.max(...near));
+      }
+      // the faded on an inner ring still sit inside the next ring out
+      const fam = l.placed.filter((p) => p.ring === 0).map((p) => Math.hypot(p.x, p.y) + p.r);
+      const social = l.placed.filter((p) => p.ring === 3).map((p) => Math.hypot(p.x, p.y) - p.r);
+      expect(Math.max(...fam)).toBeLessThan(Math.min(...social));
+    }
+  });
 });
 
 describe("visibility", () => {

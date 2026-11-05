@@ -9,6 +9,7 @@
  *   - A person is proposed only for a frequent contact the Mac knows by name: at least 3 calls on at least 2
  *     different days, not already in the graph. A one-off or unnamed number is never proposed.
  */
+import { roleMention } from "@/lib/meta/roles";
 import type { ChangeInput } from "@/lib/changes";
 import { matchPerson, normEmail, normPhone } from "./match";
 import { callsPayload, type CallsPayload } from "./schemas";
@@ -97,7 +98,8 @@ export function readCalls(data: CallsPayload, ctx: ImportContext): ImportPlan {
   // People: frequent, named, not in the graph.
   const changes: ChangeInput[] = [];
   const frequent = [...contacts.values()]
-    .filter((ct) => !ct.known && ct.name && !ct.key.startsWith("raw:") && ct.calls.length >= CALL_RULES.minCalls && ct.days.size >= CALL_RULES.minDays)
+    // A contact saved as a role ("Lægen", "the dentist") names nobody: no person for it.
+    .filter((ct) => !ct.known && ct.name && !roleMention(ct.name) && !ct.key.startsWith("raw:") && ct.calls.length >= CALL_RULES.minCalls && ct.days.size >= CALL_RULES.minDays)
     .sort((a, b) => b.calls.length - a.calls.length);
   for (const ct of frequent.slice(0, CALL_RULES.maxPeople)) {
     const last = ct.calls[ct.calls.length - 1];

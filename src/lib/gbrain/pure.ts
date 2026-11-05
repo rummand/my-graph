@@ -214,8 +214,13 @@ export function noisyOr(a: number, b: number): number {
   return 1 - (1 - clamp01(a)) * (1 - clamp01(b));
 }
 
-/** "Parent Of" / "parent-of" / "parentOf" → "parent_of". Returns "" if nothing usable is left. */
+/**
+ * "Parent Of" / "parent-of" / "parentOf" → "parent_of". Returns "" if nothing usable is left. A role held
+ * ("role:class_teacher", src/lib/meta/roles.ts) keeps its "role:" prefix: no normalised relation contains a colon.
+ */
 export function normalizeRelation(r: string): string {
+  const role = /^\s*role:/i.exec(r);
+  if (role) { const k = normalizeRelation(r.slice(role[0].length)); return k ? `role:${k}` : ""; }
   return r
     .trim()
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")

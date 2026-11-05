@@ -11,19 +11,26 @@
 import { errorFromResponse, MuxAuthError, MuxError, MuxUnavailableError } from "./errors";
 import { buildHeaders, effectiveRoute, extractJson, messageText, muxConfig, readMuxHeaders } from "./request";
 import { readSse } from "./sse";
+import { noteUsage, readUsage, type MuxUsage } from "./usage";
 
 export { MuxError, MuxAuthError, MuxUnavailableError, isMuxDown } from "./errors";
 export { speak, type Speech } from "./speech";
+export { meterUsage, sumUsage, type MuxUsage, type UsageRecord, type UsageTotals } from "./usage";
 
 export type MuxRoute = "auto" | "fast" | "agent" | "smart" | "vision" | "multilingual" | "code";
 
 export type MuxMessage = { role: "system" | "user" | "assistant"; content: string | MuxContentPart[] };
 export type MuxContentPart = { type: "text"; text: string } | { type: "image_url"; image_url: { url: string } };
 
-/** `graphId` is sent as an `x-mux-tags` entry (`graph:<id>`) so mux usage can be told apart per graph. */
-export type MuxCallMeta = { userId: string; agent: string; traceId?: string; sensitive?: boolean; graphId?: string };
+/**
+ * `graphId` is sent as an `x-mux-tags` entry (`graph:<id>`) so mux usage can be told apart per graph.
+ * `affinity` (default: `traceId`) is sent as `x-mux-affinity`: every call with the same key stays on one model, so
+ * its prompt cache stays warm (a chat session's turns, an agent run's rounds).
+ */
+export type MuxCallMeta = { userId: string; agent: string; traceId?: string; affinity?: string; sensitive?: boolean; graphId?: string };
 
-export type MuxResult = { text: string; model: string | null; route: string | null; requestId: string | null };
+/** `usage`: what the call cost, when the model said (see ./usage). */
+export type MuxResult = { text: string; model: string | null; route: string | null; requestId: string | null; usage?: MuxUsage };
 
 /* ── Transport ───────────────────────────────────────────────────────────────────────────────────────── */
 
@@ -66,7 +73,8 @@ function chatBody(opts: { route: MuxRoute; messages: MuxMessage[]; maxTokens?: n
   if (opts.maxTokens) body.max_tokens = opts.maxTokens;
   if (opts.temperature !== undefined) body.temperature = opts.temperature;
   if (opts.json) body.response_format = { type: "json_object" };
-  if (opts.stream) body.stream = true;
+  // Ask for the usage chunk at the end of a stream (mux passes it through when asked).
+  if (opts.stream) { body.stream = true; body.stream_options = { include_usage: true }; }
   return JSON.stringify(body);
 }
 
@@ -75,22 +83,25 @@ function chatBody(opts: { route: MuxRoute; messages: MuxMessage[]; maxTokens?: n
 /** One chat completion. */
 export async function complete(opts: { route: MuxRoute; messages: MuxMessage[]; maxTokens?: number; temperature?: number; json?: boolean; meta: MuxCallMeta; signal?: AbortSignal }): Promise<MuxResult> {
   const { apiKey } = requireKey();
+  const t0 = Date.now();
   const res = await post("/v1/chat/completions", {
     body: chatBody(opts),
     headers: { "content-type": "application/json", ...buildHeaders(opts.meta, apiKey) },
     signal: anySignal([AbortSignal.timeout(TIMEOUT.complete), opts.signal]),
   });
   const meta = readMuxHeaders(res.headers);
-  let data: { choices?: { message?: { content?: unknown } }[] };
+  let data: { choices?: { message?: { content?: unknown } }[]; usage?: unknown };
   try {
     data = await res.json();
   } catch {
     throw new MuxError(502, "bad_response", "mux sent an answer that isn't JSON.", meta.requestId);
   }
-  return { text: messageText(data.choices?.[0]?.message?.content).replace(/^\s*<think>[\s\S]*?<\/think>\s*/i, ""), ...meta };
+  const usage = readUsage(data.usage) ?? undefined;
+  noteUsage({ agent: opts.meta.agent, route: meta.route ?? opts.route, model: meta.model, requestId: meta.requestId, usage: usage ?? null, ms: Date.now() - t0 });
+  return { text: messageText(data.choices?.[0]?.message?.content).replace(/^\s*<think>[\s\S]*?<\/think>\s*/i, ""), ...meta, usage };
 }
 
-type Chunk = { choices?: { delta?: { content?: unknown } }[]; error?: { message?: string; type?: string; code?: number } };
+type Chunk = { choices?: { delta?: { content?: unknown } }[]; usage?: unknown; error?: { message?: string; type?: string; code?: number } };
 
 /** Streamed chat completion: yields text deltas, then resolves meta. */
 export async function* stream(opts: { route: MuxRoute; messages: MuxMessage[]; maxTokens?: number; temperature?: number; meta: MuxCallMeta; signal?: AbortSignal }): AsyncGenerator<string, Omit<MuxResult, "text">> {
@@ -104,13 +115,16 @@ export async function* stream(opts: { route: MuxRoute; messages: MuxMessage[]; m
   };
   arm(TIMEOUT.connect);
   const signal = anySignal([idle.signal, opts.signal]);
+  const t0 = Date.now();
+  let usage: MuxUsage | undefined;
+  let meta: Omit<MuxResult, "text" | "usage"> | null = null;
   try {
     const res = await post("/v1/chat/completions", {
       body: chatBody({ ...opts, stream: true }),
       headers: { "content-type": "application/json", accept: "text/event-stream", ...buildHeaders(opts.meta, apiKey) },
       signal,
     });
-    const meta = readMuxHeaders(res.headers);
+    meta = readMuxHeaders(res.headers);
     if (!res.body) throw new MuxError(502, "bad_response", "mux sent an empty stream.", meta.requestId);
     arm(TIMEOUT.idle);
     try {
@@ -125,6 +139,7 @@ export async function* stream(opts: { route: MuxRoute; messages: MuxMessage[]; m
           const status = typeof chunk.error.code === "number" ? chunk.error.code : 502;
           throw errorFromResponse(status, chunk, meta.requestId, null);
         }
+        if (chunk.usage) usage = readUsage(chunk.usage) ?? usage;
         const text = messageText(chunk.choices?.[0]?.delta?.content);
         if (text) yield text;
       }
@@ -133,9 +148,11 @@ export async function* stream(opts: { route: MuxRoute; messages: MuxMessage[]; m
       if (idle.signal.aborted && !opts.signal?.aborted) throw new MuxUnavailableError("The model gateway (mux) stopped answering.", 0, "timeout", meta.requestId);
       throw e;
     }
-    return meta;
+    return { ...meta, usage };
   } finally {
     clearTimeout(timer);
+    // Also when the caller stopped early (a page action, Stop): the call still cost what it cost so far.
+    if (meta) noteUsage({ agent: opts.meta.agent, route: meta.route ?? opts.route, model: meta.model, requestId: meta.requestId, usage: usage ?? null, ms: Date.now() - t0 });
   }
 }
 

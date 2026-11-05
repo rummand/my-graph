@@ -19,7 +19,7 @@ export type EdgeSnap = {
   confidence: number; visibility: "private" | "parents" | "household"; validFrom: string | null; validTo: string | null;
 };
 
-export type MetaSnap = { id: string; table: "kinds" | "relations" | "attributes"; key: string; label: string; [field: string]: unknown };
+export type MetaSnap = { id: string; table: "kinds" | "relations" | "attributes" | "roles"; key: string; label: string; [field: string]: unknown };
 
 /** Fields of a node the history follows (props are followed key by key as `props.<key>`). */
 export const NODE_FIELDS = ["type", "kind", "label", "aliases", "summary", "startAt", "endAt", "timePrecision", "visibility", "sensitive", "mergedInto"] as const;

@@ -15,6 +15,7 @@
  * Aula's field names are read tolerantly (a missing or renamed field is skipped, never fatal). What Aula says is
  * data, never instructions.
  */
+import { detectRole, roleRelation } from "@/lib/meta/roles";
 import { createHash } from "node:crypto";
 import type { ChangeInput, Receipt } from "@/lib/changes";
 import { htmlToText } from "@/lib/ingest/email";
@@ -419,6 +420,13 @@ export function institutionKind(name: string): "school" | "daycare" {
   return /skole|school|gymnasi|efterskole/i.test(name) && !/sfo|fritid/i.test(name) ? "school" : "daycare";
 }
 
+/** The role a staff member's Aula title names: class teacher, teacher, pedagogue or principal. */
+export function staffRole(hint: string | null): string | null {
+  const hit = detectRole(hint);
+  if (hit && ["class_teacher", "teacher", "pedagogue", "school_leader"].includes(hit.role)) return hit.role;
+  return staffKind(hint);
+}
+
 export function staffKind(hint: string | null): "teacher" | "pedagogue" | "school_leader" | null {
   const h = (hint ?? "").toLowerCase();
   if (/leder|leader|inspektør|principal/.test(h)) return "school_leader";
@@ -491,6 +499,20 @@ export function peopleOps(i: PeopleInput): PeopleResult {
     counts.connections++;
   };
   const kindIf = (type: string, kind: string | null) => (kind && i.kinds.has(`${type}:${kind}`) ? kind : null);
+  /** A role held (src/lib/meta/roles.ts): staff at the institution, a classmate, a classmate's parent. No context → back at the person. */
+  const roleEdge = (personId: string, role: string, contextId: string | null, receipt: Receipt, confidence: number, note: string) => {
+    if (waiting.has(personId) || (contextId && waiting.has(contextId))) return;
+    const relation = roleRelation(role), toId = contextId ?? personId;
+    const k = edgeKey(personId, relation, toId);
+    if (edges.has(k)) return;
+    edges.add(k);
+    const prev = mapping[`edge:${k}`];
+    if (prev && i.now.getTime() - Date.parse(prev.at) < REPROPOSE_AFTER_MS) return;
+    mapping[`edge:${k}`] = { nodeId: "", at };
+    changes.push({ op: "addEdge", fromId: personId, toId, relation, confidence, status: confidence >= 0.8 ? "confirmed" : "unconfirmed", note, receipt });
+    counts.connections++;
+  };
+  const instByName = new Map<string, string>();
 
   // Children and where they go.
   const accountReceipt: Receipt = { sourceId: i.accountSourceId, quote: "Aula: the children on this parent's login", locator: { aula: { profiles: true } }, confidence: 1 };
@@ -516,6 +538,7 @@ export function peopleOps(i: PeopleInput): PeopleResult {
         counts.places++;
         inst = { id, pending: false };
       }
+      instByName.set(norm(c.institutionName), inst.id);
       edge(r.id, "attends", inst.id, { ...accountReceipt, quote: `${c.name}, ${c.institutionName}` }, 1, "confirmed", "Aula lists the child at this institution.");
     }
   }
@@ -531,17 +554,22 @@ export function peopleOps(i: PeopleInput): PeopleResult {
     if (!sourceId) continue; // every proposal has a receipt pointing at a stored source
     const receipt: Receipt = { sourceId, quote: p.quote.slice(0, 200), locator: p.locator, confidence: 0.9 };
     let r = resolve(p.key, p.name, people);
+    // What they are to us is a role, not a kind: staff at the school, a classmate, a classmate's parent.
+    const role = p.role === "staff" ? (staffRole(p.hint) ?? "teacher") : p.role === "guardian" ? "childs_friend_parent" : p.role === "child" ? "classmate" : null;
     if (!r) {
-      const kind = p.role === "staff" ? staffKind(p.hint) ?? "teacher" : p.role === "guardian" ? "childs_friend_parent" : p.role === "child" ? "classmate" : null;
       const id = i.mint();
       changes.push({
-        op: "addNode", nodeId: id, type: "person", kind: kindIf("person", kind), label: p.name,
+        op: "addNode", nodeId: id, type: "person", kind: null, label: p.name,
         props: { aulaRole: roleWord[p.role], ...(p.hint ? { aulaTitle: p.hint } : {}), ...(p.institution ? { institution: p.institution } : {}) },
         visibility: i.visibility, note: p.role === "staff" ? "Writes to you in Aula from school or daycare." : "Writes to you in Aula.", receipt,
       });
       mapping[p.key] = { nodeId: id, at };
       counts.people++;
       r = { id, pending: false };
+    }
+    if (role && !r.pending) {
+      const inst = p.institution ? instByName.get(norm(p.institution)) ?? null : null;
+      roleEdge(r.id, role, inst, receipt, p.role === "staff" ? 0.9 : 0.6, p.role === "staff" ? `Writes in Aula as ${p.hint ?? "staff"}.` : "Writes to you in Aula.");
     }
     if (p.role === "staff" && staffKind(p.hint) !== "school_leader") {
       for (const name of p.children) {

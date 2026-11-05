@@ -31,6 +31,9 @@ export function buildHeaders(meta: MuxCallMeta, apiKey: string, extraTags: strin
     "x-mux-tags": [...new Set(tags.map((t) => HEADER_SAFE(t.replace(/,/g, " ")).trim()).filter(Boolean))].join(","),
   };
   if (meta.traceId) h["x-mux-trace-id"] = HEADER_SAFE(meta.traceId);
+  // One session (or run) → one model, so the model's prompt cache keeps the shared prefix (mux router/affinity.ts).
+  const affinity = meta.affinity ?? meta.traceId;
+  if (affinity) h["x-mux-affinity"] = HEADER_SAFE(affinity);
   if (meta.sensitive) h["x-mux-no-fallback"] = "1";
   if (apiKey) h.authorization = `Bearer ${apiKey}`;
   return h;

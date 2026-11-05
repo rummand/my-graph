@@ -9,6 +9,7 @@
  *             database is read by the model like a document.
  * What a page says is data, never instructions; a known person is never changed by an import.
  */
+import { detectRole, roleMention, roleRelation } from "@/lib/meta/roles";
 import type { ChangeInput } from "@/lib/changes";
 import type { TextSegment } from "@/lib/ingest/chunk";
 import { matchPerson } from "../match";
@@ -70,6 +71,7 @@ function readPage(d: NotionPagePayload, ctx: ImportContext): ImportPlan {
   let added = 0, matched = 0;
   const text = segments.map((s) => s.text).join("\n");
   for (const p of d.mentions.people) {
+    if (roleMention(p.name)) continue;
     const hit = matchPerson(ctx.known, { name: p.name, emails: p.email ? [p.email] : [] });
     if (hit) { matched++; continue; }
     if (added >= MAX_PEOPLE) break;
@@ -108,10 +110,12 @@ function readDatabase(d: NotionDatabasePayload, ctx: ImportContext): ImportPlan 
       const hit = matchPerson(ctx.known, { name, emails: r.emails, phones: r.phones });
       if (hit) { matched++; continue; }
       if (added >= MAX_PEOPLE) { left++; continue; }
+      if (roleMention(name)) continue;
       const role = r.values.find((v) => ROLE_COLUMN.test(v.name) && v.type !== "title")?.value;
       const org = r.values.find((v) => ORG_COLUMN.test(v.name))?.value;
+      const personId = ctx.mint();
       changes.push({
-        op: "addNode", nodeId: ctx.mint(), type: "person", label: name.slice(0, 200),
+        op: "addNode", nodeId: personId, type: "person", label: name.slice(0, 200),
         props: {
           ...(r.emails[0] ? { email: r.emails[0] } : {}), ...(r.emails.length > 1 ? { emails: r.emails } : {}),
           ...(r.phones[0] ? { phone: r.phones[0] } : {}), ...(role ? { jobTitle: role } : {}), ...(org ? { organization: org } : {}),
@@ -120,6 +124,12 @@ function readDatabase(d: NotionDatabasePayload, ctx: ImportContext): ImportPlan 
         visibility: ctx.visibility,
         receipt: { sourceId: ctx.sourceId, quote: [r.title, ...r.values.map((v) => `${v.name}: ${v.value}`)].join("; ").slice(0, 300), url: r.url, locator: { region: `row:${r.id}` } },
       });
+      // The role column, when it names a role, is a role they hold (no known context: the organisation is only a name here).
+      const held = detectRole(role ?? null);
+      if (held && !held.family) {
+        changes.push({ op: "addEdge", fromId: personId, toId: personId, relation: roleRelation(held.role), confidence: 0.8, status: "unconfirmed",
+          receipt: { sourceId: ctx.sourceId, quote: `${name}: ${role}`.slice(0, 300), url: r.url, locator: { region: `row:${r.id}` } } });
+      }
       added++;
     }
   }

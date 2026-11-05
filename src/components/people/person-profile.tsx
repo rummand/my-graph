@@ -12,7 +12,7 @@ import type { Citation, FeedItem, PersonProfile } from "@/lib/people/types";
 import { attrName, circleName, kindName, relLabel, rolePhrase, tagName, visibilityName, wellbeingWord } from "@/lib/people/words";
 import { AttributeField, formatAttr } from "./attribute-field";
 import { PersonAvatar, WellbeingWord } from "./avatar";
-import { api, fieldErrors, useFmt, When, type Fmt, type FieldErrors } from "./format";
+import { api, fieldErrors, useFmt, type Fmt, type FieldErrors } from "./format";
 import { relationOptions } from "./relation-options";
 import { WellbeingChart } from "./wellbeing-chart";
 import { MemoryPanel } from "@/components/memory/memory-panel";
@@ -21,6 +21,8 @@ import { WhoSaidField } from "@/components/history/live";
 import { LivingProfile } from "@/components/profile/living-profile";
 import type { ProfileView } from "@/lib/profile/types";
 import { usePersonAssistantActions } from "./assistant-actions";
+import { RolesLine } from "./roles-line";
+import { InteractionTimeline, LastInTouch, PinButton } from "./closeness";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -49,7 +51,7 @@ export function PersonProfileView({ initial, living }: { initial: PersonProfile;
               </div>
             </Block>
           }
-          end={<><ContactLog profile={profile} onSaved={reload} /><ActivityFeed items={profile.feed} family={family} /></>}
+          end={<><InteractionTimeline items={profile.interactions} /><ContactLog profile={profile} onSaved={reload} /><ActivityFeed items={profile.feed} family={family} /></>}
           aside={<>
             <Details profile={profile} onSaved={setProfile} />
             <Relationships profile={profile} onSaved={reload} />
@@ -121,7 +123,8 @@ function Header({ profile, onSaved }: { profile: PersonProfile; onSaved: (p: Per
   const circle = circleIn(getTemplate(template), p.circle);
   const canChangeVisibility = p.ownerId === profile.viewer.id;
   const relText = p.relation ? rolePhrase(t, f.locale, p.relation.role, p.relation.label) : null;
-  const kindText = p.kindLabel ? kindName(t, p.kindLabel) : null;
+  // A kind that became a role ("Doctor") isn't repeated when the role itself is shown ("Doctor at Lægehuset Vejle").
+  const kindText = p.kindLabel && !(p.roles ?? []).some((r) => r.key === p.kind) ? kindName(t, p.kindLabel) : null;
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -146,11 +149,13 @@ function Header({ profile, onSaved }: { profile: PersonProfile; onSaved: (p: Per
           <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-muted">
             {relText && <span className="text-fg">{relText}</span>}
             {kindText && (!relText || !relText.toLowerCase().includes(kindText.toLowerCase())) && <span>{kindText}</span>}
-            {!p.relation && !p.kindLabel && !p.isViewer && <span>{circleName(t, template, circle)}</span>}
+            {!p.relation && !p.kindLabel && !p.roleText && !p.isViewer && <span>{circleName(t, template, circle)}</span>}
             {p.aliases.length > 0 && <span>{t("people.profile.alsoCalled", { names: p.aliases.join(", ") })}</span>}
             {p.householdMember && !p.isViewer && <span>{t("people.memberOfGraph")}</span>}
           </p>
+          <RolesLine roles={p.roles} className="mt-1" />
         </div>
+        {!p.isViewer && profile.viewer.role !== "guest" && <PinButton personId={p.id} pinned={!!p.closeness?.pinned} />}
         {!editing && p.canEdit && <Button variant="secondary" onClick={() => setEditing(true)}><Pencil className="size-4" aria-hidden="true" />{t("people.profile.edit")}</Button>}
       </div>
 
@@ -189,7 +194,7 @@ function Header({ profile, onSaved }: { profile: PersonProfile; onSaved: (p: Per
           {latest && <span className="block text-[13px] text-muted" suppressHydrationWarning>{f.ago(latest.at)}</span>}
         </Fact>
         <Fact label={t("people.profile.lastInTouch")}>
-          <When iso={p.lastContactAt} />
+          <LastInTouch closeness={p.closeness} fallbackIso={p.lastContactAt} />
           {p.contactCount90 > 0 && <span className="block text-[13px] text-muted tabular-nums">{t("people.profile.times90", { count: p.contactCount90 })}</span>}
         </Fact>
         <Fact label={t("people.profile.nextBirthday")}>

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { complete, completeJson, embed, muxHealth, MuxAuthError, MuxError, MuxUnavailableError, stream, transcribe, whisperLanguage } from "./index";
 import { buildHeaders, effectiveRoute, extractJson, muxConfig } from "./request";
+import { meterUsage, readUsage, sumUsage } from "./usage";
 
 type Call = { url: string; init: RequestInit };
 let calls: Call[] = [];
@@ -26,6 +27,7 @@ const sseBody = (parts: string[]) => new ReadableStream<Uint8Array>({
 });
 
 const meta = { userId: "u1", agent: "test-agent", traceId: "t1" };
+const calls_ = () => calls;
 const headersOf = (c: Call) => c.init.headers as Record<string, string>;
 const bodyOf = (c: Call) => JSON.parse(String(c.init.body));
 
@@ -116,6 +118,44 @@ describe("complete", () => {
     expect(e4).toBeInstanceOf(MuxError);
     expect(e4).not.toBeInstanceOf(MuxUnavailableError);
     expect(e4.retryAfterS).toBe(5);
+  });
+});
+
+describe("tokens and affinity", () => {
+  it("sends x-mux-affinity: the caller's key, else the trace id", () => {
+    expect(buildHeaders({ ...meta, affinity: "session-1" }, "k")["x-mux-affinity"]).toBe("session-1");
+    expect(buildHeaders(meta, "k")["x-mux-affinity"]).toBe("t1");
+    expect(buildHeaders({ userId: "u", agent: "a" }, "k")["x-mux-affinity"]).toBeUndefined();
+  });
+
+  it("reads usage in OpenAI's and Anthropic's shapes", () => {
+    expect(readUsage({ prompt_tokens: 100, completion_tokens: 20, prompt_tokens_details: { cached_tokens: 80 } })).toEqual({ promptTokens: 100, completionTokens: 20, cachedTokens: 80 });
+    expect(readUsage({ prompt_tokens: 5, completion_tokens: 1, cache_read_input_tokens: 3 })).toEqual({ promptTokens: 5, completionTokens: 1, cachedTokens: 3 });
+    expect(readUsage(null)).toBeNull();
+    expect(readUsage({ total_tokens: 3 })).toBeNull();
+  });
+
+  it("meters every call made inside a unit of work, also when streamed, and sums per agent", async () => {
+    const usage = { prompt_tokens: 50, completion_tokens: 5, prompt_tokens_details: { cached_tokens: 40 } };
+    mockFetch(
+      json({ choices: [{ message: { content: "Title" } }], usage }, 200, { "x-mux-route": "fast", "x-mux-model": "m" }),
+      new Response(sseBody([`data: ${JSON.stringify({ choices: [{ delta: { content: "Hi" } }] })}\n\n`, `data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: 900, completion_tokens: 30, prompt_tokens_details: { cached_tokens: 700 } } })}\n\n`, "data: [DONE]\n\n"]), {
+        headers: { "content-type": "text/event-stream", "x-mux-route": "smart", "x-mux-model": "m" },
+      }),
+    );
+    const calls = await meterUsage(async (list) => {
+      const t = await complete({ route: "fast", messages: [], meta: { ...meta, agent: "title" } });
+      expect(t.usage).toEqual({ promptTokens: 50, completionTokens: 5, cachedTokens: 40 });
+      const gen = stream({ route: "smart", messages: [], meta: { ...meta, agent: "answer" } });
+      let r = await gen.next();
+      while (!r.done) r = await gen.next();
+      expect(r.value.usage).toEqual({ promptTokens: 900, completionTokens: 30, cachedTokens: 700 });
+      return list;
+    });
+    expect(bodyOf(calls_()[1]).stream_options).toEqual({ include_usage: true });
+    const sum = sumUsage(calls);
+    expect(sum).toMatchObject({ promptTokens: 950, completionTokens: 35, cachedTokens: 740, calls: 2, unreported: 0 });
+    expect(sum.byAgent.answer).toEqual({ promptTokens: 900, completionTokens: 30, cachedTokens: 700, calls: 1 });
   });
 });
 

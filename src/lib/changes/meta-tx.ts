@@ -8,14 +8,15 @@
  * workstream lets applyMetaOp take a transaction, this file goes and deliver.ts calls it instead.
  */
 import { and, eq, isNull, sql } from "drizzle-orm";
-import { metaAttributes, metaKinds, metaRelations } from "@/db/schema";
+import { metaAttributes, metaKinds, metaRelations, metaRoles } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import type { Tx } from "@/lib/history/context";
 
 export type MetaOpTx =
   | { op: "addKind"; nodeType: string; key: string; label: string; pluralLabel?: string; parentKey?: string | null; description?: string }
   | { op: "addRelationType"; key: string; label: string; inverseLabel: string; fromTypes?: string[]; toTypes?: string[]; symmetric?: boolean; category?: string }
-  | { op: "addAttribute"; nodeType: string; kindKey?: string | null; key: string; label: string; type: string };
+  | { op: "addAttribute"; nodeType: string; kindKey?: string | null; key: string; label: string; type: string }
+  | { op: "addRole"; key: string; label: string; pluralLabel?: string; preposition?: string; labelDa?: string; pluralLabelDa?: string; prepositionDa?: string; circle?: string | null; contextTypes?: string[]; parentKey?: string | null; description?: string };
 
 const ATTR_TYPES = new Set(["text", "longtext", "date", "number", "boolean", "enum", "email", "phone", "url"]);
 
@@ -67,6 +68,26 @@ export async function applyMetaOpTx(tx: Tx, v: Viewer, op: MetaOpTx, ctx: { chan
         evidenceCount: ctx.evidence ?? 1, firstSeenAt: now, changeSetId: ctx.changeSetId ?? null,
       }).returning();
       return { key, id: row.id, created: true };
+    }
+    if (op.op === "addRole") {
+      const rows = await tx.select().from(metaRoles).where(and(eq(metaRoles.key, op.key),
+        sql`(${metaRoles.householdId} is null or ${metaRoles.householdId} = ${household})`));
+      const builtin = rows.find((r) => r.householdId === null);
+      const mine = rows.find((r) => r.householdId === household && (!r.graphId || r.graphId === graphId));
+      if (mine) {
+        const set: Partial<typeof metaRoles.$inferInsert> = { evidenceCount: mine.evidenceCount + (ctx.evidence ?? 1) };
+        if (status === "active" && mine.status !== "active" && !mine.builtin) Object.assign(set, { status: "active", changeSetId: ctx.changeSetId ?? mine.changeSetId });
+        await tx.update(metaRoles).set(set).where(eq(metaRoles.id, mine.id));
+        return { key: mine.key, id: mine.id, created: false };
+      }
+      if (builtin) return { key: builtin.key, id: builtin.id, created: false };
+      const [row] = await tx.insert(metaRoles).values({
+        householdId: household, graphId, key: op.key, label: op.label, pluralLabel: op.pluralLabel ?? null, preposition: op.preposition || "of",
+        labelDa: op.labelDa ?? null, pluralLabelDa: op.pluralLabelDa ?? null, prepositionDa: op.prepositionDa ?? null,
+        circle: op.circle ?? null, contextTypes: op.contextTypes ?? [], parentKey: op.parentKey ?? null, description: op.description ?? null,
+        sortOrder: 6000, builtin: false, status, origin, evidenceCount: ctx.evidence ?? 1, firstSeenAt: now, changeSetId: ctx.changeSetId ?? null,
+      }).returning();
+      return { key: row.key, id: row.id, created: true };
     }
     const kindKey = op.kindKey ?? null;
     const rows = await tx.select().from(metaAttributes).where(and(eq(metaAttributes.nodeType, op.nodeType as never), eq(metaAttributes.key, op.key),

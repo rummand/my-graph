@@ -26,6 +26,14 @@ export function plainQuestion(question: string): string {
   return question.replace(/@\[([^\]]+)\]\(node:[0-9a-f-]{36}\)/gi, "$1");
 }
 
+/**
+ * Questions about time ("when", "next week", "what's new", "hvornår", "i morgen") get the full list of what's coming
+ * up; any other question gets the nearest few, so unrelated dates don't crowd the context.
+ */
+export const TIME_WORDS = /(?<![\p{L}\p{N}])(when|next|upcoming|coming|soon|today|tonight|tomorrow|week|weekend|month|plans?|schedule|calendar|agenda|due|deadline|new|latest|happening|hvorn[åa]r|n[æa]ste|kommende|snart|i dag|i aften|i morgen|uge\p{L}*|weekend\p{L}*|m[åa]ned\p{L}*|plan\p{L}*|kalender\p{L}*|frist\p{L}*|nyt|nye|seneste|sker)(?![\p{L}\p{N}])/iu;
+
+export const isTimeQuestion = (q: string) => TIME_WORDS.test(q);
+
 const NEIGHBOUR_HITS = 3;
 const MAX_FACTS = 24;
 const MAX_PEOPLE = 8;
@@ -48,8 +56,13 @@ export function peopleLinesById(text: string, people: { id: string; label: strin
   return out;
 }
 
-function nodeText(n: gbrain.GNode): string {
+/** Props that are bookkeeping, not knowledge: ids, flags and file types the model can't use (and that cost tokens). */
+const SYSTEM_PROP = /^(self|kind|mime|mimeType|householdMember|household_member|hash|checksum|url|href|.*(?:Id|_id|Ids|_ids))$/;
+const ID_LIKE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function nodeText(n: Pick<gbrain.GNode, "summary" | "props">): string {
   const props = Object.entries(n.props ?? {})
+    .filter(([k, v]) => !SYSTEM_PROP.test(k) && !(typeof v === "string" && ID_LIKE.test(v)))
     .filter(([, v]) => v !== null && v !== "" && (typeof v === "string" || typeof v === "number" || typeof v === "boolean"))
     .slice(0, 8)
     .map(([k, v]) => `${k.replace(/_/g, " ")}: ${v}`);
@@ -84,11 +97,12 @@ export async function retrieve(v: Viewer, rawQuestion: string, opts: { tz: strin
   const flags = opts.flags ?? ALL_ON;
   const noEvents = { events: [] as gbrain.GNode[], involves: [] as { eventId: string; personId: string }[] };
   const mentionIds = [...new Set(opts.mentionIds ?? [])].slice(0, 8);
+  const upcomingLimit = isTimeQuestion(question) ? 12 : 4;
   const [searchHits, meta, upcoming, reminders, mentionedRaw] = await Promise.all([
     safe(gbrain.search(v, question, { limit: 12 }), [], "search"),
     safe(getMeta(v), null, "meta"),
-    flags.timeline ? safe(gbrain.timeline(v, { from: now, to: new Date(now.getTime() + 14 * 86_400_000), limit: 12 }), noEvents, "timeline") : Promise.resolve(noEvents),
-    flags.reminders ? safe(listReminders(v, { upcoming: true, days: 21, limit: 12, now }), [], "reminders") : Promise.resolve([]),
+    flags.timeline ? safe(gbrain.timeline(v, { from: now, to: new Date(now.getTime() + 14 * 86_400_000), limit: upcomingLimit }), noEvents, "timeline") : Promise.resolve(noEvents),
+    flags.reminders ? safe(listReminders(v, { upcoming: true, days: 21, limit: upcomingLimit, now }), [], "reminders") : Promise.resolve([]),
     Promise.all(mentionIds.map((id) => safe(gbrain.getNode(v, id), null, "mentioned node"))),
   ]);
   const mentioned = mentionedRaw.filter((n): n is gbrain.GNode => !!n);

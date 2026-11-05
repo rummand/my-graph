@@ -9,6 +9,7 @@ import { clinicalConsentEvents, clinicalConsents, clinicalSessions, shares, sour
 import { audit, type Viewer } from "@/lib/auth";
 import * as gbrain from "@/lib/gbrain";
 import { sourceReadSql } from "@/lib/gbrain/access";
+import { roleRelation } from "@/lib/meta/roles";
 import { putFile, sha256Hex } from "@/lib/storage";
 import {
   ClinicalError, accessibleClients, asConsentRow, colleagues, consentRows, gate, loadClient, names, requireClinical, type ClientRecord,
@@ -33,6 +34,12 @@ export async function createClient(v: Viewer, input: { name: string; discipline:
     id, type: "person", kind: CLIENT_KIND[input.discipline], label: input.name, visibility: "private", sensitive: true,
     props: { clinical: true, ...(input.reason ? { referral_reason: input.reason } : {}), started_on: new Date().toISOString().slice(0, 10) },
   }, me(v));
+  // Client and patient are roles, held with the clinician (src/lib/meta/roles.ts). The record kind stays what clinical
+  // access is decided on; the role edge is private like the record, and never blocks creating it.
+  if (v.personNodeId) {
+    await gbrain.addEdge(v, { fromId: id, toId: v.personNodeId, relation: roleRelation(CLIENT_KIND[input.discipline]), status: "confirmed", visibility: "private" }, { ...me(v), confidence: 1, note: "Started with the clinician" })
+      .catch((e) => console.warn("[clinical] could not record the client role", (e as Error).message));
+  }
   void audit(v, "clinical.client.create", { type: "node", id }, { discipline: input.discipline }).catch(() => {});
   return { id };
 }

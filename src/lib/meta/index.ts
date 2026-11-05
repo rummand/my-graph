@@ -10,21 +10,23 @@
 import { cache } from "react";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { metaAttributes, metaKinds, metaRelations } from "@/db/schema";
+import { metaAttributes, metaKinds, metaRelations, metaRoles } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 
 /** Whose meta model: the graph's household when the viewer carries one, else their own household. */
 export type MetaScope = Pick<Viewer, "householdId"> & { graphHouseholdId?: string; graphId?: string | null; graphKind?: string | null };
-import { BUILTIN_ATTRIBUTES, BUILTIN_KINDS, BUILTIN_RELATIONS } from "./builtins";
+import { BUILTIN_ATTRIBUTES, BUILTIN_KINDS, BUILTIN_RELATIONS, BUILTIN_ROLES } from "./builtins";
+import { findRole, roleWords, visibleRoles } from "./roles";
 import {
   attributesFor as _attributesFor, findKind, kindsFor as _kindsFor, mergeMetaModel, relationLabel as _relationLabel,
   relationsBetween, suggestKind as _suggestKind, validateProps as _validateProps, type KindSuggestion,
 } from "./model";
-import type { MetaModel, MetaNodeType, MetaSource, MetaStatus } from "./types";
+import type { MetaModel, MetaNodeType, MetaRole, MetaSource, MetaStatus } from "./types";
 import { ensureTemplateSeeded, lensFor } from "@/lib/templates";
 
 export * from "./types";
 export { mergeMetaModel, isTombstone, findKind, findRelation, relationsBetween, attributeSchema } from "./model";
+export { findRole, roleWords, visibleRoles, roleRelation, roleKeyOf, isRoleRelation, rolesHeld, roleText, roleMention, detectRole, detectRoles } from "./roles";
 export type { KindSuggestion } from "./model";
 
 /* ── Built-ins ────────────────────────────────────────────────────────────────────────────────────────── */
@@ -76,6 +78,20 @@ async function runEnsureBuiltins(): Promise<{ inserted: number; updated: number 
       if (!have) { await tx.insert(metaAttributes).values({ householdId: null, nodeType: b.nodeType, kindKey: b.kindKey ?? null, key: b.key, ...want }); inserted++; }
       else if (differs(have, want)) { await tx.update(metaAttributes).set(want).where(eq(metaAttributes.id, have.id)); updated++; }
     }
+
+    const roles = await tx.select().from(metaRoles).where(isNull(metaRoles.householdId));
+    const roByKey = new Map(roles.map((r) => [r.key, r]));
+    for (const [i, b] of BUILTIN_ROLES.entries()) {
+      const want = {
+        label: b.label, pluralLabel: b.pluralLabel, preposition: b.preposition, inverseLabel: b.inverseLabel ?? null,
+        labelDa: b.da.label, pluralLabelDa: b.da.plural, prepositionDa: b.da.preposition, inverseLabelDa: b.da.inverse ?? null,
+        description: b.description ?? null, contextTypes: b.contexts ?? [], circle: b.circle, impliedBy: b.impliedBy ?? null,
+        parentKey: b.parentKey ?? null, icon: b.icon ?? null, sortOrder: i * 10, builtin: true,
+      };
+      const have = roByKey.get(b.key);
+      if (!have) { await tx.insert(metaRoles).values({ householdId: null, key: b.key, ...want }); inserted++; }
+      else if (differs(have, want)) { await tx.update(metaRoles).set(want).where(eq(metaRoles.id, have.id)); updated++; }
+    }
     return { inserted, updated };
   });
 }
@@ -108,10 +124,11 @@ async function loadMetaModel(viewer: MetaScope): Promise<MetaModel> {
   await ensureBuiltins();
   const hh = viewer.graphHouseholdId ?? viewer.householdId;
   if (viewer.graphId) await ensureTemplateSeeded(viewer).catch((e) => console.error("[meta] template seed failed", e));
-  const [kinds, relations, attributes] = await Promise.all([
+  const [kinds, relations, attributes, roles] = await Promise.all([
     db.select().from(metaKinds).where(or(isNull(metaKinds.householdId), eq(metaKinds.householdId, hh))),
     db.select().from(metaRelations).where(or(isNull(metaRelations.householdId), eq(metaRelations.householdId, hh))),
     db.select().from(metaAttributes).where(or(isNull(metaAttributes.householdId), eq(metaAttributes.householdId, hh))),
+    db.select().from(metaRoles).where(or(isNull(metaRoles.householdId), eq(metaRoles.householdId, hh))),
   ]);
   const em = (r: { status: string; origin: string; householdId: string | null }) => ({ status: r.status as MetaStatus, source: (r.householdId === null ? "builtin" : r.origin) as MetaSource });
   const lens = viewer.graphId ? lensFor({ ...viewer, householdId: viewer.householdId }) : {};
@@ -119,6 +136,7 @@ async function loadMetaModel(viewer: MetaScope): Promise<MetaModel> {
     kinds: kinds.map(({ origin: _o, ...k }) => ({ ...k, ...em({ status: k.status, origin: _o, householdId: k.householdId }), nodeType: k.nodeType as MetaNodeType })),
     relations: relations.map(({ origin: _o, ...r }) => ({ ...r, ...em({ status: r.status, origin: _o, householdId: r.householdId }) })),
     attributes: attributes.map(({ origin: _o, ...a }) => ({ ...a, ...em({ status: a.status, origin: _o, householdId: a.householdId }), nodeType: a.nodeType as MetaNodeType })),
+    roles: roles.map(({ origin: _o, ...r }) => ({ ...r, ...em({ status: r.status, origin: _o, householdId: r.householdId }) })),
   }, lens);
 }
 
@@ -129,7 +147,12 @@ export type Meta = MetaModel & {
   kind: (type: string, key: string | null | undefined) => ReturnType<typeof findKind>;
   relationLabel: (key: string, direction?: "out" | "in") => string;
   relationsBetween: (fromType: string, toType?: string) => ReturnType<typeof relationsBetween>;
-  attributesFor: (type: string, kind?: string | null) => ReturnType<typeof _attributesFor>;
+  attributesFor: (type: string, kind?: string | null, roles?: string[]) => ReturnType<typeof _attributesFor>;
+  /** Roles people can hold here (visible ones, display order) and one by key (hidden ones too). */
+  roles: MetaRole[];
+  role: (key: string | null | undefined) => MetaRole | undefined;
+  visibleRoles: () => MetaRole[];
+  roleWords: (key: string, locale?: string) => ReturnType<typeof roleWords>;
   validateProps: (type: string, kind: string | null | undefined, props: Record<string, unknown>, opts?: { partial?: boolean }) => ReturnType<typeof _validateProps>;
   suggestKind: (label: string, context?: Parameters<typeof _suggestKind>[1]) => KindSuggestion | null;
 };
@@ -141,7 +164,11 @@ export function bindMeta(model: MetaModel): Meta {
     kind: (t, k) => findKind(model, t, k),
     relationLabel: (k, d) => _relationLabel(model, k, d),
     relationsBetween: (f, t) => relationsBetween(model, f, t),
-    attributesFor: (t, k) => _attributesFor(model, t, k),
+    attributesFor: (t, k, r) => _attributesFor(model, t, k, r),
+    roles: model.roles ?? [],
+    role: (k) => findRole(model, k),
+    visibleRoles: () => visibleRoles(model),
+    roleWords: (k, l = "en") => roleWords(findRole(model, k), l, k),
     validateProps: (t, k, p, o) => _validateProps(model, t, k, p, o),
     suggestKind: (l, c) => _suggestKind(l, c, model),
   };
@@ -166,6 +193,7 @@ export async function suggestKind(viewer: MetaScope, label: string, context?: Pa
 /* ── Household rows (writes) ──────────────────────────────────────────────────────────────────────────── */
 
 export const metaTables = { kinds: metaKinds, relations: metaRelations, attributes: metaAttributes } as const;
+export const metaRoleTable = metaRoles;
 export type MetaTableName = keyof typeof metaTables;
 
 /** A household-owned row of one of the three tables, or null (built-ins and other households' rows are never editable). */

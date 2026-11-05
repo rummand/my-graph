@@ -326,8 +326,9 @@ export function verdictsFor(changes: ChangeRowLike[], now: Now, opts: { included
         const from = point(String(p(c, "fromId") ?? "")); if (!from.ok) { done(from.v); break; }
         const to = point(String(p(c, "toId") ?? "")); if (!to.ok) { done(to.v); break; }
         if (c.edgeId && now.edges.has(c.edgeId) && !INACTIVE.has(now.edges.get(c.edgeId)!.status)) { done({ verdict: "landed", code: "already_true", details: { edgeId: c.edgeId } }); break; }
-        // Both ends turned out to be the same thing: there is nothing to connect.
-        if (from.id === to.id) { done({ verdict: "landed", code: "already_true" }); break; }
+        // Both ends turned out to be the same thing: there is nothing to connect — except a role held with no known
+        // context, which points back at its person on purpose (src/lib/meta/roles.ts).
+        if (from.id === to.id && !relation.startsWith("role:")) { done({ verdict: "landed", code: "already_true" }); break; }
         const fact = now.triples.get(`${from.id}|${relation}|${to.id}`);
         if (fact) { done({ verdict: "landed", code: "already_true", details: { edgeId: fact } }); break; }
         done({ verdict: "outstanding", code: "to_connect" });
@@ -353,6 +354,9 @@ export function verdictsFor(changes: ChangeRowLike[], now: Now, opts: { included
         break;
       case "addAttribute":
         done(now.meta.has(`attributes:${p(c, "nodeType")}:${p(c, "kindKey") ?? "*"}:${p(c, "key")}`) ? { verdict: "landed", code: "already_true" } : { verdict: "outstanding", code: "model" });
+        break;
+      case "addRole":
+        done(now.meta.has(`roles:${p(c, "key")}`) ? { verdict: "landed", code: "already_true" } : { verdict: "outstanding", code: "model" });
         break;
       case "addReminder": {
         const about = p<string | null>(c, "aboutNodeId");

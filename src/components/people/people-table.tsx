@@ -19,7 +19,7 @@ export function relationText(f: Fmt, p: PersonSummary): string | null {
 
 /** "Emma's grandparent", or "Teacher" when no relation is recorded; the kind is added when the relation doesn't say it. */
 function subline(f: Fmt, p: PersonSummary): string {
-  const rel = relationText(f, p), kind = p.kindLabel ? kindName(f.t, p.kindLabel) : null;
+  const rel = relationText(f, p), kind = p.roleText ?? (p.kindLabel ? kindName(f.t, p.kindLabel) : null);
   const base = !rel ? kind ?? "" : kind && !rel.toLowerCase().includes(kind.toLowerCase()) ? `${rel}, ${kind.toLowerCase()}` : rel;
   if (!p.householdMember) return base;
   return base ? f.t("people.table.memberSuffix", { base }) : f.t("people.memberOfGraph");
@@ -27,12 +27,18 @@ function subline(f: Fmt, p: PersonSummary): string {
 
 const latest = (p: PersonSummary) => p.wellbeing[p.wellbeing.length - 1]?.score ?? null;
 
+/** The newest contact: logged by hand or an event, or derived from what the graph holds (an email, a call …). */
+export function lastTouch(p: PersonSummary): string | null {
+  const a = p.lastContactAt, b = p.closeness?.lastInTouch?.at ?? null;
+  return a && b ? (a > b ? a : b) : a ?? b;
+}
+
 const SORTERS: Record<SortKey, (a: PersonSummary, b: PersonSummary) => number> = {
   name: (a, b) => a.label.localeCompare(b.label),
   kind: (a, b) => (a.kindLabel ?? "~").localeCompare(b.kindLabel ?? "~"),
   relation: (a, b) => (a.relation?.hops ?? 9) - (b.relation?.hops ?? 9) || (a.relation?.label ?? "~").localeCompare(b.relation?.label ?? "~"),
   // most recent first; never-contacted last
-  contact: (a, b) => (b.lastContactAt ?? "").localeCompare(a.lastContactAt ?? ""),
+  contact: (a, b) => (lastTouch(b) ?? "").localeCompare(lastTouch(a) ?? ""),
   // lowest first so people who need you come up
   wellbeing: (a, b) => (latest(a) ?? 9) - (latest(b) ?? 9),
   birthday: (a, b) => (a.nextBirthday?.daysUntil ?? 999) - (b.nextBirthday?.daysUntil ?? 999),
@@ -86,7 +92,7 @@ export function PeopleTable({ people, overdue, relationHeading }: {
             const isOverdue = overdue.has(p.id);
             return (
               <motion.tr key={p.id} layout="position" transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                className="group border-b border-line last:border-0 transition-colors hover:bg-surface-2/50">
+                className={clsx("group border-b border-line last:border-0 transition-colors hover:bg-surface-2/50", p.closeness?.band === "faded" && "opacity-70")}>
                 <td className="py-2.5 pl-4 pr-3">
                   <Link href={`/people/${p.id}`} className="flex min-w-0 items-center gap-3 rounded-md">
                     <PersonAvatar id={p.id} label={p.label} score={latest(p)} size={34} />
@@ -99,9 +105,12 @@ export function PeopleTable({ people, overdue, relationHeading }: {
                   </Link>
                 </td>
                 <td className="hidden px-4 py-2.5 2xl:table-cell">{relationText(f, p) ?? <span className="text-muted">—</span>}</td>
-                <td className="hidden px-4 py-2.5 text-muted 2xl:table-cell">{p.kindLabel ? kindName(t, p.kindLabel) : "—"}</td>
+                <td className="hidden px-4 py-2.5 text-muted 2xl:table-cell">{p.roleText ?? (p.kindLabel ? kindName(t, p.kindLabel) : "—")}</td>
                 <td className="whitespace-nowrap px-4 py-2.5">
-                  <When iso={p.lastContactAt} className={clsx("tabular-nums", isOverdue ? "text-warn" : p.lastContactAt ? undefined : "text-muted")} />
+                  <When iso={lastTouch(p)} className={clsx("tabular-nums", isOverdue ? "text-warn" : lastTouch(p) ? undefined : "text-muted")} />
+                  {(p.closeness?.band === "drifting" || p.closeness?.band === "faded") && !p.isViewer && (
+                    <span className="block text-[13px] text-muted">{t(`closeness.band.${p.closeness.band}`)}</span>
+                  )}
                   {isOverdue && <span className="sr-only">{t(od == null ? "people.table.neverLogged" : "people.table.longer")}</span>}
                   {p.lastContactSource === "event" && <span className="sr-only">{t("people.table.fromEvent")}</span>}
                 </td>

@@ -87,6 +87,16 @@ export function describeChange(c: Change, ctx: DescribeCtx, t: TFn): DescribedCh
       return { sentence: t("changes.sentence.mergeNodes", { drop: nameOf(p.dropId, ctx), keep: nameOf(p.keepId, ctx) }), rows };
     case "addEdge": {
       if (p.status) rows.push({ field: fieldText("status", t), before: t("changes.nothing"), after: statusText(p.status, t) });
+      if (s(p.relation).startsWith("role:")) {
+        // "Lars holds the role doctor at Lægehuset Vejle" / "… doctor for Emma" / "… doctor" (where isn't known yet).
+        const words = relationText(s(p.relation), ctx, t).split(/\s+/);
+        const prep = words.length > 1 ? words.pop()! : "";
+        const role = words.join(" ");
+        const to = s(p.toId) ? ctx.nodes[s(p.toId)] : undefined;
+        if (p.fromId === p.toId) return { sentence: t("changes.sentence.holdsRole", { name: nameOf(p.fromId, ctx), role }), rows };
+        if (to?.type === "person") return { sentence: t("changes.sentence.holdsRoleFor", { name: nameOf(p.fromId, ctx), role, to: nameOf(p.toId, ctx) }), rows };
+        return { sentence: t("changes.sentence.holdsRoleAt", { name: nameOf(p.fromId, ctx), role, prep, to: nameOf(p.toId, ctx) }), rows };
+      }
       return { sentence: t("changes.sentence.addEdge", { from: nameOf(p.fromId, ctx), to: nameOf(p.toId, ctx), relation: relationText(s(p.relation), ctx, t) }), rows };
     }
     case "updateEdge": {
@@ -106,6 +116,8 @@ export function describeChange(c: Change, ctx: DescribeCtx, t: TFn): DescribedCh
       const inverse = s(p.inverseLabel);
       return { sentence: inverse && inverse !== s(p.label) ? t("changes.sentence.addRelationTypeBoth", { label: s(p.label), inverse }) : t("changes.sentence.addRelationType", { label: s(p.label) }), rows };
     }
+    case "addRole":
+      return { sentence: t("changes.sentence.addRole", { label: s(p.label) }), rows };
     case "addAttribute":
       return { sentence: t("changes.sentence.addAttribute", { type: t(`changes.typePlain.${s(p.nodeType) || "thing"}`), label: s(p.label) }), rows };
     case "addReminder": {

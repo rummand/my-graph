@@ -2,6 +2,7 @@
 import type { AttentionItem } from "./attention";
 import type { MetaAttribute, MetaKind, MetaRelation } from "@/lib/meta/types";
 import type { RoleParts } from "./relpath";
+import type { ClosenessView, InteractionView } from "./interactions/pure";
 
 export type { AttentionItem } from "./attention";
 export type { RoleParts } from "./relpath";
@@ -24,6 +25,12 @@ export type PersonSummary = {
   householdMember: boolean;
   isViewer: boolean;
   relation: { label: string; role?: RoleParts; hops: 1 | 2; via: { id: string; label: string } | null; relation: string; category: string } | null;
+  /** Roles they hold, in the reader's language ("Doctor at Lægehuset Vejle", "Parent of Emma"), current ones first. */
+  roles?: HeldRoleView[];
+  /** Their first current role, for lists and the map ("Doctor at Lægehuset Vejle"). */
+  roleText?: string | null;
+  /** How close the viewer is to them, from interactions the viewer may read (src/lib/people/interactions). */
+  closeness?: ClosenessView;
   lastContactAt: string | null;
   lastContactSource: "contact" | "event" | null;
   contactCount90: number;
@@ -36,6 +43,13 @@ export type PersonSummary = {
 };
 
 export type CenterOption = { id: string; label: string; isViewer: boolean };
+
+/** A role someone holds, as a person page shows it. Implied ones come from a relation (parent ← parent_of). */
+export type HeldRoleView = {
+  key: string; text: string; label: string; current: boolean; implied: boolean; status: string; edgeId: string;
+  from: string | null; to: string | null;
+  context: { id: string; label: string; type: string; href: string } | null;
+};
 
 export type PeopleOverview = {
   center: CenterOption | null;
@@ -105,6 +119,8 @@ export type NodeOption = { id: string; label: string; type: string; kind: string
 export type PersonProfile = {
   person: PersonSummary & { props: Record<string, unknown>; summary: string | null; aliases: string[]; canEdit: boolean; createdAt: string };
   attributes: MetaAttribute[];
+  /** The latest interactions with them the viewer may read, newest first (src/lib/people/interactions). */
+  interactions?: InteractionView[];
   relationships: RelationshipGroup[];
   observations: Observation[];
   milestones: { id: string; at: string; title: string; href: string | null; source: "observation" | "event"; untitled?: boolean }[];

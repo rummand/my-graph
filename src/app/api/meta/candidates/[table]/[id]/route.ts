@@ -4,7 +4,7 @@ import { decideCandidate, MetaError } from "@/lib/meta/emergent";
 import { ApiError, handle, jsonBody } from "@/lib/meta/http";
 
 type Ctx = { params: Promise<{ table: string; id: string }> };
-const params = z.object({ table: z.enum(["kinds", "relations", "attributes"]), id: z.uuid() });
+const params = z.object({ table: z.enum(["kinds", "relations", "attributes", "roles"]), id: z.uuid() });
 const input = z.object({ action: z.enum(["accept", "hide", "merge", "restore"]), intoKey: z.string().trim().min(1).max(60).optional() });
 
 /** POST /api/meta/candidates/{table}/{id} { action: accept | merge | hide | restore, intoKey? } — a person decides. */

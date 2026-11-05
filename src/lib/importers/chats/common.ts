@@ -6,6 +6,7 @@
  * (phone, email, then a unique name); the ones the graph doesn't know are proposed, never the person who exported
  * the chat ("me"). The model also reads the text (`extract: true`) for plans, dates and people mentioned.
  */
+import { roleMention } from "@/lib/meta/roles";
 import type { ChangeInput } from "@/lib/changes";
 import type { TextSegment } from "@/lib/ingest/chunk";
 import { contactsOf, matchPerson, normEmail, normName, normPhone } from "../match";
@@ -234,7 +235,8 @@ function proposePeople(
       }
       continue;
     }
-    if (!realName) { unnamed++; continue; }
+    // A chat with "Lægen" or "the teacher" names nobody: a role is not a person.
+    if (!realName || roleMention(realName)) { unnamed++; continue; }
     if (proposed >= CHAT_RULES.maxPeople) continue;
     const props: Record<string, unknown> = {};
     if (phones[0]) props.phone = phones[0].trim();

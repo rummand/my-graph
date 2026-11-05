@@ -5,7 +5,7 @@
  */
 import { and, desc, eq, getTableColumns, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { edges, graphEvents, metaAttributes, metaKinds, metaRelations, nodes } from "@/db/schema";
+import { edges, graphEvents, metaAttributes, metaKinds, metaRelations, metaRoles, nodes } from "@/db/schema";
 import { currentScope, type Actor, type Tx } from "./context";
 import { coalesce, diffEdge, diffMeta, diffNode, edgeSnap, MOMENT_MS, nodeSnap, sameHand, type EdgeSnap, type EventDraft, type MetaSnap, type NodeSnap } from "./pure";
 
@@ -78,7 +78,12 @@ async function edgeNames(ex: Exec, list: EdgeSnap[]): Promise<Map<string, string
   if (!ids.length) return new Map();
   const rows = await ex.select({ id: nodes.id, label: nodes.label }).from(nodes).where(inArray(nodes.id, ids));
   const label = new Map(rows.map((r) => [r.id, r.label]));
-  return new Map(list.map((e) => [e.id, `${label.get(e.fromId) ?? "?"} · ${e.relation.replace(/_/g, " ")} · ${label.get(e.toId) ?? "?"}`]));
+  return new Map(list.map((e) => {
+    // A role held: "Lars · doctor · Lægehuset Vejle", or "Lars · doctor" when where isn't known (the edge points back).
+    const rel = (e.relation.startsWith("role:") ? e.relation.slice(5) : e.relation).replace(/_/g, " ");
+    if (e.relation.startsWith("role:") && e.fromId === e.toId) return [e.id, `${label.get(e.fromId) ?? "?"} · ${rel}`];
+    return [e.id, `${label.get(e.fromId) ?? "?"} · ${rel} · ${label.get(e.toId) ?? "?"}`];
+  }));
 }
 
 /** Diff two snapshots of the same scope and write the events. */
@@ -114,16 +119,18 @@ export async function recordEvent(ex: Exec, graphId: string, draft: EventDraft, 
 
 /** The graph's own and household-wide model rows (built-ins never change, so they are not watched). */
 export async function snapshotMeta(ex: Exec, householdId: string, graphId: string): Promise<Map<string, MetaSnap>> {
-  const own = <T extends typeof metaKinds | typeof metaRelations | typeof metaAttributes>(t: T) =>
+  const own = <T extends typeof metaKinds | typeof metaRelations | typeof metaAttributes | typeof metaRoles>(t: T) =>
     and(eq(t.householdId, householdId), or(isNull(t.graphId), eq(t.graphId, graphId)));
-  const [k, r, a] = await Promise.all([
+  const [k, r, a, ro] = await Promise.all([
     ex.select().from(metaKinds).where(own(metaKinds)),
     ex.select().from(metaRelations).where(own(metaRelations)),
     ex.select().from(metaAttributes).where(own(metaAttributes)),
+    ex.select().from(metaRoles).where(own(metaRoles)),
   ]);
   const out = new Map<string, MetaSnap>();
   for (const x of k) out.set(x.id, { id: x.id, table: "kinds", key: x.key, label: x.label, nodeType: x.nodeType, pluralLabel: x.pluralLabel, description: x.description, parentKey: x.parentKey, circle: x.circle, status: x.status, hidden: x.builtin });
   for (const x of r) out.set(x.id, { id: x.id, table: "relations", key: x.key, label: x.label, inverseLabel: x.inverseLabel, category: x.category, fromTypes: x.fromTypes, toTypes: x.toTypes, symmetric: x.symmetric, status: x.status, hidden: x.builtin });
+  for (const x of ro) out.set(x.id, { id: x.id, table: "roles", key: x.key, label: x.label, pluralLabel: x.pluralLabel, preposition: x.preposition, labelDa: x.labelDa, circle: x.circle, contextTypes: x.contextTypes, parentKey: x.parentKey, status: x.status, hidden: x.builtin });
   for (const x of a) out.set(x.id, { id: x.id, table: "attributes", key: x.key, label: x.label, nodeType: x.nodeType, kindKey: x.kindKey, dataType: x.dataType, options: x.options, sensitive: x.sensitive, status: x.status, hidden: x.builtin });
   return out;
 }

@@ -288,10 +288,12 @@ describe("mapping", () => {
     const r = peopleOps(base);
     expect(r.childNodes.get(1101)).toBe("emma");
     const added = r.changes.filter((c) => c.op === "addNode") as { label: string; kind: string | null; receipt?: { sourceId?: string } }[];
-    expect(added.map((a) => [a.label, a.kind])).toEqual([["Bakkeskolen", "school"], ["Mette Jensen", "teacher"]]);
+    // A teacher is a person with a role, not a kind of person: class teacher at Bakkeskolen.
+    expect(added.map((a) => [a.label, a.kind])).toEqual([["Bakkeskolen", "school"], ["Mette Jensen", null]]);
     expect(added[1].receipt?.sourceId).toBe("src1");
     const edges = r.changes.filter((c) => c.op === "addEdge") as { relation: string; fromId: string; toId: string; status: string }[];
-    expect(edges.map((e) => [e.relation, e.status])).toEqual([["attends", "confirmed"], ["teacher_of", "unconfirmed"]]);
+    expect(edges.map((e) => [e.relation, e.status])).toEqual([["attends", "confirmed"], ["role:class_teacher", "confirmed"], ["teacher_of", "unconfirmed"]]);
+    expect(edges[1]).toMatchObject({ fromId: "new2", toId: "new1" });
     // The next run, with the proposal still waiting: nothing is proposed again.
     const again = peopleOps({ ...base, mapping: r.mapping });
     expect(again.changes).toEqual([]);

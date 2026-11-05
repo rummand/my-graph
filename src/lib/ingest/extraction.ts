@@ -59,14 +59,30 @@ export const factSchema = z.object({
 });
 export type ExtractedFact = z.output<typeof factSchema>;
 
+/**
+ * A role someone holds, as the text says it: "Karen Hansen er klasselærer for 3.B". `person` is a named person (null
+ * when the text names nobody); `role` the words as written (mapped to a role key with detectRole later).
+ */
+export const roleSchema = z.object({
+  person: z.union([z.string(), z.null()]).optional().transform((s) => (s && s.trim() ? s.trim().slice(0, 200) : null)),
+  role: trimmed(80).pipe(z.string().min(1)),
+  context: optionalText(200),
+  from: dateish,
+  to: dateish,
+  quote: optionalText(500),
+  confidence: z.unknown().optional().transform((c) => (c === undefined ? 0.8 : clampConfidence(c))),
+});
+export type ExtractedRole = z.output<typeof roleSchema>;
+
 /** The date the document gives itself (letter date, sent date), when the model found one. */
 export type StatedDate = { at: Date; precision: "day" | "month" | "year" | "minute"; quote?: string };
 
-export type Extraction = { entities: ExtractedEntity[]; facts: ExtractedFact[]; dropped: number; documentDate?: StatedDate };
+export type Extraction = { entities: ExtractedEntity[]; facts: ExtractedFact[]; dropped: number; documentDate?: StatedDate; roles?: ExtractedRole[] };
 
 const envelope = z.object({
   entities: z.array(z.unknown()).optional().default([]),
   facts: z.array(z.unknown()).optional().default([]),
+  roles: z.array(z.unknown()).optional().default([]),
   documentDate: z.unknown().optional(),
   documentDatePrecision: z.unknown().optional(),
   documentDateQuote: z.unknown().optional(),
@@ -104,7 +120,14 @@ export function parseExtraction(raw: unknown): Extraction {
     if (r.data.from.toLowerCase() === r.data.to.toLowerCase()) { dropped++; continue; }
     facts.push(r.data);
   }
-  return { entities, facts, dropped, documentDate: statedDate(env.documentDate, env.documentDatePrecision, env.documentDateQuote) };
+  const roles: ExtractedRole[] = [];
+  for (const r of env.roles) {
+    const p = roleSchema.safeParse(r);
+    if (!p.success || !p.data.person) { dropped++; continue; }
+    if (p.data.from && p.data.to && p.data.to < p.data.from) p.data.to = undefined;
+    roles.push(p.data);
+  }
+  return { entities, facts, dropped, roles, documentDate: statedDate(env.documentDate, env.documentDatePrecision, env.documentDateQuote) };
 }
 
 export type KnownPerson = { id: string; label: string; aliases: string[] };
@@ -121,10 +144,13 @@ export function buildExtractionMessages(opts: { title: string; text: string; kno
     "You extract a knowledge graph from the documents people keep (letters, mail, scans, notes). Answer with ONE JSON object and nothing else:",
     '{"documentDate":"ISO 8601 or null","documentDatePrecision":"day|month|year","documentDateQuote":"the words that give it",',
     ' "entities":[{"type":"person|place|event|topic|organization","label":"...","aliases":["..."],"summary":"...","startAt":"ISO 8601 or null","endAt":"ISO 8601 or null","precision":"minute|day|month|year"}],',
-    ' "facts":[{"from":"entity label","relation":"<relation>","to":"entity label","quote":"exact words from the text","confidence":0.0-1.0}]}',
+    ' "facts":[{"from":"entity label","relation":"<relation>","to":"entity label","quote":"exact words from the text","confidence":0.0-1.0}],',
+    ' "roles":[{"person":"entity label","role":"the role in the text\'s words, e.g. klasselærer, doctor, landlord","context":"entity label it is held in/for, or null","from":"ISO 8601 or null","to":"ISO 8601 or null","quote":"exact words","confidence":0.0-1.0}]}',
     `Allowed relations: ${RELATIONS.join(", ")}.`,
     "Rules:",
     "- Only what the text states. No guesses about people's private lives. Never output CPR numbers or passwords.",
+    "- People are named humans only. Someone named only by a role (\"the teacher\", \"Lægen\", \"vores nabo\", \"Speaker 2\") is NOT a person entity: leave them out, and leave out facts about them.",
+    "- A role is a position someone holds (doctor, class teacher, pedagogue, colleague, manager, landlord, coach, client …), not who they are: put it in roles, never as a person's type. Give context when the text says where or for whom (\"læge i Lægehuset Vejle\" → context Lægehuset Vejle, also as an organization or place entity), and from/to when it says since or until when.",
     "- documentDate is when the document itself was written or sent (the letter's date line, the letterhead date, a stamp), not the dates it talks about. null when it doesn't say.",
     "- Events (appointments, school trips, deadlines, birthdays, meetings) need startAt when the text gives a date; use precision to say how exact it is. Resolve relative dates against today's date.",
     "- Connect each event to the people taking part with an \"involves\" fact (from = event, to = person), and to its place with \"happened_at\".",

@@ -32,6 +32,7 @@ export function toSettings(r: SettingsRow | undefined): AssistantSettings {
     alwaysAllow: Array.isArray(r.alwaysAllow) ? r.alwaysAllow.filter((x) => typeof x === "string") : [],
     capabilities: { ...DEFAULT_SETTINGS.capabilities, ...(r.capabilities ?? {}) },
     tone, dailySuggestionCap: Math.max(0, Math.min(r.dailySuggestionCap, MAX_DAILY_CAP)), onboardedAt: r.onboardedAt,
+    keepInTouchNudges: !!r.keepInTouchNudges,
   };
 }
 
@@ -49,6 +50,7 @@ export async function writeSettings(graphId: string, userId: string, patch: Sett
   if (patch.capabilities !== undefined) set.capabilities = patch.capabilities;
   if (patch.tone !== undefined) set.tone = patch.tone;
   if (patch.dailySuggestionCap !== undefined) set.dailySuggestionCap = Math.max(0, Math.min(patch.dailySuggestionCap, MAX_DAILY_CAP));
+  if (patch.keepInTouchNudges !== undefined) set.keepInTouchNudges = patch.keepInTouchNudges;
   if (patch.onboarded) set.onboardedAt = new Date();
   if (patch.capabilities !== undefined) {
     const current = await settingsFor(graphId, userId);

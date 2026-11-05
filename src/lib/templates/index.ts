@@ -30,13 +30,15 @@ export function lensFor(v: GraphRef): GraphLens & { template: GraphTemplate } {
     keepBuiltin: (table, row) => keepsBuiltin(t, table, row),
     keepShared: (table, row) => templateDefines(t, table, row),
     circleOf: (k) => (k.nodeType === "person" ? t.circleOf[k.key] : undefined),
+    roleCircleOf: (r) => t.circleOf[r.key],
   };
 }
 
 /** Shared template rows: visible in a graph only when that graph's template defines the key. */
-export function templateDefines(t: GraphTemplate, table: "kinds" | "relations" | "attributes", row: { key: string; nodeType?: string; kindKey?: string | null }): boolean {
+export function templateDefines(t: GraphTemplate, table: "kinds" | "relations" | "attributes" | "roles", row: { key: string; nodeType?: string; kindKey?: string | null }): boolean {
   if (table === "kinds") return t.kinds.some((k) => k.nodeType === row.nodeType && k.key === row.key);
   if (table === "relations") return t.relations.some((r) => r.key === row.key);
+  if (table === "roles") return true;
   return t.attributes.some((a) => a.nodeType === row.nodeType && (a.kindKey ?? null) === (row.kindKey ?? null) && a.key === row.key);
 }
 

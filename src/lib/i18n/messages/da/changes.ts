@@ -185,7 +185,7 @@ const messages: MessageTree = {
   },
   op: {
     addNode: "Tilføj", updateNode: "Ændr", retireNode: "Træk tilbage", mergeNodes: "Læg sammen", addEdge: "Forbind", updateEdge: "Ændr en forbindelse",
-    removeEdge: "Fjern en forbindelse", addKind: "Ny type", addRelationType: "Ny relation", addAttribute: "Ny detalje",
+    removeEdge: "Fjern en forbindelse", addKind: "Ny type", addRelationType: "Ny relation", addAttribute: "Ny detalje", addRole: "Ny rolle",
     addReminder: "Påmindelse", editWiki: "Side",
   },
   sentence: {
@@ -201,6 +201,10 @@ const messages: MessageTree = {
     addRelationType: "En ny relation: {label}",
     addRelationTypeBoth: "En ny relation: {label} (den anden vej: {inverse})",
     addAttribute: "En ny detalje for {type}: {label}",
+    addRole: "En ny rolle, man kan have: {label}",
+    holdsRole: "{name} har rollen {role}",
+    holdsRoleFor: "{name} har rollen {role} for {to}",
+    holdsRoleAt: "{name} har rollen {role} {prep} {to}",
     addReminder: "Påmind {date}: {title}",
     editWiki: "Tilføj til siden {title}",
     other: "{op}",

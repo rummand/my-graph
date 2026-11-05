@@ -1,0 +1,56 @@
+import type { MessageTree } from "../../core";
+
+/** "roles" namespace (da): roles people hold (doctor at …, class teacher of …) and the role conversion. t("roles.<key>"). */
+const messages: MessageTree = {
+  line: {
+    title: "Roller:",
+    since: "siden {year}",
+    until: "indtil {year}",
+    fromTo: "{from}–{to}",
+    unconfirmed: "Ikke bekræftet endnu",
+    more: "og {count} mere",
+  },
+  model: {
+    title: "Roller, folk har",
+    lead: "En rolle er det, nogen er eller gør for nogen eller et sted: læge på en klinik, klasselærer for 3.B, klient hos praksis. Man kan have flere roller, og en rolle kan ophøre. Roller vokser ud af det, grafen læser, ligesom typer og relationer.",
+    aRole: "en rolle",
+    heldBy: { one: "{count} person har den", other: "{count} personer har den" },
+    andMore: " og {count} mere",
+    nobody: "Ingen har den endnu",
+    noneHeld: "Ingen har en rolle endnu. Når grafen læser, at nogen er lærer, læge eller kollega, foreslår den rollen her.",
+    implied: "Læst ud fra familierelationer",
+    circle: "Placerer folk i {circle}",
+    showAll: "Vis alle {count}",
+    onlyHeld: "Kun roller i brug",
+    hide: "Skjul",
+    show: "Vis igen",
+    hidden: "{name} er skjult. De, der har rollen, beholder den.",
+    shown: "{name} er tilbage.",
+    newRole: "Ny rolle",
+    name: "Navn",
+    namePlaceholder: "Fodboldtræner",
+    nameDa: "Navn på dansk",
+    preposition: "Ord før stedet",
+    prepositionHint: "„i“ i „træner i B93“",
+    circleLabel: "Placerer folk i",
+    add: "Tilføj rolle",
+    added: "{name} er nu en rolle, folk kan have.",
+  },
+  convert: {
+    title: "Typer, der i virkeligheden er roller",
+    lead: "Før fik en person én type, fx Læge eller Kollega. Det er roller: man kan have flere, et sted, i en periode. My Graph kan foreslå at gøre dem til roller og rydde op i „personer“, der kun var en rolle, som „læreren“ eller „Taler 2“. Intet ændres, før du leverer forslaget.",
+    look: "Find roller",
+    looking: "Leder …",
+    none: "Intet at ændre: alle typer her siger allerede, hvem nogen er.",
+    itemRole: "bliver {role}",
+    itemContext: "bliver {role} for {where}",
+    itemImplied: "er allerede {role} (en familierelation siger det); typen fjernes",
+    itemMerge: "er en rolle, ikke en person: læg sammen med {name}",
+    itemRetire: "er en rolle, ikke en person: tag den ud",
+    propose: "Foreslå ændringerne",
+    proposed: "Foreslået. Intet ændres, før det er leveret.",
+    review: "Se forslaget",
+  },
+};
+
+export default messages;

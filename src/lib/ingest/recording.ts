@@ -5,6 +5,7 @@
  * already in the graph by email, then by name), each linked to the meeting, its decisions, and its open to-dos as
  * reminders. Every op has a receipt with the quote, the moment and Record's link to that moment.
  */
+import { roleMention } from "@/lib/meta/roles";
 import type { ChangeInput, Receipt } from "@/lib/changes";
 import { matchKnownPerson } from "./extraction";
 import { edgeKey, type KnownNode } from "./proposals";
@@ -140,7 +141,8 @@ export function foldIntoMeeting(changes: ChangeInput[], meeting: { title: string
 
 /** Remove proposed people with a generic speaker label ("Speaker 4"), and everything that points at them. Returns how many. */
 export function dropGenericPeople(changes: ChangeInput[]): number {
-  const drop = new Set(changes.flatMap((c) => (c.op === "addNode" && c.type === "person" && GENERIC_SPEAKER.test(c.label.trim()) && c.nodeId ? [c.nodeId] : [])));
+  // "Speaker 4" names nobody, and neither does a bare role ("the teacher", "Lægen"): a role is not a person.
+  const drop = new Set(changes.flatMap((c) => (c.op === "addNode" && c.type === "person" && (GENERIC_SPEAKER.test(c.label.trim()) || roleMention(c.label)) && c.nodeId ? [c.nodeId] : [])));
   if (!drop.size) return 0;
   for (let i = changes.length - 1; i >= 0; i--) {
     const c = changes[i];

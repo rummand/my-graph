@@ -47,7 +47,7 @@ describe("parseExtraction", () => {
   });
 
   it("treats missing arrays as empty but rejects a non-object", () => {
-    expect(parseExtraction({})).toEqual({ entities: [], facts: [], dropped: 0 });
+    expect(parseExtraction({})).toEqual({ entities: [], facts: [], roles: [], dropped: 0 });
     expect(() => parseExtraction("nope")).toThrow();
     expect(() => parseExtraction({ entities: "x" })).toThrow();
   });

@@ -7,7 +7,7 @@ import { formatDate } from "@/components/provenance/labels";
 import { ReceiptLine } from "./receipt";
 import { ChangeSetActions } from "./change-set-actions";
 
-const OPS = ["addNode", "updateNode", "retireNode", "mergeNodes", "addEdge", "updateEdge", "removeEdge", "addKind", "addRelationType", "addAttribute", "addReminder", "editWiki"];
+const OPS = ["addNode", "updateNode", "retireNode", "mergeNodes", "addEdge", "updateEdge", "removeEdge", "addKind", "addRelationType", "addAttribute", "addRole", "addReminder", "editWiki"];
 const ORIGINS = ["person", "assistant", "chat", "connector", "web", "ingest", "automation", "heartbeat", "keeper", "restore"];
 
 export function originLabel(origin: string, t: TFn): string {

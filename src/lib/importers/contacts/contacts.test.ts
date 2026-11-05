@@ -323,3 +323,23 @@ describe("contacts → proposal", () => {
     expect(() => contactsImporter.read({ filename: "x", bytes: Buffer.from("{\"contacts\":[{}]}") }, ctxOf())).toThrow(/expected shape/);
   });
 });
+
+describe("contacts → roles", () => {
+  const vcf = [
+    "BEGIN:VCARD", "VERSION:3.0", "FN:Lars Holm", "N:Holm;Lars;;;", "ORG:Lægehuset Vejle", "TITLE:Praktiserende læge", "TEL:+4511223344", "END:VCARD",
+    "BEGIN:VCARD", "VERSION:3.0", "FN:Ida Berg", "N:Berg;Ida;;;", "ORG:Acme", "TITLE:Designer", "EMAIL:ida@acme.dk", "END:VCARD",
+    "BEGIN:VCARD", "VERSION:3.0", "FN:Lægen", "TEL:+4599887766", "EMAIL:laege@example.dk", "END:VCARD",
+  ].join("\r\n");
+  it("a job is a role held at the company; a card saved as a role is no person", () => {
+    const plan = planContacts(parseVCards(vcf).contacts, ctxOf());
+    const people = (plan.changes.filter((c) => c.op === "addNode" && c.type === "person") as Extract<ChangeInput, { op: "addNode" }>[]);
+    expect(people.map((p) => p.label).sort()).toEqual(["Ida Berg", "Lars Holm"]);
+    expect(people.every((p) => !p.kind)).toBe(true);
+    const orgs = plan.changes.filter((c) => c.op === "addNode" && c.type === "organization") as Extract<ChangeInput, { op: "addNode" }>[];
+    const idOf = (l: string) => [...people, ...orgs].find((n) => n.label === l)!.nodeId;
+    const roles = (plan.changes.filter((c) => c.op === "addEdge" && c.relation.startsWith("role:")) as Extract<ChangeInput, { op: "addEdge" }>[])
+      .map((e) => [e.fromId, e.relation, e.toId]);
+    expect(roles).toEqual(expect.arrayContaining([[idOf("Lars Holm"), "role:doctor", idOf("Lægehuset Vejle")], [idOf("Ida Berg"), "role:employee", idOf("Acme")]]));
+    expect(plan.warnings!.join(" ")).toMatch(/saved under a role/);
+  });
+});

@@ -6,6 +6,7 @@
  * it fits (by name, synonym or spelling), a new one is proposed only when nothing fits, and existing nodes are linked
  * instead of duplicated. `opsFromPlan` turns the plan into change-set ops with a receipt each.
  */
+import { KEPT_PERSON_KINDS, detectRole, roleRelation } from "./roles";
 import { z } from "zod";
 import { findSynonymKind, findSynonymRelation, isKnownKindWord, normalizeTerm, pluralize, sameTerm, titleCase, toKey } from "./synonyms";
 import type { MetaModel, MetaNodeType } from "./types";
@@ -59,12 +60,18 @@ export type PlannedRelation = { key: string; label: string; inverseLabel: string
 export type PlannedEntity = {
   ref: string; label: string; surface: string; type: MetaNodeType; kindKey: string | null; kindLabel: string | null;
   newKind: boolean; nodeId: string | null; existing: boolean;
+  /** A person's "kind" that is really a role they hold (teacher, coach, landlord): proposed as a role edge, not a kind. */
+  roleKey?: string | null; roleLabel?: string | null;
 };
+/** A role the plan uses; `isNew` when the graph doesn't know it yet (proposed with addRole). */
+export type PlannedRole = { key: string; label: string; isNew: boolean };
 export type PlannedFact = { ref: string; from: string; to: string; relationKey: string; relationLabel: string; newRelation: boolean; quote?: string };
 export type PlannedAttribute = { ref: string; key: string; label: string; value: string; dataType: string; newAttribute: boolean };
 
 export type DomainPlan = {
   kinds: PlannedKind[]; relations: PlannedRelation[]; entities: PlannedEntity[]; facts: PlannedFact[]; attributes: PlannedAttribute[];
+  /** Roles people hold in this plan (optional so older callers keep working). */
+  roles?: PlannedRole[];
 };
 
 export const YOU = "you";
@@ -103,10 +110,38 @@ export function guessInverse(label: string): string {
  * Map an extraction onto the model. `known` = existing readable nodes that might be meant; `self` = the viewer's own
  * person node in this graph (the extraction calls it "you").
  */
-export function planFromExtraction(m: Pick<MetaModel, "kinds" | "relations" | "attributes">, x: Extraction, known: KnownNode[], self: { id: string | null; label: string }, opts: { text?: string } = {}): DomainPlan {
+export function planFromExtraction(m: Pick<MetaModel, "kinds" | "relations" | "attributes"> & Pick<Partial<MetaModel>, "roles">, x: Extraction, known: KnownNode[], self: { id: string | null; label: string }, opts: { text?: string } = {}): DomainPlan {
   const kinds: PlannedKind[] = [];
   const relations: PlannedRelation[] = [];
   const entities: PlannedEntity[] = [];
+  const roles: PlannedRole[] = [];
+  /**
+   * People and roles are different things: a person's "kind" that names a role (a known role word, a role the graph
+   * has, or any new word other than the person kinds that stay kinds) becomes a role they hold.
+   */
+  const roleFor = (word: string): PlannedRole | null => {
+    const t = normalizeTerm(word);
+    if (!t) return null;
+    // Who someone is in this graph (a child of the family, a partner) stays their kind.
+    if (KEPT_PERSON_KINDS.has(toKey(word)) || m.kinds.some((k) => k.nodeType === "person" && KEPT_PERSON_KINDS.has(k.key) && normalizeTerm(k.label) === t)) return null;
+    const known = (m.roles ?? []).find((r) => normalizeTerm(r.key) === t || normalizeTerm(r.label) === t || (r.labelDa && normalizeTerm(r.labelDa) === t));
+    const hit = detectRole(word);
+    const key = known?.key ?? (hit && !hit.family ? hit.role : null);
+    if (key) {
+      const r = roles.find((x) => x.key === key) ?? { key, label: known?.label ?? titleCase(key.replace(/_/g, " ")), isNew: false };
+      if (!roles.includes(r)) roles.push(r);
+      return r;
+    }
+    if (hit?.family) return null;
+    if (m.kinds.some((k) => k.nodeType === "person" && !k.hidden && (normalizeTerm(k.label) === t || k.key === toKey(word)))) return null; // a person kind the graph keeps
+    const newKey = toKey(word);
+    if (!newKey) return null;
+    const prior = roles.find((x) => x.key === newKey);
+    if (prior) return prior;
+    const r: PlannedRole = { key: newKey, label: titleCase(word), isNew: true };
+    roles.push(r);
+    return r;
+  };
   const synonymOf = new Map(x.synonyms.map((s) => [normalizeTerm(s.label), s.sameAs]));
 
   const kindFor = (type: MetaNodeType, label: string): PlannedKind => {
@@ -145,6 +180,11 @@ export function planFromExtraction(m: Pick<MetaModel, "kinds" | "relations" | "a
     // A kind that only repeats the type ("Topic", "Person") says nothing; "Project" as a kind of project is kept
     // (proposed once, reused after) so projects can be told apart from other kinds of projects later.
     const bare = !!e.kind && normalizeTerm(e.kind) === normalizeTerm(type) && type !== "project";
+    const role = type === "person" && e.kind && !bare ? roleFor(e.kind) : null;
+    if (role) {
+      entities.push({ ref: e.ref, label: e.label, surface: e.surface || e.label, type, kindKey: null, kindLabel: null, newKind: false, nodeId: null, existing: false, roleKey: role.key, roleLabel: role.label });
+      continue;
+    }
     if (e.kind && !bare) kind = kindFor(type, e.kind);
     if (kind && !kind.isNew) type = kind.nodeType; // reuse the type the existing kind lives on
     entities.push({ ref: e.ref, label: e.label, surface: e.surface || e.label, type, kindKey: kind?.key ?? null, kindLabel: kind?.label ?? null, newKind: !!kind?.isNew, nodeId: null, existing: false });
@@ -223,7 +263,7 @@ export function planFromExtraction(m: Pick<MetaModel, "kinds" | "relations" | "a
     attributes.push({ ref: a.ref, key: have?.key ?? toKey(a.label), label: have?.label ?? titleCase(a.label), value: a.value, dataType: have?.dataType ?? a.dataType, newAttribute: !have });
   }
 
-  return { kinds: kinds.filter((k) => k.isNew || entities.some((e) => e.kindKey === k.key)), relations, entities, facts, attributes };
+  return { kinds: kinds.filter((k) => k.isNew || entities.some((e) => e.kindKey === k.key)), relations, entities, facts, attributes, roles };
 }
 
 /** "my department X", "our team X", "min afdeling X": the text says the writer belongs to X. */
@@ -301,6 +341,10 @@ export function opsFromPlan(plan: DomainPlan, opts: { selfId: string | null; min
     const f = plan.facts.find((f) => f.relationKey === r.key);
     ops.push({ op: "addRelationType", key: r.key, label: r.label, inverseLabel: r.inverseLabel, fromTypes: r.fromTypes, toTypes: r.toTypes, category: "other", note: `New relation “${r.label}”`, receipt: opts.receipt(f?.quote) });
   }
+  for (const r of (plan.roles ?? []).filter((r) => r.isNew && plan.entities.some((e) => e.roleKey === r.key))) {
+    const example = plan.entities.find((e) => e.roleKey === r.key);
+    ops.push({ op: "addRole", key: r.key, label: r.label, pluralLabel: pluralize(r.label), circle: "other", note: `New role for ${example?.label ?? r.label}`, receipt: opts.receipt(example?.surface) });
+  }
   for (const a of plan.attributes.filter((a) => a.newAttribute)) {
     const e = plan.entities.find((e) => e.ref === a.ref);
     if (!e || ops.some((o) => o.op === "addAttribute" && o.key === a.key && o.nodeType === e.type)) continue;
@@ -321,6 +365,14 @@ export function opsFromPlan(plan: DomainPlan, opts: { selfId: string | null; min
     const fromId = nodeIds[f.from], toId = nodeIds[f.to];
     if (!fromId || !toId) continue;
     ops.push({ op: "addEdge", fromId, toId, relation: f.relationKey, status: "confirmed", note: f.relationLabel, receipt: opts.receipt(f.quote) });
+  }
+  // Roles held: in the organisation, place or project the plan connects them to, else with no known context.
+  for (const e of plan.entities.filter((e) => e.roleKey)) {
+    const fromId = nodeIds[e.ref];
+    if (!fromId) continue;
+    const ctx = plan.facts.map((f) => (f.from === e.ref ? f.to : null)).find((ref) => ref && ["organization", "place", "project"].includes(plan.entities.find((x) => x.ref === ref)?.type ?? ""));
+    const toId = (ctx && nodeIds[ctx]) || fromId;
+    ops.push({ op: "addEdge", fromId, toId, relation: roleRelation(e.roleKey!), status: "confirmed", note: e.roleLabel ?? e.roleKey!, receipt: opts.receipt(e.surface) });
   }
   return { ops, nodeIds };
 }

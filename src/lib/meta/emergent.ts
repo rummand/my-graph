@@ -14,7 +14,9 @@
  */
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { changes, changeSets, edges, metaAttributes, metaKinds, metaRelations, nodes } from "@/db/schema";
+import { changes, changeSets, edges, metaAttributes, metaKinds, metaRelations, metaRoles, nodes } from "@/db/schema";
+import { applyMetaOpTx } from "@/lib/changes/meta-tx";
+import { roleKeyOf, roleRelation, roleWords } from "./roles";
 import { isParent, type Viewer } from "@/lib/auth";
 import { historyOf, remembering } from "@/lib/changes";
 import { graph as readGraph } from "@/lib/gbrain";
@@ -22,7 +24,7 @@ import { scopeOf } from "@/lib/graphs/pure";
 import { getMeta, getMetaModel } from "./index";
 import type { DomainPlan } from "./domain";
 import { synonymPairs } from "./synonyms";
-import type { MetaAttribute, MetaKind, MetaRelation } from "./types";
+import type { MetaAttribute, MetaKind, MetaRelation, MetaRole } from "./types";
 
 export class MetaError extends Error {
   constructor(public status: 400 | 403 | 404 | 409, message: string) { super(message); this.name = "MetaError"; }
@@ -36,7 +38,7 @@ export function canDecideModel(v: Viewer): boolean {
 }
 
 const hh = (v: Viewer) => v.graphHouseholdId ?? v.householdId;
-type Table = "kinds" | "relations" | "attributes";
+type Table = "kinds" | "relations" | "attributes" | "roles";
 
 /* ── Keys ─────────────────────────────────────────────────────────────────────────────────────────────── */
 
@@ -51,7 +53,8 @@ type Table = "kinds" | "relations" | "attributes";
 export type MetaOp =
   | { op: "addKind"; nodeType: string; key: string; label: string; pluralLabel?: string; parentKey?: string | null; description?: string }
   | { op: "addRelationType"; key: string; label: string; inverseLabel: string; fromTypes?: string[]; toTypes?: string[]; symmetric?: boolean; category?: string }
-  | { op: "addAttribute"; nodeType: string; kindKey?: string | null; key: string; label: string; type: string };
+  | { op: "addAttribute"; nodeType: string; kindKey?: string | null; key: string; label: string; type: string }
+  | { op: "addRole"; key: string; label: string; pluralLabel?: string; preposition?: string; labelDa?: string; pluralLabelDa?: string; prepositionDa?: string; circle?: string | null; contextTypes?: string[]; parentKey?: string | null; description?: string };
 
 const ATTR_TYPES = new Set(["text", "longtext", "date", "number", "boolean", "enum", "email", "phone", "url"]);
 
@@ -67,6 +70,7 @@ export async function applyMetaOp(v: Viewer, op: MetaOp, ctx: { changeSetId?: st
   const origin = ctx.origin ?? "emergent";
   const now = new Date();
   const run = async () => db.transaction(async (tx) => {
+    if (op.op === "addRole") return applyMetaOpTx(tx, v, op, { ...ctx, status, origin });
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`my-graph:meta:${household}`}))`);
     if (op.op === "addKind") {
       const nodeType = op.nodeType as never;
@@ -145,6 +149,9 @@ export async function recordCandidates(v: Viewer, plan: DomainPlan, ctx: { chang
   for (const r of plan.relations.filter((r) => r.isNew)) {
     await applyMetaOp(v, { op: "addRelationType", key: r.key, label: r.label, inverseLabel: r.inverseLabel, fromTypes: r.fromTypes, toTypes: r.toTypes }, { ...ctx, status: "candidate" }); n++;
   }
+  for (const r of (plan.roles ?? []).filter((r) => r.isNew)) {
+    await applyMetaOp(v, { op: "addRole", key: r.key, label: r.label }, { ...ctx, status: "candidate" }); n++;
+  }
   for (const a of plan.attributes.filter((a) => a.newAttribute)) {
     const e = plan.entities.find((e) => e.ref === a.ref);
     if (!e) continue;
@@ -155,7 +162,7 @@ export async function recordCandidates(v: Viewer, plan: DomainPlan, ctx: { chang
 
 /* ── Deciding about candidates ────────────────────────────────────────────────────────────────────────── */
 
-const tables = { kinds: metaKinds, relations: metaRelations, attributes: metaAttributes } as const;
+const tables = { kinds: metaKinds, relations: metaRelations, attributes: metaAttributes, roles: metaRoles } as const;
 
 async function ownRow(v: Viewer, table: Table, id: string) {
   const t = tables[table];
@@ -194,6 +201,12 @@ export async function decideCandidate(v: Viewer, input: { table: Table; id: stri
       const r = await db.update(nodes).set({ kind: target.key, updatedAt: new Date() })
         .where(and(eq(nodes.graphId, graphId), eq(nodes.type, k.nodeType), eq(nodes.kind, k.key))).returning({ id: nodes.id });
       moved = r.length;
+    } else if (input.table === "roles") {
+      // Everyone holding the candidate role now holds the one it is merged into (the edges' relation moves).
+      const target = meta.roles.find((x) => x.key === into && !x.hidden);
+      if (!target) throw new MetaError(400, "Merge into a role this graph uses.");
+      const r = await db.update(edges).set({ relation: roleRelation(target.key) }).where(and(eq(edges.graphId, graphId), eq(edges.relation, roleRelation(row.key)))).returning({ id: edges.id });
+      moved = r.length;
     } else if (input.table === "relations") {
       const target = meta.relations.find((x) => x.key === into && !x.hidden);
       if (!target) throw new MetaError(400, "Merge into a relation this graph uses.");
@@ -222,6 +235,8 @@ export type ModelElement = {
   evidence: Evidence[]; firstSeenAt: string | null; graphOnly: boolean; origin: string;
   /** For candidates: existing elements it probably is (synonyms). */
   sameAs: { key: string; label: string }[];
+  /** Roles: Danish name, the circle holding it implies, and whether a relation already says it (parent ← parent_of). */
+  labelDa?: string | null; circle?: string | null; implied?: boolean;
 };
 
 export type ModelHistoryEntry = { at: string; what: string; label: string; table: Table | "other"; how: string; changeSetId: string | null };
@@ -229,17 +244,19 @@ export type ModelHistoryEntry = { at: string; what: string; label: string; table
 export type ModelOverview = {
   graphName: string; canDecide: boolean;
   emerging: ModelElement[]; inUse: ModelElement[]; quiet: ModelElement[]; history: ModelHistoryEntry[];
+  /** Every role this graph offers or uses, most held first. */
+  roles: ModelElement[];
 };
 
 /** Receipts for proposed meta ops in this graph, by "table:key". */
 async function evidenceFor(graphId: string): Promise<Map<string, Evidence[]>> {
   const rows = await db.select({ op: changes.op, payload: changes.payload, receipt: changes.receipt, setId: changes.changeSetId, at: changes.createdAt, origin: changeSets.origin, evidence: changeSets.evidence })
     .from(changes).innerJoin(changeSets, eq(changeSets.id, changes.changeSetId))
-    .where(and(eq(changes.graphId, graphId), inArray(changes.op, ["addKind", "addRelationType", "addAttribute"])))
+    .where(and(eq(changes.graphId, graphId), inArray(changes.op, ["addKind", "addRelationType", "addAttribute", "addRole"])))
     .orderBy(desc(changes.createdAt)).limit(400);
   const out = new Map<string, Evidence[]>();
   for (const r of rows) {
-    const table: Table = r.op === "addKind" ? "kinds" : r.op === "addRelationType" ? "relations" : "attributes";
+    const table: Table = r.op === "addKind" ? "kinds" : r.op === "addRelationType" ? "relations" : r.op === "addRole" ? "roles" : "attributes";
     const key = `${table}:${String(r.payload.key ?? "")}`;
     const rc = r.receipt as Record<string, unknown>, ev = r.evidence as Record<string, unknown>;
     const list = out.get(key) ?? [];
@@ -262,7 +279,31 @@ export async function modelOverview(v: Viewer): Promise<ModelOverview> {
     kindUse.set(k, [...(kindUse.get(k) ?? []), { id: n.id, label: n.label }]);
   }
   const relUse = new Map<string, number>();
-  for (const e of g.edges) relUse.set(e.relation, (relUse.get(e.relation) ?? 0) + 1);
+  const roleUse = new Map<string, { id: string; label: string }[]>();
+  const labelOf = new Map(g.nodes.map((n) => [n.id, n.label]));
+  for (const e of g.edges) {
+    if (e.status === "rejected" || e.status === "superseded") continue;
+    const rk = roleKeyOf(e.relation);
+    if (rk) {
+      const list = roleUse.get(rk) ?? [];
+      if (!list.some((x) => x.id === e.fromId)) list.push({ id: e.fromId, label: labelOf.get(e.fromId) ?? "" });
+      roleUse.set(rk, list);
+      continue;
+    }
+    relUse.set(e.relation, (relUse.get(e.relation) ?? 0) + 1);
+  }
+  // Roles a relation already says (parent ← parent_of) count where that relation is used.
+  for (const r of model.roles ?? []) {
+    if (!r.impliedBy) continue;
+    const [rel, dir] = r.impliedBy.split(":");
+    const list = roleUse.get(r.key) ?? [];
+    for (const e of g.edges) {
+      if (e.relation !== rel || e.status === "rejected" || e.status === "superseded") continue;
+      const holders = dir === "out" ? [e.fromId] : dir === "in" ? [e.toId] : [e.fromId, e.toId];
+      for (const id of holders) if (!list.some((x) => x.id === id)) list.push({ id, label: labelOf.get(id) ?? "" });
+    }
+    if (list.length) roleUse.set(r.key, list);
+  }
   const attrUse = new Map<string, number>();
   for (const n of g.nodes) for (const key of Object.keys(n.props ?? {})) attrUse.set(`${n.type}:${key}`, (attrUse.get(`${n.type}:${key}`) ?? 0) + 1);
 
@@ -286,13 +327,25 @@ export async function modelOverview(v: Viewer): Promise<ModelOverview> {
     evidence: evidence.get(`attributes:${a.key}`) ?? [], firstSeenAt: iso(a.firstSeenAt ?? a.createdAt), graphOnly: !!a.graphId, origin: a.origin, sameAs: [],
   });
 
+  const roleEl = (r: MetaRole): ModelElement => {
+    const ex = roleUse.get(r.key) ?? [];
+    const w = roleWords(r, "en", r.key);
+    return {
+      table: "roles", id: r.householdRowId ?? r.id, key: r.key, label: r.label, detail: r.description ?? `${w.label} ${w.preposition} …`, nodeType: null,
+      status: r.hidden && r.status !== "candidate" ? "hidden" : r.status ?? "active", source: r.source ?? "builtin", usage: ex.length, examples: ex.slice(0, 4), evidenceCount: r.evidenceCount ?? 0,
+      evidence: evidence.get(`roles:${r.key}`) ?? [], firstSeenAt: iso(r.firstSeenAt ?? r.createdAt), graphOnly: !!r.graphId, origin: r.origin, sameAs: [],
+      labelDa: r.labelDa, circle: r.circle, implied: !!r.impliedBy,
+    };
+  };
+
   // Emerging: candidates, with the elements they are probably the same as.
-  const c = model.candidates ?? { kinds: [], relations: [], attributes: [] };
-  const emerging = [...c.kinds.map(kindEl), ...c.relations.map(relEl), ...c.attributes.map(attrEl)];
-  const active = { kinds: model.kinds.filter((k) => !k.hidden), relations: model.relations.filter((r) => !r.hidden) };
+  const c = model.candidates ?? { kinds: [], relations: [], attributes: [], roles: [] };
+  const emerging = [...c.kinds.map(kindEl), ...c.relations.map(relEl), ...c.attributes.map(attrEl), ...(c.roles ?? []).map(roleEl)];
+  const active = { kinds: model.kinds.filter((k) => !k.hidden), relations: model.relations.filter((r) => !r.hidden), roles: (model.roles ?? []).filter((r) => !r.hidden) };
   for (const e of emerging) {
     const pool = e.table === "kinds" ? active.kinds.filter((k) => k.nodeType === e.nodeType).map((k) => ({ id: k.key, label: k.label }))
-      : e.table === "relations" ? active.relations.map((r) => ({ id: r.key, label: r.label })) : [];
+      : e.table === "relations" ? active.relations.map((r) => ({ id: r.key, label: r.label }))
+      : e.table === "roles" ? active.roles.map((r) => ({ id: r.key, label: r.label })) : [];
     e.sameAs = synonymPairs([{ id: "__me", label: e.label }, ...pool]).filter((p) => p.a === "__me").map((p) => pool.find((x) => x.id === p.b)!).map((x) => ({ key: x.id, label: x.label })).slice(0, 3);
   }
   emerging.sort((a, b) => b.evidenceCount - a.evidenceCount || a.label.localeCompare(b.label));
@@ -301,18 +354,21 @@ export async function modelOverview(v: Viewer): Promise<ModelOverview> {
     ...model.kinds.filter((k) => !k.hidden || (kindUse.get(`${k.nodeType}:${k.key}`)?.length ?? 0) > 0).map(kindEl),
     ...model.relations.filter((r) => !r.hidden || (relUse.get(r.key) ?? 0) > 0).map(relEl),
     ...model.attributes.filter((a) => !a.hidden && a.source !== "builtin").map(attrEl),
+    ...(model.roles ?? []).filter((r) => !r.offTemplate || (roleUse.get(r.key)?.length ?? 0) > 0).map(roleEl),
   ];
-  const inUse = all.filter((e) => e.usage > 0).sort((a, b) => b.usage - a.usage);
-  const quiet = all.filter((e) => e.usage === 0 && e.table !== "attributes");
+  const inUse = all.filter((e) => e.usage > 0 && e.table !== "roles").sort((a, b) => b.usage - a.usage);
+  // Unused built-in roles are the model's vocabulary, not something gone quiet: they are listed in the editor.
+  const quiet = all.filter((e) => e.usage === 0 && e.table !== "attributes" && !(e.table === "roles" && e.source === "builtin"));
+  const roles = all.filter((e) => e.table === "roles").sort((a, b) => b.usage - a.usage || a.label.localeCompare(b.label));
 
   // History: when each element appeared (from the rows), plus recorded model events.
-  const own = [...model.kinds, ...model.relations, ...model.attributes, ...c.kinds, ...c.relations, ...c.attributes].filter((x) => x.householdRowId && x.source !== "builtin");
+  const own = [...model.kinds, ...model.relations, ...model.attributes, ...(model.roles ?? []), ...c.kinds, ...c.relations, ...c.attributes, ...(c.roles ?? [])].filter((x) => x.householdRowId && x.source !== "builtin");
   const history: ModelHistoryEntry[] = own.map((x) => {
-    const table: Table = "nodeType" in x ? ("kindKey" in x ? "attributes" : "kinds") : "relations";
+    const table: Table = "preposition" in x ? "roles" : "nodeType" in x ? ("kindKey" in x ? "attributes" : "kinds") : "relations";
     const how = x.source === "template" ? "Came with this graph's template"
       : x.source === "emergent" ? (x.status === "candidate" ? "Proposed from what this graph learned" : x.status === "hidden" ? "Proposed, then hidden" : "Grew from what this graph learned")
       : "Added by hand";
-    return { at: iso(x.firstSeenAt ?? x.createdAt) ?? new Date(0).toISOString(), what: table === "kinds" ? "Kind" : table === "relations" ? "Relation" : "Detail", label: x.label, table, how, changeSetId: x.changeSetId ?? null };
+    return { at: iso(x.firstSeenAt ?? x.createdAt) ?? new Date(0).toISOString(), what: table === "kinds" ? "Kind" : table === "relations" ? "Relation" : table === "roles" ? "Role" : "Detail", label: x.label, table, how, changeSetId: x.changeSetId ?? null };
   });
   const events = await historyOf(v, { limit: 200 }).catch(() => []);
   for (const e of events.filter((e) => e.subjectType === "meta")) {
@@ -321,5 +377,5 @@ export async function modelOverview(v: Viewer): Promise<ModelOverview> {
   }
   history.sort((a, b) => b.at.localeCompare(a.at));
 
-  return { graphName: v.graphName, canDecide: canDecideModel(v), emerging, inUse, quiet, history: history.slice(0, 60) };
+  return { graphName: v.graphName, canDecide: canDecideModel(v), emerging, inUse, quiet, roles, history: history.slice(0, 60) };
 }

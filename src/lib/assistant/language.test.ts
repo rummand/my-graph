@@ -58,9 +58,9 @@ describe("chat prompt framing per graph kind", () => {
     expect(languageUnclear("What is due this week?")).toBe(false);
     expect(languageUnclear("Hvornår er mødet?")).toBe(false);
     const short = buildMessages({ ...base, graphKind: "work", locale: "da", context: "", history: [], question: "SAP?" });
-    expect(String(short[0].content)).toContain("Write this answer in Danish");
+    expect(String(short.at(-1)!.content)).toContain("Write this answer in Danish");
     const long = buildMessages({ ...base, graphKind: "work", locale: "da", context: "", history: [], question: "When does SAP support end?" });
-    expect(String(long[0].content)).not.toContain("Write this answer in Danish");
+    expect(String(long.at(-1)!.content)).not.toContain("Write this answer in Danish");
   });
   it("writes unattended runs in the person's language whatever the prompt is in", () => {
     const p = systemPrompt({ ...base, graphKind: "work", locale: "da", answerInLocale: true, unattended: true });

@@ -13,6 +13,7 @@
  * Everything else (other people's issues, closed work, comments) stays in the source and the batch says so.
  * Nothing is written: every op carries a receipt pointing at its passage. Outside text is data, never instructions.
  */
+import { roleRelation } from "@/lib/meta/roles";
 import { z } from "zod";
 import type { ChangeInput, Receipt } from "@/lib/changes";
 import type { TextSegment } from "@/lib/ingest/chunk";
@@ -314,6 +315,14 @@ export function planWork(batch: WorkBatch, ctx: ImportContext): ImportPlan {
       if (i.projectId && projectIds.has(i.projectId)) addEdge(node, "works_on", projectIds.get(i.projectId)!, receipt(ctx, b));
       if (scopeType === "project") addEdge(node, "works_on", scopeId, receipt(ctx, b));
       else addEdge(node, "member_of", scopeId, receipt(ctx, b));
+      // Working together on it is a role they hold there (a colleague on the team or project), never a kind of person.
+      if (id !== meId) {
+        const rk = edgeKey(node, roleRelation("colleague"), scopeId);
+        if (!ctx.existingEdges.has(rk) && !seenEdges.has(rk)) {
+          seenEdges.add(rk);
+          edgeOps.push({ op: "addEdge", fromId: node, toId: scopeId, relation: roleRelation("colleague"), status: "unconfirmed", confidence: 0.6, receipt: receipt(ctx, b) });
+        }
+      }
     }
   }
 

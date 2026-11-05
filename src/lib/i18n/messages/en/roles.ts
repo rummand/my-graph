@@ -1,0 +1,56 @@
+import type { MessageTree } from "../../core";
+
+/** "roles" namespace (en): roles people hold (doctor at …, class teacher of …) and the role conversion. t("roles.<key>"). */
+const messages: MessageTree = {
+  line: {
+    title: "Roles:",
+    since: "since {year}",
+    until: "until {year}",
+    fromTo: "{from}–{to}",
+    unconfirmed: "Not confirmed yet",
+    more: "and {count} more",
+  },
+  model: {
+    title: "Roles people hold",
+    lead: "A role is what someone is or does for someone or somewhere: a doctor at a clinic, the class teacher of 3.B, a client of the practice. People can hold several, and a role can end. Roles grow from what this graph reads, like kinds and relations.",
+    aRole: "a role",
+    heldBy: { one: "Held by {count} person", other: "Held by {count} people" },
+    andMore: " and {count} more",
+    nobody: "Nobody holds it yet",
+    noneHeld: "Nobody holds a role yet. When the graph reads that someone is a teacher, a doctor or a colleague, it proposes the role here.",
+    implied: "Read from family relations",
+    circle: "Puts people in {circle}",
+    showAll: "Show all {count}",
+    onlyHeld: "Only roles in use",
+    hide: "Hide",
+    show: "Show again",
+    hidden: "{name} is hidden. People who hold it keep it.",
+    shown: "{name} is back.",
+    newRole: "New role",
+    name: "Name",
+    namePlaceholder: "Football coach",
+    nameDa: "Name in Danish",
+    preposition: "Word before where",
+    prepositionHint: "“at” in “coach at B93”",
+    circleLabel: "Puts people in",
+    add: "Add role",
+    added: "{name} is a role people can hold now.",
+  },
+  convert: {
+    title: "Kinds that are really roles",
+    lead: "People used to get one kind, like Doctor or Colleague. Those are roles: someone can hold several, somewhere, for a time. My Graph can propose turning them into roles, and tidy up “people” that were only a role, like “the teacher” or “Speaker 2”. Nothing changes until you deliver the proposal.",
+    look: "Look for roles",
+    looking: "Looking…",
+    none: "Nothing to change: every kind here already says who someone is.",
+    itemRole: "becomes a role: {role}",
+    itemContext: "becomes a role: {role} for {where}",
+    itemImplied: "is {role} already (a family relation says so); the kind goes",
+    itemMerge: "names a role, not a person: merge into {name}",
+    itemRetire: "names a role, not a person: retire it",
+    propose: "Propose these changes",
+    proposed: "Proposed. Nothing changes until it is delivered.",
+    review: "Review the proposal",
+  },
+};
+
+export default messages;
