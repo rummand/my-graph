@@ -35,17 +35,23 @@ function head(set: SetInfo, lang: string): string[] {
   ];
 }
 
-/** Pass 2: read one passage (whole units) and list its rules and definitions. */
+/**
+ * Pass 2: read one passage (whole units) and list its rules and definitions. The system prompt is the same for every
+ * passage of a run (cached by the model between calls); the passage's units and the passage itself come last.
+ */
 export function extractMessages(input: { set: SetInfo; sourceTitle: string; passage: string; units: { key: string; label: string }[]; locale: string; known: string[] }): MuxMessage[] {
   const lang = LANG[input.locale] ?? "English";
   const system = [
     "You read one passage of a body of rules and list every rule in it, so that nothing in the passage is missed.",
     ...head(input.set, lang),
+    "Answer with JSON only: { \"rules\": [ { \"unit\", \"ref\", \"title\", \"text\", \"modality\", \"quote\", \"check_hint\", \"severity\", \"confidence\" } ], \"definitions\": [ { \"unit\", \"term\", \"text\", \"quote\" } ] }. Empty lists are fine.",
+  ].join("\n");
+  const user = [
     `The units in this passage are: ${input.units.slice(0, 120).map((u) => u.key).join("; ")}.`,
     input.known.length ? `Already read from other passages (do not repeat): ${input.known.slice(0, 40).join("; ")}.` : "",
-    "Answer with JSON only: { \"rules\": [ { \"unit\", \"ref\", \"title\", \"text\", \"modality\", \"quote\", \"check_hint\", \"severity\", \"confidence\" } ], \"definitions\": [ { \"unit\", \"term\", \"text\", \"quote\" } ] }. Empty lists are fine.",
+    `Source: ${input.sourceTitle}\n<legal-text>\n${fence(input.passage)}\n</legal-text>`,
   ].filter(Boolean).join("\n");
-  return [{ role: "system", content: system }, { role: "user", content: `Source: ${input.sourceTitle}\n<legal-text>\n${fence(input.passage)}\n</legal-text>` }];
+  return [{ role: "system", content: system }, { role: "user", content: user }];
 }
 
 /** Pass 3: read one unit again, knowing what was found, and find what was missed (or say why there is nothing). */
@@ -55,13 +61,16 @@ export function rereadMessages(input: { set: SetInfo; sourceTitle: string; passa
   const system = [
     "You check a reading of one part of a body of rules for completeness. Read it again, slowly, sentence by sentence.",
     ...head(input.set, lang),
+    "Return only what is missing: rules and definitions not yet found. For every unit that truly holds no rule and no definition, add it to no_rule with a reason: purpose, heading, commencement, repeal, amendment, authorisation (it lets an authority make rules), procedure, or a short reason of your own.",
+    "Answer with JSON only: { \"rules\": [ … as above … ], \"definitions\": [ … ], \"no_rule\": [ { \"unit\", \"reason\" } ] }.",
+  ].join("\n");
+  const user = [
     `The units here are: ${input.units.map((u) => u.key).join("; ")}.`,
     flagged.length ? `These units have wording about definitions, scope, exceptions, deadlines or penalties; make sure each is covered: ${flagged.join("; ")}.` : "",
     input.found.length ? `Already found here (do not repeat these): ${input.found.slice(0, 40).join("; ")}.` : "Nothing has been found here yet.",
-    "Return only what is missing: rules and definitions not yet found. For every unit that truly holds no rule and no definition, add it to no_rule with a reason: purpose, heading, commencement, repeal, amendment, authorisation (it lets an authority make rules), procedure, or a short reason of your own.",
-    "Answer with JSON only: { \"rules\": [ … as above … ], \"definitions\": [ … ], \"no_rule\": [ { \"unit\", \"reason\" } ] }.",
+    `Source: ${input.sourceTitle}\n<legal-text>\n${fence(input.passage)}\n</legal-text>`,
   ].filter(Boolean).join("\n");
-  return [{ role: "system", content: system }, { role: "user", content: `Source: ${input.sourceTitle}\n<legal-text>\n${fence(input.passage)}\n</legal-text>` }];
+  return [{ role: "system", content: system }, { role: "user", content: user }];
 }
 
 /** Pass 4: what it means, per chapter and for the whole set, and what stays open. From the rules read, not the raw text. */

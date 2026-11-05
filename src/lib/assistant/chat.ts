@@ -77,7 +77,7 @@ export type TurnUsage = {
   prompt: number; completion: number; cached: number; calls: number;
   answer: { prompt: number; completion: number; cached: number; rounds: number };
   /** Per agent ("my-graph:tools", "my-graph:chat-title" …). */
-  agents: Record<string, { prompt: number; completion: number; cached: number; calls: number }>;
+  agents: Record<string, { prompt: number; completion: number; cached: number; calls: number; ms: number }>;
 };
 
 /** The turn's calls summed; `answer` is the answer model alone (its rounds), the rest is titles and tool plans. */
@@ -88,7 +88,7 @@ export function turnUsage(calls: mux.UsageRecord[]): TurnUsage {
   return {
     prompt: all.promptTokens, completion: all.completionTokens, cached: all.cachedTokens, calls: all.calls,
     answer: { prompt: a.promptTokens, completion: a.completionTokens, cached: a.cachedTokens, rounds: a.calls },
-    agents: Object.fromEntries(Object.entries(all.byAgent).map(([k, x]) => [k, { prompt: x.promptTokens, completion: x.completionTokens, cached: x.cachedTokens, calls: x.calls }])),
+    agents: Object.fromEntries(Object.entries(all.byAgent).map(([k, x]) => [k, { prompt: x.promptTokens, completion: x.completionTokens, cached: x.cachedTokens, calls: x.calls, ms: x.ms }])),
   };
 }
 

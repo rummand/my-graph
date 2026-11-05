@@ -77,7 +77,7 @@ export function RuleCard({ r, canManage, replaces, onDecide, onEdit, onRetire, b
     );
   }
   return (
-    <article className={clsx("rounded-lg p-4", proposed ? "bg-warn-tint/40" : "bg-surface", retired && "opacity-60")} aria-label={`${r.ref} ${r.title}`}>
+    <article id={`rule-${r.id}`} className={clsx("scroll-mt-24 rounded-lg p-4 target:ring-2 target:ring-accent", proposed ? "bg-warn-tint/40" : "bg-surface", retired && "opacity-60")} aria-label={`${r.ref} ${r.title}`}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <span className="font-medium">{r.ref}</span>
         <span className="text-fg">{r.title}</span>

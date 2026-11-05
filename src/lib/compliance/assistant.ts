@@ -58,9 +58,11 @@ export async function checkAnswer(v: Viewer, messageId: string, opts: { corpusId
   if (!t.text.trim()) return null;
   const { picked } = await corporaFor(v, { targetType: "message" }, messageId, opts.corpusIds ?? null);
   if (!picked.length) return null;
+  // affinity = the conversation: its answers are checked one after another against much the same rules (cached).
+  const [m] = await db.select({ conversationId: messages.conversationId }).from(messages).where(eq(messages.id, messageId)).limit(1);
   const result = await checkText(v, {
     text: t.text, targetType: "message", targetId: messageId,
-    context: { sensitive: t.sensitive, missing: false, corpusIds: opts.corpusIds ?? null },
+    context: { sensitive: t.sensitive, missing: false, corpusIds: opts.corpusIds ?? null, affinity: m ? `compliance:chat:${m.conversationId}` : null },
   });
   if (result.status !== "skipped" && result.status !== "unavailable") {
     const [row] = await db.select({ steps: messages.steps }).from(messages).where(eq(messages.id, messageId)).limit(1);

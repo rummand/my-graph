@@ -18,7 +18,7 @@ export { liveNodeSql } from "./access";
 export { isRetired } from "./pure";
 import {
   clamp01, defaultEdgeStatus, findMergePairs, isRetired, mergeAliases, namesMatch, narrowerVisibility, normalizeLabel,
-  normalizeRelation, noisyOr, rrfFuse, statusAfterReassert, toAnyPrefixTsQuery, toPrefixTsQuery, vectorLiteral,
+  isRelevant, normalizeRelation, noisyOr, rrfFuse, statusAfterReassert, toAnyPrefixTsQuery, toPrefixTsQuery, vectorLiteral,
 } from "./pure";
 import { ensureSearchIndexesOnce } from "./setup";
 import { afterCommit, ambientTx } from "@/lib/history/context";
@@ -77,6 +77,11 @@ export type EdgeInput = {
 
 export type SearchHit = {
   kind: "node" | "chunk"; score: number;
+  /**
+   * How it matched: `sim` the cosine similarity to the question (null when it wasn't among the nearest), `kw` whether
+   * every word of the question matched ("all"), only some of them ("any"), or none (null).
+   */
+  sim?: number | null; kw?: "all" | "any" | null;
   node?: GNode;
   chunk?: { id: string; sourceId: string; sourceTitle: string; text: string; locator: Locator };
 };
@@ -704,8 +709,12 @@ export async function agentNames(v: Viewer, provs: Pick<GProvenance, "agentType"
   return out;
 }
 
-/** Hybrid search (Postgres full-text + pgvector cosine, fused by RRF) over nodes and source chunks the viewer may see. */
-export async function search(v: Viewer, query: string, opts?: { limit?: number; types?: NodeType[] }): Promise<SearchHit[]> {
+/**
+ * Hybrid search (Postgres full-text + pgvector cosine, fused by RRF) over nodes and source chunks the viewer may see.
+ * `relevant`: drop hits that only made the lists by rank — see `isRelevant` (the assistant's retrieval uses it; the
+ * search box keeps everything, ranked).
+ */
+export async function search(v: Viewer, query: string, opts?: { limit?: number; types?: NodeType[]; relevant?: boolean }): Promise<SearchHit[]> {
   const q = query.trim().slice(0, 500);
   if (!q) return [];
   const limit = Math.min(Math.max(opts?.limit ?? 10, 1), 50);
@@ -725,26 +734,44 @@ export async function search(v: Viewer, query: string, opts?: { limit?: number; 
       sql`coalesce(${chunks.search}, to_tsvector('simple', ${chunks.text})) @@ to_tsquery('simple', ${tq})`))
     .orderBy(sql`ts_rank(coalesce(${chunks.search}, to_tsvector('simple', ${chunks.text})), to_tsquery('simple', ${tq})) desc`)
     .limit(per)).map((r) => r.id);
-  const withFallback = async (fn: (tq: string) => Promise<string[]>) => {
+  /** Every word first; when nothing has them all, any word (marked "any": weaker evidence). */
+  const withFallback = async (fn: (tq: string) => Promise<string[]>): Promise<{ ids: string[]; kw: "all" | "any" }> => {
     const all = toPrefixTsQuery(q);
-    if (!all) return [];
+    if (!all) return { ids: [], kw: "all" };
     const hits = await fn(all);
     const any = toAnyPrefixTsQuery(q);
-    return hits.length || !any || any === all ? hits : fn(any);
+    return hits.length || !any || any === all ? { ids: hits, kw: "all" } : { ids: await fn(any), kw: "any" };
   };
+  const simCol = (col: typeof nodes.embedding | typeof chunks.embedding) => sql<number>`1 - (${col} <=> ${vec}::vector)`;
 
   const [nText, nVec, cText, cVec] = await Promise.all([
     withFallback(nodeText),
-    vec ? db.select({ id: nodes.id }).from(nodes).where(and(nodeWhere, isNotNull(nodes.embedding)))
-      .orderBy(sql`${nodes.embedding} <=> ${vec}::vector`).limit(per).then((r) => r.map((x) => x.id)) : Promise.resolve([]),
-    includeChunks ? withFallback(chunkText) : Promise.resolve([]),
-    includeChunks && vec ? db.select({ id: chunks.id }).from(chunks).innerJoin(sources, eq(sources.id, chunks.sourceId))
+    vec ? db.select({ id: nodes.id, sim: simCol(nodes.embedding) }).from(nodes).where(and(nodeWhere, isNotNull(nodes.embedding)))
+      .orderBy(sql`${nodes.embedding} <=> ${vec}::vector`).limit(per) : Promise.resolve([]),
+    includeChunks ? withFallback(chunkText) : Promise.resolve({ ids: [] as string[], kw: "all" as const }),
+    includeChunks && vec ? db.select({ id: chunks.id, sim: simCol(chunks.embedding) }).from(chunks).innerJoin(sources, eq(sources.id, chunks.sourceId))
       .where(and(sourceReadSql(ctx, "sources"), ctx.graphId ? eq(chunks.graphId, ctx.graphId) : sql`false`, isNotNull(chunks.embedding)))
-      .orderBy(sql`${chunks.embedding} <=> ${vec}::vector`).limit(per).then((r) => r.map((x) => x.id)) : Promise.resolve([]),
+      .orderBy(sql`${chunks.embedding} <=> ${vec}::vector`).limit(per) : Promise.resolve([]),
   ]);
 
+  const sims = new Map<string, number>([...nVec.map((r) => [`node:${r.id}`, Number(r.sim)] as const), ...cVec.map((r) => [`chunk:${r.id}`, Number(r.sim)] as const)]);
+  const kws = new Map<string, "all" | "any">([...nText.ids.map((id) => [`node:${id}`, nText.kw] as const), ...cText.ids.map((id) => [`chunk:${id}`, cText.kw] as const)]);
+  if (opts?.relevant && vec) {
+    // Keyword hits that weren't among the nearest: how close are they? (Needed to judge an "any word" match.)
+    const nMissing = nText.ids.filter((id) => !sims.has(`node:${id}`));
+    const cMissing = cText.ids.filter((id) => !sims.has(`chunk:${id}`));
+    const [nS, cS] = await Promise.all([
+      nMissing.length ? db.select({ id: nodes.id, sim: simCol(nodes.embedding) }).from(nodes).where(and(inArray(nodes.id, nMissing), isNotNull(nodes.embedding))) : Promise.resolve([]),
+      cMissing.length ? db.select({ id: chunks.id, sim: simCol(chunks.embedding) }).from(chunks).where(and(inArray(chunks.id, cMissing), isNotNull(chunks.embedding))) : Promise.resolve([]),
+    ]);
+    for (const r of nS) sims.set(`node:${r.id}`, Number(r.sim));
+    for (const r of cS) sims.set(`chunk:${r.id}`, Number(r.sim));
+  }
   const tag = (kind: "node" | "chunk", ids: string[]) => ids.map((id) => ({ key: `${kind}:${id}`, item: { kind, id } }));
-  const fused = rrfFuse([tag("node", nText), tag("node", nVec), tag("chunk", cText), tag("chunk", cVec)]).slice(0, limit);
+  let fused = rrfFuse([tag("node", nText.ids), tag("node", nVec.map((r) => r.id)), tag("chunk", cText.ids), tag("chunk", cVec.map((r) => r.id))]);
+  // Without a vector (mux down) keyword matches are all there is: keep them.
+  if (opts?.relevant && vec) fused = fused.filter((f) => isRelevant({ kind: f.item.kind, sim: sims.get(f.key) ?? null, kw: kws.get(f.key) ?? null }));
+  fused = fused.slice(0, limit);
 
   const nodeIds = fused.filter((f) => f.item.kind === "node").map((f) => f.item.id);
   const chunkIds = fused.filter((f) => f.item.kind === "chunk").map((f) => f.item.id);
@@ -759,8 +786,9 @@ export async function search(v: Viewer, query: string, opts?: { limit?: number; 
   const hits: SearchHit[] = [];
   for (const f of fused) {
     const score = Math.round(f.score * 1e6) / 1e6;
-    if (f.item.kind === "node") { const node = nMap.get(f.item.id); if (node) hits.push({ kind: "node", score, node }); }
-    else { const chunk = cMap.get(f.item.id); if (chunk) hits.push({ kind: "chunk", score, chunk }); }
+    const how = { sim: sims.has(f.key) ? Math.round(sims.get(f.key)! * 1000) / 1000 : null, kw: kws.get(f.key) ?? null };
+    if (f.item.kind === "node") { const node = nMap.get(f.item.id); if (node) hits.push({ kind: "node", score, ...how, node }); }
+    else { const chunk = cMap.get(f.item.id); if (chunk) hits.push({ kind: "chunk", score, ...how, chunk }); }
   }
   return hits;
 }

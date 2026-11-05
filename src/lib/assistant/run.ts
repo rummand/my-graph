@@ -77,7 +77,7 @@ export async function runTask(v: Viewer, input: TaskInput): Promise<TaskResult> 
   const canWrite = scopeOf(v).canWrite;
   const memOk = memoryAllowedFor(v);
 
-  const toolsPromise = safe(runMcpTools(v, { question: prompt, today: longDay(now, tz), readOnly: true, sensitive: false, traceId: input.runId }),
+  const toolsPromise = safe(runMcpTools(v, { question: prompt, today: longDay(now, tz), readOnly: true, sensitive: false, traceId: input.runId, alwaysPlan: true }),
     { steps: [], context: "", approvals: [], hints: [] }, "MCP tools");
   const [found0, mem] = await Promise.all([
     safe(retrieve(v, prompt, { tz, now, flags }), { items: [], hits: 0, people: [] }, "retrieve"),

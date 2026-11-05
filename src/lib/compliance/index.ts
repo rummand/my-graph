@@ -6,8 +6,9 @@
  * Cost, per check:
  *   - one embedding call (mux `embed`) for the text, used to pick the closest rules when a graph has more than
  *     RULE_CAP of them; cached by text;
- *   - at most one `smart` call for the paragraphs that changed since they were last checked (at most PARA_CAP of them,
- *     1500 characters each) — unchanged paragraphs come from the cache, keyed by their words, the rule set version
+ *   - at most one `smart` call (`fast` with a small cap for chat answers) for the paragraphs that changed since they
+ *     were last checked (at most PARA_CAP of them, 1500 characters each); the prompt puts the instructions and the
+ *     rules (in a stable order) first and the text last, so the model's prompt cache keeps them between checks — unchanged paragraphs come from the cache, keyed by their words, the rule set version
  *     and the reader's language;
  *   - at most one `smart` call for "missing" obligations over the whole text, cached by the whole text and asked at
  *     most once a minute per target while someone is typing.
@@ -26,7 +27,7 @@ import { sourceVisibleTo } from "@/lib/ingest/access";
 import { activeRules, readScope, structuralScope, type ActiveRule, type CorpusScope, type TargetType } from "@/lib/corpus";
 import { checkMessages, missingMessages, type PromptRule } from "./prompt";
 import {
-  acceptProblem, countFindings, dropRedundantMissing, paragraphKey, parseVerdicts, pickCorpora, reconcile, ruleSetVersion, scopeApplies, selectRules, shiftFindings, TtlCache,
+  acceptProblem, countFindings, dropRedundantMissing, paragraphKey, parseVerdicts, pickCorpora, reconcile, ruleSetVersion, scopeApplies, nothingClose, selectRules, shiftFindings, TtlCache,
   type CheckContext, type Counts, type FreshFinding, type Span,
 } from "./pure";
 import { hashText, splitParagraphs, type Paragraph } from "./text";
@@ -113,8 +114,33 @@ export type CheckInput = {
     persist?: boolean;
     /** Map spans back onto blocks (documents). */
     blockOf?: (offset: number) => string | null;
+    /** mux affinity: checks that share it stay on one model, whose prompt cache keeps the rules (default: the target). */
+    affinity?: string | null;
   };
 };
+
+/**
+ * Which model and how much room. A chat answer is checked after every turn and almost always passes ({"findings":[]},
+ * ~8 tokens): a fast model with a small cap (one finding fits); when findings don't fit, the same prompt is asked
+ * again with room — the model's prompt cache holds all of it by then, so only the answer costs anything. Pages and
+ * documents keep the larger model.
+ */
+type Ask = { route: mux.MuxRoute; maxTokens: number; roomy?: number };
+function askFor(targetType: TargetType): { paragraphs: Ask; missing: Ask } {
+  if (targetType === "message") return { paragraphs: { route: "fast", maxTokens: 300, roomy: 2500 }, missing: { route: "fast", maxTokens: 300, roomy: 1500 } };
+  return { paragraphs: { route: "smart", maxTokens: 2500 }, missing: { route: "smart", maxTokens: 1500 } };
+}
+
+/** One JSON answer: capped first; cut off (it doesn't parse) → the same messages again with room, then as before. */
+async function askJson<T>(ask: Ask, messages: mux.MuxMessage[], meta: mux.MuxCallMeta, parse: (raw: unknown) => T): Promise<T> {
+  if (ask.roomy) {
+    const first = await mux.complete({ route: ask.route, maxTokens: ask.maxTokens, temperature: 0, json: true, messages, meta });
+    try { return parse(JSON.parse(stripFence(first.text))); } catch { /* cut off or not JSON: ask again with room */ }
+  }
+  return mux.completeJson({ route: ask.route, maxTokens: ask.roomy ?? ask.maxTokens, messages, meta, parse });
+}
+
+const stripFence = (t: string) => t.replace(/^\s*```(?:json)?\s*|\s*```\s*$/gi, "").trim();
 
 const toPromptRules = (rules: ActiveRule[]): PromptRule[] => rules.map((r, i) => ({ n: i + 1, ref: r.ref, corpus: r.corpusName, modality: r.modality, text: r.text, quote: r.quote, checkHint: r.checkHint }));
 
@@ -137,7 +163,11 @@ export async function checkText(v: Viewer, input: CheckInput): Promise<CheckResu
   const text = input.text.slice(0, 60_000);
   const paragraphs = splitParagraphs(text).slice(0, 120);
   const ruleSet = ruleSetVersion(picked);
-  const meta: mux.MuxCallMeta = { userId: v.id, agent: "my-graph:compliance", graphId: v.graphId, sensitive: !!ctxIn.sensitive, traceId: targetId ?? undefined };
+  const meta: mux.MuxCallMeta = {
+    userId: v.id, agent: "my-graph:compliance", graphId: v.graphId, sensitive: !!ctxIn.sensitive, traceId: targetId ?? undefined,
+    affinity: ctxIn.affinity ?? (targetId ? `compliance:${input.targetType}:${targetId}` : `compliance:${v.graphId}`),
+  };
+  const ask = askFor(input.targetType);
 
   // The rules: all of them when there are few, else the closest to this text.
   const vecKey = hashText("v", text.slice(0, 4000));
@@ -150,7 +180,9 @@ export async function checkText(v: Viewer, input: CheckInput): Promise<CheckResu
     const s = structuralScope(r.appliesTo as CorpusScope);
     return !Object.keys(s).length || scopeApplies(s, ctx);
   });
-  const rules = selectRules(candidates, RULE_CAP);
+  // A chat answer that no rule is close to (most of them: "Emma swims on Tuesdays") isn't sent to the model.
+  const unrelated = input.targetType === "message" && !!vec && !ctxIn.corpusIds?.length && nothingClose(candidates.map((r) => r.score));
+  const rules = unrelated ? [] : selectRules(candidates, RULE_CAP);
   const ruleIds = rules.map((r) => r.id);
 
   const [run] = await db.insert(complianceRuns).values({
@@ -175,11 +207,8 @@ export async function checkText(v: Viewer, input: CheckInput): Promise<CheckResu
       cost.paragraphs = misses.length;
       if (misses.length) {
         const prompt = toPromptRules(rules);
-        const found = await mux.completeJson({
-          route: "smart", maxTokens: 2500, meta,
-          messages: checkMessages({ rules: prompt, paragraphs: misses, locale, targetType: input.targetType, title: ctxIn.title }),
-          parse: (raw) => parseVerdicts(raw, { paragraphs: misses, fullText: text, ruleIds, refs: rules.map((r) => `${r.corpusName} ${r.ref}`) }),
-        });
+        const found = await askJson(ask.paragraphs, checkMessages({ rules: prompt, paragraphs: misses, locale, targetType: input.targetType, title: ctxIn.title }), meta,
+          (raw) => parseVerdicts(raw, { paragraphs: misses, fullText: text, ruleIds, refs: rules.map((r) => `${r.corpusName} ${r.ref}`) }));
         cost.muxCalls++;
         for (const p of misses) {
           const mine = found.filter((f) => f.paragraphKey === p.key);
@@ -204,11 +233,8 @@ export async function checkText(v: Viewer, input: CheckInput): Promise<CheckResu
       else if (Date.now() - last < MISSING_EVERY_MS) missingSkipped = true;
       else {
         caches.lastMissing.set(throttleKey, Date.now());
-        const found = await mux.completeJson({
-          route: "smart", maxTokens: 1500, meta,
-          messages: missingMessages({ rules: toPromptRules(obligations), text, locale, targetType: input.targetType, title: ctxIn.title }),
-          parse: (raw) => parseVerdicts(raw, { paragraphs, fullText: text, ruleIds: oIds, allowMissing: true, refs: obligations.map((r) => `${r.corpusName} ${r.ref}`) }).filter((f) => f.verdict === "missing"),
-        });
+        const found = await askJson(ask.missing, missingMessages({ rules: toPromptRules(obligations), text, locale, targetType: input.targetType, title: ctxIn.title }), meta,
+          (raw) => parseVerdicts(raw, { paragraphs, fullText: text, ruleIds: oIds, allowMissing: true, refs: obligations.map((r) => `${r.corpusName} ${r.ref}`) }).filter((f) => f.verdict === "missing"));
         cost.muxCalls++;
         caches.missing.set(mKey, found);
         fresh.push(...found);

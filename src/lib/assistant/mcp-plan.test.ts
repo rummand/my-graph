@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  approvalExpired, approvalHint, countItems, displayToolText, stripToolMarks, MAX_CALLS, mcpContextText, mcpStep, nounOf, parsePlan, planMessages, plannable, schemaLine,
+  approvalExpired, approvalHint, countItems, displayToolText, stripToolMarks, MAX_CALLS, mcpContextText, mcpStep, needsToolPlan, nounOf, parsePlan, planMessages, plannable, schemaLine,
   type PlanTool,
 } from "./mcp-plan";
 import { decodeState, encodeState, foldState } from "./state";
@@ -123,5 +123,37 @@ describe("approval cards are kept with the answer", () => {
     const s = foldState([raw, encodeState({ type: "sensitive" })]);
     expect(s.mcp.get("m1")).toEqual([approval]);
     expect(s.sensitive).toBe(true);
+  });
+});
+
+describe("needsToolPlan", () => {
+  const record = [
+    "search_meetings", "list_meetings", "get_meeting", "ask_meetings", "list_todos", "add_todo", "complete_todo", "get_meeting_timeline", "list_people", "get_person", "get_meeting_audio",
+  ].map((n) => ({ connection: "Record", server: "Record (mock)", tool: n }));
+  const ask = (question: string, recent: string | null = null) => needsToolPlan({ question, recent, tools: record });
+
+  it("never runs without tools", () => {
+    expect(needsToolPlan({ question: "What did we decide in the meeting?", tools: [] })).toBe(false);
+  });
+  it("skips questions about the graph", () => {
+    expect(ask("When is Emma's swimming practice, and what does she need to bring?")).toBe(false);
+    expect(ask("Hvem er Noahs læge, og hvornår skal han til lægen næste gang?")).toBe(false);
+    expect(ask("What do we know about Emma?")).toBe(false);
+    expect(ask("Add a note on her profile that she needs new swimming goggles.")).toBe(false);
+    expect(ask("And Noah: anything coming up for him in the next two weeks?")).toBe(false);
+    expect(ask("Which people are on Emma's timeline?")).toBe(false);
+    expect(ask("Hvad skal Emma have med til mødre-dagen?")).toBe(false);
+  });
+  it("runs when the question names the service or its tools' words, in English or Danish", () => {
+    expect(ask("What did Record catch from yesterday's call?")).toBe(true);
+    expect(ask("What did we decide in the last meeting?")).toBe(true);
+    expect(ask("Any open to-dos for me?")).toBe(true);
+    expect(ask("Hvad blev der besluttet på mødet i går?")).toBe(true);
+    expect(ask("Hvilke opgaver har jeg?")).toBe(true);
+    expect(ask("Can you check my connected apps for this?")).toBe(true);
+  });
+  it("runs on a follow-up to an answer that used the service", () => {
+    expect(ask("And the one before that?", "According to Record, the last meeting was about the budget.")).toBe(true);
+    expect(ask("And the one before that?", "Emma swims on Tuesdays.")).toBe(false);
   });
 });

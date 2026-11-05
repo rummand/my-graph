@@ -7,7 +7,7 @@ import type { AssistantStep } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import { callMcpTool, listMcpTools, type McpApproval } from "@/lib/mcp-client";
 import * as mux from "@/lib/mux";
-import { approvalHint, mcpContextText, mcpStep, parsePlan, planMessages, plannable, type CallOutcome } from "./mcp-plan";
+import { approvalHint, mcpContextText, mcpStep, needsToolPlan, parsePlan, planMessages, plannable, type CallOutcome } from "./mcp-plan";
 
 export type McpUse = { steps: AssistantStep[]; context: string; approvals: McpApproval[]; hints: string[] };
 
@@ -15,6 +15,8 @@ const NONE: McpUse = { steps: [], context: "", approvals: [], hints: [] };
 
 export async function runMcpTools(v: Viewer, opts: {
   question: string; today: string; readOnly: boolean; sensitive: boolean; recent?: string | null; traceId?: string; signal?: AbortSignal;
+  /** Plan even when the question doesn't point at a service (unattended runs: nobody waits, a recipe may rely on tools). */
+  alwaysPlan?: boolean;
   onStep?: (s: AssistantStep) => void;
 }): Promise<McpUse> {
   let tools;
@@ -25,6 +27,8 @@ export async function runMcpTools(v: Viewer, opts: {
     return NONE;
   }
   if (!tools.length) return NONE;
+  // Most questions are about the graph: only plan when the question (or the answer it follows) points at a service.
+  if (!opts.alwaysPlan && !needsToolPlan({ question: opts.question, recent: opts.recent, tools })) return NONE;
 
   let calls;
   try {

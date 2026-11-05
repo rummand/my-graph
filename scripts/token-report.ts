@@ -11,6 +11,10 @@
  * Turns: a question about a person (English), the same kind in Danish, one asked from a person's page, and a
  * 6-turn conversation from that page with page actions offered (one turn calls one: this script plays the browser
  * and answers "done"). It writes conversations into the demo graph; don't run it during a demo.
+ *
+ * Columns `plan` (the tool planner: its calls and ms) and `other` (title …) come from the turn's per-agent usage.
+ * The compliance check of each answer runs after `done`, so it isn't in these numbers: measure it with
+ * `npx tsx scripts/assistant-eval.ts compliance`.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -52,7 +56,8 @@ async function signIn() {
   writeFileSync(COOKIE_FILE, cookie);
 }
 
-type Usage = { prompt: number; completion: number; cached: number; calls: number; answer: { prompt: number; completion: number; cached: number; rounds: number } };
+type AgentUsage = { prompt: number; completion: number; cached: number; calls: number; ms?: number };
+type Usage = { prompt: number; completion: number; cached: number; calls: number; answer: { prompt: number; completion: number; cached: number; rounds: number }; agents?: Record<string, AgentUsage> };
 type Citation = { n: number; title: string; sourceId?: string; nodeId?: string; edgeId?: string };
 type Done = { messageId: string; text: string; citations: Citation[]; route: string | null; model: string | null; usage?: Usage; degraded: unknown };
 type Page = { path: string; kind: string; id: string; title?: string };
@@ -166,11 +171,15 @@ async function main() {
   }
 
   const pad = (s: string | number, n: number) => String(s).padStart(n);
-  console.log("\nset        turn   prompt   cached  complet.  calls  rounds   ms     cites  route");
+  console.log("\nset        turn   prompt   cached  complet.  calls  rounds   ms     cites  plan(calls/ms)  route");
   for (const r of rows) {
     const u = r.usage;
-    console.log(`${r.set.padEnd(10)} ${pad(r.turn, 4)} ${pad(u?.prompt ?? "-", 8)} ${pad(u?.cached ?? "-", 8)} ${pad(u?.completion ?? "-", 9)} ${pad(u?.calls ?? "-", 6)} ${pad(u?.answer.rounds ?? "-", 7)} ${pad(r.ms, 6)} ${pad(r.citations, 6)}  ${r.route ?? "-"}`);
+    const plan = u?.agents?.["my-graph:tools"];
+    console.log(`${r.set.padEnd(10)} ${pad(r.turn, 4)} ${pad(u?.prompt ?? "-", 8)} ${pad(u?.cached ?? "-", 8)} ${pad(u?.completion ?? "-", 9)} ${pad(u?.calls ?? "-", 6)} ${pad(u?.answer.rounds ?? "-", 7)} ${pad(r.ms, 6)} ${pad(r.citations, 6)}  ${pad(plan ? `${plan.calls}/${plan.ms ?? "?"}` : "skipped", 14)}  ${r.route ?? "-"}`);
   }
+  const planMs = rows.reduce((a, r) => a + (r.usage?.agents?.["my-graph:tools"]?.ms ?? 0), 0);
+  const planned = rows.filter((r) => r.usage?.agents?.["my-graph:tools"]).length;
+  console.log(`tool planner: ran on ${planned} of ${rows.length} turns, ${planMs} ms in all`);
   const sum = (k: "prompt" | "cached" | "completion") => rows.reduce((a, r) => a + (r.usage?.[k] ?? 0), 0);
   console.log(`${"total".padEnd(15)} ${pad(sum("prompt"), 8)} ${pad(sum("cached"), 8)} ${pad(sum("completion"), 9)}`);
   if (JSON_OUT) {

@@ -13,7 +13,7 @@ export type UsageRecord = {
   usage: MuxUsage | null; ms: number;
 };
 
-export type UsageTotals = MuxUsage & { calls: number; unreported: number; byAgent: Record<string, MuxUsage & { calls: number }> };
+export type UsageTotals = MuxUsage & { calls: number; unreported: number; byAgent: Record<string, MuxUsage & { calls: number; ms: number }> };
 
 /** OpenAI-shaped `usage` → our shape; null when the model didn't say. Pure. */
 export function readUsage(raw: unknown): MuxUsage | null {
@@ -33,8 +33,9 @@ export function sumUsage(records: UsageRecord[]): UsageTotals {
   const out: UsageTotals = { promptTokens: 0, completionTokens: 0, cachedTokens: 0, calls: 0, unreported: 0, byAgent: {} };
   for (const r of records) {
     out.calls++;
-    const a = (out.byAgent[r.agent] ??= { promptTokens: 0, completionTokens: 0, cachedTokens: 0, calls: 0 });
+    const a = (out.byAgent[r.agent] ??= { promptTokens: 0, completionTokens: 0, cachedTokens: 0, calls: 0, ms: 0 });
     a.calls++;
+    a.ms += r.ms;
     if (!r.usage) { out.unreported++; continue; }
     out.promptTokens += r.usage.promptTokens; out.completionTokens += r.usage.completionTokens; out.cachedTokens += r.usage.cachedTokens;
     a.promptTokens += r.usage.promptTokens; a.completionTokens += r.usage.completionTokens; a.cachedTokens += r.usage.cachedTokens;

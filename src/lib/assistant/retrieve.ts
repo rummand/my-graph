@@ -99,7 +99,7 @@ export async function retrieve(v: Viewer, rawQuestion: string, opts: { tz: strin
   const mentionIds = [...new Set(opts.mentionIds ?? [])].slice(0, 8);
   const upcomingLimit = isTimeQuestion(question) ? 12 : 4;
   const [searchHits, meta, upcoming, reminders, mentionedRaw] = await Promise.all([
-    safe(gbrain.search(v, question, { limit: 12 }), [], "search"),
+    safe(gbrain.search(v, question, { limit: 12, relevant: true }), [], "search"),
     safe(getMeta(v), null, "meta"),
     flags.timeline ? safe(gbrain.timeline(v, { from: now, to: new Date(now.getTime() + 14 * 86_400_000), limit: upcomingLimit }), noEvents, "timeline") : Promise.resolve(noEvents),
     flags.reminders ? safe(listReminders(v, { upcoming: true, days: 21, limit: upcomingLimit, now }), [], "reminders") : Promise.resolve([]),

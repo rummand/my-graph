@@ -121,7 +121,7 @@ function fallbackLabels(locale: Locale) {
 export type DraftResult = { title: string | null; content: ArtifactContent; model: string | null; usedModel: boolean; sensitive: boolean; message: string | null };
 
 /** Draft a whole artifact. Never throws for mux trouble: falls back to a plain layout. */
-export async function draftArtifact(v: Viewer, input: { kind: ArtifactKind; title: string; query: SourceQuery; tone: string; locale: Locale; timeZone: string }): Promise<DraftResult> {
+export async function draftArtifact(v: Viewer, input: { kind: ArtifactKind; title: string; query: SourceQuery; tone: string; locale: Locale; timeZone: string; artifactId?: string }): Promise<DraftResult> {
   const { evidence, sensitive } = await gatherEvidence(v, input.query, input.title);
   const fmt = (d: Date) => formatDate(d, "date", { locale: input.locale, timeZone: input.timeZone });
   const t = tFor(input.locale);
@@ -134,7 +134,8 @@ export async function draftArtifact(v: Viewer, input: { kind: ArtifactKind; titl
       maxTokens: 4000,
       messages: draftMessages({ kind: input.kind, title: input.title, query: input.query, evidence, tone: input.tone, language: input.locale === "da" ? "da" : "en" }),
       parse: (x) => modelDraftSchema.parse(x),
-      meta: { userId: v.id, agent: "my-graph-artifacts", graphId: v.graphId, sensitive },
+      // affinity = the artifact: its draft and later section redrafts stay on one model (shared instructions cached).
+      meta: { userId: v.id, agent: "my-graph-artifacts", graphId: v.graphId, sensitive, affinity: input.artifactId ? `artifact:${input.artifactId}` : undefined },
     });
     const { title, content } = fromModelDraft(draft, evidence);
     return { title, content, model: null, usedModel: true, sensitive, message: null };
@@ -150,7 +151,7 @@ export async function draftArtifact(v: Viewer, input: { kind: ArtifactKind; titl
 
 /** Redraft one section. Throws when mux can't do it (the person keeps the section they have). */
 export async function draftSection(v: Viewer, input: {
-  kind: ArtifactKind; title: string; query: SourceQuery; tone: string; locale: Locale; section: Section; currentText: string; instruction?: string;
+  kind: ArtifactKind; title: string; query: SourceQuery; tone: string; locale: Locale; section: Section; currentText: string; instruction?: string; artifactId?: string;
 }): Promise<{ section: Section; citations: Citation[] }> {
   const query: SourceQuery = { ...input.query, question: [input.query.question, input.section.title, input.instruction].filter(Boolean).join(" — ") };
   const { evidence, sensitive } = await gatherEvidence(v, query, input.section.title || input.title);
@@ -162,7 +163,7 @@ export async function draftSection(v: Viewer, input: {
       section: { title: input.section.title, current: input.currentText, instruction: input.instruction },
     }),
     parse: (x) => modelDraftSchema.parse(x),
-    meta: { userId: v.id, agent: "my-graph-artifacts", graphId: v.graphId, sensitive },
+    meta: { userId: v.id, agent: "my-graph-artifacts", graphId: v.graphId, sensitive, affinity: input.artifactId ? `artifact:${input.artifactId}` : undefined },
   });
   const { content } = fromModelDraft(draft, evidence, { idPrefix: "n" });
   const first = content.sections[0];

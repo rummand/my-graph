@@ -191,6 +191,21 @@ export function toPrefixTsQuery(q: string): string | null {
   return uniq.length ? uniq.map((w) => `${w}:*`).join(" & ") : null;
 }
 
+/**
+ * Minimum relevance for the assistant's retrieval (bge-m3 cosine; calibrated on the demo graphs with
+ * scripts/assistant-eval.ts retrieval). Nearest-neighbour and "any word" lists always return something, however far
+ * off; these keep only hits with real evidence. A keyword match on only some words needs a vector match to back it up.
+ */
+export const RELEVANCE = { node: 0.5, chunk: 0.5, anyWordNode: 0.4, anyWordChunk: 0.45 } as const;
+
+/** Is a search hit relevant enough to put in front of the answer model? Pure. */
+export function isRelevant(h: { kind: "node" | "chunk"; sim: number | null; kw: "all" | "any" | null }): boolean {
+  if (h.kw === "all") return true;
+  if (h.sim == null) return false;
+  if (h.kw === "any") return h.sim >= (h.kind === "node" ? RELEVANCE.anyWordNode : RELEVANCE.anyWordChunk);
+  return h.sim >= (h.kind === "node" ? RELEVANCE.node : RELEVANCE.chunk);
+}
+
 /** Same as toPrefixTsQuery but any word may match (used as a fallback when the AND query finds nothing). */
 export function toAnyPrefixTsQuery(q: string): string | null {
   const words = q.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];

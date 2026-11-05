@@ -73,6 +73,72 @@ Reply with only JSON: {"calls":[{"tool":"<exact tool name>","args":{...},"why":"
   ];
 }
 
+/* ── Does this question need the planner at all? ─────────────────────────────────────────────────────────── */
+
+/** Words in tool names that are about the graph's own things (asking about them doesn't mean a connected service). */
+const GRAPH_WORDS = new Set([
+  "people", "person", "persons", "timeline", "event", "events", "note", "notes", "page", "pages", "document", "documents", "file", "files", "fact", "facts",
+  "memory", "memories", "reminder", "reminders", "profile", "profiles", "graph", "node", "nodes", "item", "items", "data", "info", "details", "detail",
+  "list", "get", "search", "find", "fetch", "read", "query", "lookup", "show", "load", "retrieve", "recent", "all", "add", "create", "update", "delete",
+  "remove", "complete", "ask", "set", "new", "open", "close", "mark", "send", "post", "make", "by", "for", "of", "the", "and", "with", "one", "mock", "mcp",
+  "server", "api", "app", "tool", "tools",
+]);
+
+/** A tool word → how it is said in Danish (stems: "møde" also matches "mødet", "møderne"). */
+const DANISH: Record<string, string[]> = {
+  meeting: ["møde"], todo: ["opgave", "huskeliste"], task: ["opgave"], transcript: ["transskri", "udskrift"], recording: ["optagelse"], audio: ["lyd"],
+  invoice: ["faktura"], payment: ["betaling"], board: ["tavle"], calendar: ["kalender"], mail: ["mail"], email: ["mail"], message: ["besked"],
+  customer: ["kunde"], project: ["projekt"], ticket: ["sag"], issue: ["sag"], design: ["design"], contact: ["kontakt"],
+};
+
+/** "Ask in Linear", "via the app", "mine tilsluttede tjenester": the person means a connected service. */
+const EXTERNAL = /(?<![\p{L}])(connected|integrations?|apps?|services?|tilsluttede?|forbundne?|tjenester?|integrationer?)(?![\p{L}])/iu;
+
+const words = (s: string) => s.replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase().replace(/(\p{L})-(\p{L})/gu, "$1$2").match(/\p{L}[\p{L}\p{N}]*/gu) ?? [];
+const stem = (w: string) => (w.length > 4 && w.endsWith("ies") ? `${w.slice(0, -3)}y` : w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+
+/** What names the person's connected services in a question: service names, and the distinctive words of tool names. */
+export function toolVocabulary(tools: Pick<PlanTool, "connection" | "server" | "tool">[]): { names: string[]; stems: string[] } {
+  const names = new Set<string>();
+  const stems = new Set<string>();
+  for (const t of tools) {
+    for (const n of [t.connection, (t.server ?? "").replace(/\([^)]*\)/g, " ")]) {
+      const w = words(n).filter((x) => x.length >= 3 && !GRAPH_WORDS.has(x));
+      if (w.length) names.add(w.join(" "));
+    }
+    for (const w of words(t.tool.replace(/[_.]/g, " "))) {
+      const st = stem(w);
+      if (st.length < 3 || GRAPH_WORDS.has(w) || GRAPH_WORDS.has(st)) continue;
+      stems.add(st);
+      for (const d of DANISH[st] ?? []) stems.add(d);
+    }
+  }
+  return { names: [...names], stems: [...stems] };
+}
+
+/**
+ * Should the tool planner run for this question (pure)? It costs a model call (2–4 s) on every question, and most
+ * questions are about the graph. Runs when: the question names a connected service or uses its tools' words
+ * ("meetings", "to-dos"; also in Danish), asks for something in an outside app, or follows an answer that used a
+ * service (it names the service: answers are told to say where tool data came from). Never without tools.
+ */
+export function needsToolPlan(input: { question: string; recent?: string | null; tools: Pick<PlanTool, "connection" | "server" | "tool">[] }): boolean {
+  if (!input.tools.length) return false;
+  const { names, stems } = toolVocabulary(input.tools);
+  const has = (text: string) => {
+    const flat = ` ${words(text).join(" ")} `;
+    if (names.some((n) => flat.includes(` ${n} `))) return true;
+    return words(text).some((w) => stems.some((st) => w.startsWith(st) && w.length <= st.length + 4));
+  };
+  if (has(input.question) || EXTERNAL.test(input.question)) return true;
+  // A follow-up ("and the one before?") to an answer that used a service: the answer names it.
+  if (input.recent) {
+    const flat = ` ${words(input.recent).join(" ")} `;
+    if (names.some((n) => flat.includes(` ${n} `))) return true;
+  }
+  return false;
+}
+
 const planSchema = z.object({
   calls: z.array(z.object({
     tool: z.string().max(200),

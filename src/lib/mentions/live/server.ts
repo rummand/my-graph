@@ -23,6 +23,7 @@ import { extractDomain } from "@/lib/meta/suggest";
 import { normalizeTerm } from "@/lib/meta/synonyms";
 import { locateSpans } from "../markup";
 import { detectDetails, type Detail } from "./detect";
+import { keepNamedThings } from "./entities";
 import { buildMatcher, type LexEntry, type LexMatch, type Matcher } from "./matcher";
 import { newRef, nodeRef, type FactsResult, type SentenceEntity, type SentenceResult } from "./merge";
 import { hash53, Lru, sentenceKey } from "./sentences";
@@ -123,6 +124,12 @@ export type LexiconPayload = ReturnType<typeof lexiconPayload>;
 const known = (e: LexEntry): KnownNode => ({ id: e.id, label: e.label, aliases: e.aliases, type: e.type, kind: e.kind ?? null });
 const uniqEntries = (xs: LexEntry[]) => xs.filter((e, i) => xs.findIndex((x) => x.id === e.id) === i);
 
+/**
+ * One model per person per graph for the live tier: every sentence's prompt starts with the same instructions, name and
+ * meta model, which stay in that model's prompt cache (only the sentence and the names in it are new).
+ */
+const liveAffinity = (v: Viewer) => `live:${v.id}:${v.graphId}`;
+
 /** At most a few model calls at once per person; the rest wait their turn (typing fast never floods mux). */
 async function withSlot<T>(userId: string, fn: () => Promise<T>): Promise<T> {
   while ((caches.running.get(userId) ?? 0) >= 4) await new Promise((r) => setTimeout(r, 40));
@@ -160,7 +167,9 @@ async function computeSentence(v: Viewer, lex: Lexicon, key: string, text: strin
   const matches = lex.matcher.match(text);
   const self = lex.entries.find((e) => e.self);
   const context = uniqEntries([...matches.map((m) => m.entry), ...(self ? [self] : [])]).slice(0, 30).map(known);
-  const x = await withSlot(v.id, () => extractDomain(v, text, { route: "fast", meta: lex.meta, known: context, mode: "live", agent: "my-graph-live-highlights", sensitive }));
+  const raw = await withSlot(v.id, () => extractDomain(v, text, { route: "fast", meta: lex.meta, known: context, mode: "live", agent: "my-graph-live-highlights", sensitive, affinity: liveAffinity(v) }));
+  // Named things only: dates, amounts and common words the model marked anyway are left to the detectors.
+  const x = keepNamedThings(text, raw, new Set(context.map((k) => k.id))).kept;
   const plan = planFromExtraction(lex.meta, x, knownFor(lex, x.entities.map((e) => e.label), matches), { id: lex.selfId, label: lex.selfLabel }, { text });
   return toSentenceResult(key, text, plan, lex.selfId);
 }
@@ -245,6 +254,7 @@ export async function readFacts(v: Viewer, input: { text: string; entities: Fact
   const self = lex.entries.find((e) => e.self);
   const x = await withSlot(v.id, () => extractDomain(v, input.text, {
     route: "fast", meta: lex.meta, known: [...knownNodes, ...(self ? [known(self)] : [])], mode: "live", agent: "my-graph-live-facts", sensitive: input.sensitive,
+    affinity: liveAffinity(v),
   }));
   const plan = planFromExtraction(lex.meta, x, knownNodes, { id: lex.selfId, label: lex.selfLabel }, { text: input.text });
   // The model's refs → the composer's refs.

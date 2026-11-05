@@ -155,7 +155,8 @@ describe("tokens and affinity", () => {
     expect(bodyOf(calls_()[1]).stream_options).toEqual({ include_usage: true });
     const sum = sumUsage(calls);
     expect(sum).toMatchObject({ promptTokens: 950, completionTokens: 35, cachedTokens: 740, calls: 2, unreported: 0 });
-    expect(sum.byAgent.answer).toEqual({ promptTokens: 900, completionTokens: 30, cachedTokens: 700, calls: 1 });
+    expect(sum.byAgent.answer).toMatchObject({ promptTokens: 900, completionTokens: 30, cachedTokens: 700, calls: 1 });
+    expect(typeof sum.byAgent.answer.ms).toBe("number");
   });
 });
 

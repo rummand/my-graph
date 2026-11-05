@@ -39,7 +39,8 @@ import stored from "./stored";
 import security from "./security";
 import roles from "./roles";
 import closeness from "./closeness";
+import search from "./search";
 
-const da: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, pages, graph, changes, history, memory, automations, connections, aula, mac, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance, profile, clinical, mcp, apps, mcpServer, recordings, providers, push, stored, security, roles, closeness };
+const da: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, pages, graph, changes, history, memory, automations, connections, aula, mac, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance, profile, clinical, mcp, apps, mcpServer, recordings, providers, push, stored, security, roles, closeness, search };
 
 export default da;

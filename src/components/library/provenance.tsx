@@ -22,8 +22,27 @@ type Ctx = { active: Target | null; show: (t: Target) => void };
 const ProvenanceCtx = createContext<Ctx>({ active: null, show: () => {} });
 export const useProvenance = () => useContext(ProvenanceCtx);
 
+/**
+ * "#chunk-<id>[.p3][.q<words>]" (a search result: its passage, the PDF page, the words that matched) → a target to
+ * show, so opening a result marks the words in the original.
+ */
+export function targetFromHash(hash: string): Target | null {
+  const m = hash.match(/^#chunk-([0-9a-f-]{36})(?:\.p(\d{1,4}))?(?:\.q(.{1,200}))?$/i);
+  if (!m) return null;
+  let quote: string | null = null;
+  try { quote = m[3] ? decodeURIComponent(m[3]) : null; } catch { quote = null; }
+  return { key: `hash:${m[1]}`, chunkId: m[1], page: m[2] ? Number(m[2]) : undefined, quote };
+}
+
 export function ProvenanceProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<Target | null>(null);
+  // Opened from search: mark the passage (and turn the PDF to its page) named in the address.
+  useEffect(() => {
+    const read = () => { const t = targetFromHash(window.location.hash); if (t) setActive({ ...t, key: `${t.key}:${Date.now()}` }); };
+    read();
+    window.addEventListener("hashchange", read);
+    return () => window.removeEventListener("hashchange", read);
+  }, []);
   const value = useMemo<Ctx>(() => ({ active, show: (t) => setActive({ ...t, key: `${t.key}:${Date.now()}` }) }), [active]);
   return <ProvenanceCtx.Provider value={value}>{children}</ProvenanceCtx.Provider>;
 }

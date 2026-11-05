@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  acceptProblem, countFindings, fingerprintOf, paragraphKey, parseVerdicts, pickCorpora, reconcile, ruleSetVersion, scopeApplies, selectRules, shiftFindings, TtlCache,
+  acceptProblem, countFindings, fingerprintOf, nothingClose, paragraphKey, parseVerdicts, pickCorpora, reconcile, ruleSetVersion, scopeApplies, selectRules, shiftFindings, TtlCache,
   type FreshFinding,
 } from "./pure";
 import { artifactText, blockAt, replaceInBlock } from "./blocks";
@@ -199,5 +199,17 @@ describe("redundant missing obligations", () => {
     const { dropRedundantMissing } = await import("./pure");
     const list = [{ ruleId: "a", verdict: "non_compliant" as const }, { ruleId: "a", verdict: "missing" as const }, { ruleId: "b", verdict: "missing" as const }];
     expect(dropRedundantMissing(list)).toEqual([list[0], list[2]]);
+  });
+});
+
+describe("nothingClose", () => {
+  it("is true only when every rule is far from the text", () => {
+    expect(nothingClose([0.456, 0.437, 0.433])).toBe(true);
+    expect(nothingClose([0.548, 0.44])).toBe(false);
+    expect(nothingClose([0.47], { min: 0.46 })).toBe(false);
+  });
+  it("never skips without scores, or when a rule has no embedding yet", () => {
+    expect(nothingClose([])).toBe(false);
+    expect(nothingClose([0.41, 0.3])).toBe(false);
   });
 });

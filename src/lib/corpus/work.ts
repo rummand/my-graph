@@ -496,7 +496,9 @@ class Runner {
       this.stopped.add(pass);
       return null;
     }
-    const meta: mux.MuxCallMeta = { userId: this.v.id, agent: "my-graph:rule-reader", graphId: this.v.graphId, traceId: this.c.id };
+    // affinity = the corpus and the pass: a pass's calls share their instructions (system prompt), so they stay on one
+    // model whose prompt cache keeps them; only the passage at the end is new.
+    const meta: mux.MuxCallMeta = { userId: this.v.id, agent: "my-graph:rule-reader", graphId: this.v.graphId, traceId: this.c.id, affinity: `corpus:${this.c.id}:p${pass}` };
     const t0 = Date.now();
     const chars = messages.reduce((a, x) => a + (typeof x.content === "string" ? x.content.length : 0), 0);
     for (let attempt = 0; attempt < 2; attempt++) {

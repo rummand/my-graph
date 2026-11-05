@@ -179,7 +179,7 @@ async function runDraft(v: Viewer, id: string, locale: Locale, timeZone: string)
     const [r] = await db.select().from(artifacts).where(and(eq(artifacts.id, id), eq(artifacts.graphId, v.graphId))).limit(1);
     if (!r) return;
     const set = (await resolveDesignSet(v, r.designSetId)).set;
-    const res = await draftArtifact(v, { kind: r.kind as ArtifactKind, title: r.title, query: (r.sourceQuery ?? {}) as SourceQuery, tone: set.tokens.tone, locale, timeZone });
+    const res = await draftArtifact(v, { kind: r.kind as ArtifactKind, title: r.title, query: (r.sourceQuery ?? {}) as SourceQuery, tone: set.tokens.tone, locale, timeZone, artifactId: id });
     const content: ArtifactContent = {
       ...(await scrubCitations(v, res.content)),
       draft: { status: res.usedModel ? "done" : "fallback", message: res.message, model: res.model, at: new Date().toISOString() },
@@ -331,7 +331,7 @@ export async function proposeSection(v: Viewer, id: string, sectionId: string, i
   try {
     const p = await draftSection(v, {
       kind: r.kind as ArtifactKind, title: r.title, query: (r.sourceQuery ?? {}) as SourceQuery, tone: set.tokens.tone, locale: prefs.locale,
-      section: current, currentText: before, instruction,
+      section: current, currentText: before, instruction, artifactId: id,
     });
     const preview = replaceSection(c, p.section, p.citations);
     const after = sectionText(preview.sections.find((s) => s.id === sectionId)!, citationNumbers(preview));

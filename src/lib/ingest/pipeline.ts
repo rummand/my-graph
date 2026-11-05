@@ -134,7 +134,8 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
   let step = "reading the file";
   try {
     const muxUp = await muxIsUp();
-    const muxMeta: mux.MuxCallMeta = { userId: v.id, agent: AGENT, traceId: sourceId, sensitive: src.sensitive, graphId: v.graphId };
+    // affinity = the source: its parts are read one after another with the same instructions (cached by the model).
+    const muxMeta: mux.MuxCallMeta = { userId: v.id, agent: AGENT, traceId: sourceId, affinity: `source:${sourceId}`, sensitive: src.sensitive, graphId: v.graphId };
 
     // 1. Text extraction
     let segments: TextSegment[];
@@ -783,7 +784,7 @@ export async function refreshSource(viewer: Viewer, sourceId: string, muxUp: boo
       const stored = await db.select({ id: chunks.id, idx: chunks.idx, text: chunks.text, locator: chunks.locator }).from(chunks)
         .where(eq(chunks.sourceId, src.id)).orderBy(chunks.idx);
       if (stored.length) {
-        const muxMeta: mux.MuxCallMeta = { userId: v.id, agent: AGENT, traceId: src.id, sensitive: src.sensitive, graphId: v.graphId };
+        const muxMeta: mux.MuxCallMeta = { userId: v.id, agent: AGENT, traceId: src.id, affinity: `source:${src.id}`, sensitive: src.sensitive, graphId: v.graphId };
         const r = await readFacts(v, documentTitleOf(meta, src.title), stored.map((c) => ({ ...c, locator: c.locator ?? {} })), muxMeta);
         meta.extraction = r.summary;
         const stated = r.groups.map((g) => checkStatedDate(g.ex.documentDate, g.chunks.map((c) => c.text).join("\n"))).find(Boolean);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  defaultEdgeStatus, editSimilarity, findMergePairs, humanizeRelation, levenshtein, mergeAliases, namesMatch, nameSimilarity,
+  defaultEdgeStatus, editSimilarity, isRelevant, RELEVANCE, findMergePairs, humanizeRelation, levenshtein, mergeAliases, namesMatch, nameSimilarity,
   narrowerVisibility, noisyOr, normalizeLabel, normalizeRelation, rrfFuse, statusAfterReassert, toAnyPrefixTsQuery,
   toPrefixTsQuery, tokenJaccard, vectorLiteral,
 } from "./pure";
@@ -118,5 +118,25 @@ describe("fact rules", () => {
     expect(statusAfterReassert("inferred", { agentType: "model", status: "confirmed" })).toBe("inferred");
     expect(statusAfterReassert("inferred", { agentType: "user" })).toBe("inferred");
     expect(statusAfterReassert("unconfirmed", { agentType: "user", status: "confirmed" })).toBe("confirmed");
+  });
+});
+
+describe("isRelevant", () => {
+  it("keeps a hit that has every word of the question", () => {
+    expect(isRelevant({ kind: "chunk", sim: null, kw: "all" })).toBe(true);
+    expect(isRelevant({ kind: "chunk", sim: 0.1, kw: "all" })).toBe(true);
+  });
+  it("drops an any-word match that the vector doesn't back up (a zoo page for 'swimming')", () => {
+    expect(isRelevant({ kind: "chunk", sim: null, kw: "any" })).toBe(false);
+    expect(isRelevant({ kind: "chunk", sim: 0.37, kw: "any" })).toBe(false);
+    expect(isRelevant({ kind: "chunk", sim: RELEVANCE.anyWordChunk, kw: "any" })).toBe(true);
+    expect(isRelevant({ kind: "node", sim: 0.44, kw: "any" })).toBe(true);
+  });
+  it("needs a close vector match when no word matched", () => {
+    expect(isRelevant({ kind: "node", sim: 0.43, kw: null })).toBe(false);
+    expect(isRelevant({ kind: "node", sim: 0.52, kw: null })).toBe(true);
+    expect(isRelevant({ kind: "chunk", sim: 0.49, kw: null })).toBe(false);
+    expect(isRelevant({ kind: "chunk", sim: 0.56, kw: null })).toBe(true);
+    expect(isRelevant({ kind: "chunk", sim: null, kw: null })).toBe(false);
   });
 });

@@ -81,6 +81,18 @@ export function selectRules<T extends { id: string; score: number; severity: Sev
   return [...rules].sort((a, b) => b.score + weight(b.severity) - (a.score + weight(a.severity))).slice(0, cap);
 }
 
+/**
+ * A chat answer none of the rules is close to (best cosine similarity under `min`; bge-m3, calibrated with
+ * scripts/assistant-eval.ts compliance: everyday answers score 0.42–0.46 against a law's rules, answers about its
+ * subject 0.54+). Such an answer isn't sent to the model at all. Never true when some rule has no embedding yet
+ * (`unembedded`, the score activeRules gives those), or when there are no scores. Pure.
+ */
+export const MESSAGE_RULE_MIN = 0.48;
+export function nothingClose(scores: number[], opts: { min?: number; unembedded?: number } = {}): boolean {
+  if (!scores.length || scores.some((s) => s === (opts.unembedded ?? 0.3))) return false;
+  return Math.max(...scores) < (opts.min ?? MESSAGE_RULE_MIN);
+}
+
 /** One version string for a set of corpora's rules: any approved, edited or retired rule changes it. */
 export function ruleSetVersion(corpora: { id: string; rulesVersion: number }[]): string {
   return hashText(...[...corpora].sort((a, b) => a.id.localeCompare(b.id)).map((c) => `${c.id}:${c.rulesVersion}`)).slice(0, 16);
