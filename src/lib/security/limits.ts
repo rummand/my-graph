@@ -13,6 +13,8 @@ export const LIMITS = {
   transcribe: { bucket: "transcribe", limit: 30, windowMs: MIN },
   /** Paste into the library (a web page is fetched for a link): per person. */
   paste: { bucket: "paste", limit: 40, windowMs: 10 * MIN },
+  /** Imports sent as JSON (the iPhone app, the Mac helper): per person. */
+  import: { bucket: "import", limit: 30, windowMs: 10 * MIN },
   /** Failed sign-ins per IP + account. */
   loginIp: { bucket: "login.ip", limit: 5, windowMs: 15 * MIN },
   /** Failed sign-ins per account across every IP (X-Forwarded-For can be spoofed; this can't be dodged that way). */

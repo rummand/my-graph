@@ -10,7 +10,7 @@
  * Csrfp-Token cookie as a header. `messaging.setLastReadMessage` exists and is recorded, so a test can prove the
  * connector never calls it; reading a thread never moves its read marker.
  *
- * Run it on its own: `npx tsx src/lib/connectors/aula/testing/mock-aula.ts [port]`.
+ * Run it on its own: `npx tsx src/lib/connectors/dk/aula/testing/mock-aula.ts [port]`.
  */
 import { createHash, randomBytes } from "node:crypto";
 import http from "node:http";

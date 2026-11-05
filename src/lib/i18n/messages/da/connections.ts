@@ -10,6 +10,7 @@ const messages: MessageTree = {
   none: "Forbind et kalenderlink eller en postkasse herunder. Nye datoer og beskeder kommer så af sig selv, med et link tilbage til, hvor de kom fra.",
   addTitle: "Tilføj en forbindelse",
   addLead: "Hver forbindelse kører som dig, henter kun ind i {graph}, og kun du kan se og ændre den.",
+  regions: { dk: "Danske forbindelser", everywhere: "Overalt" },
   rules: "Alle forbindelser foreslår: intet af det, de finder, bliver en del af grafen, før nogen godkender det. Adgangskoder og kalenderlinks gemmes krypteret og vises aldrig igen, skrives aldrig i loggen og sendes aldrig til assistenten.",
   byHandTitle: "Hent gammel mail ind i hånden",
   byHand: "Vil du have mange års mail ind på én gang, så eksportér postkassen som en .mbox-fil (eller en .zip med .eml-filer) og upload den i biblioteket.",

@@ -9,7 +9,7 @@ import { z } from "zod";
 import { clientIp } from "@/lib/auth/rate-limit";
 import { ConnectionError } from "@/lib/connectors";
 import { parseJson } from "@/lib/connectors/http";
-import { acceptTokens } from "@/lib/connectors/aula/pairing";
+import { acceptTokens } from "@/lib/connectors/dk/aula/pairing";
 
 const body = z.object({
   pairingCode: z.string().trim().min(10, "Enter the pairing code My Graph showed you.").max(20),

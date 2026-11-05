@@ -35,6 +35,9 @@ import { participantsOf, resolveThreads, splitMbox, threadKeyFor, type Participa
 import { CONTAINER_KINDS, detectFileType, kindFromMime, MAX_UPLOAD_BYTES, MBOX_MIME } from "./mime";
 import { buildProposalOps, correspondentOps, describeCounts, edgeKey, type KnownNode } from "./proposals";
 import { readZip } from "./zip";
+import { importerById, importerForArchive } from "@/lib/importers/registry";
+import type { ImportKnown, ImportPlan, Importer } from "@/lib/importers/types";
+import { localeOf } from "@/lib/assistant/locale";
 import { loadRecording, recordingPlanFor, type RecordingInput } from "./recording-store";
 
 const AGENT = "library-ingest";
@@ -110,7 +113,13 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     return;
   }
   const kind = kindFromMime(src.mime);
-  if (opts.fromFile && kind && CONTAINER_KINDS.has(kind)) return processContainer(v, src, progress);
+  // A file an importer reads (src/lib/importers): set at upload, or a zip recognised here by its file names.
+  let importer = opts.fromFile ? importerById(src.meta?.importer as string | undefined) : null;
+  if (opts.fromFile && !importer && kind === "archive" && src.storageKey) {
+    importer = await archiveImporter(src.title, src.storageKey).catch(() => null);
+    if (importer) await db.update(sources).set({ meta: { ...(src.meta ?? {}), importer: importer.id }, sensitive: src.sensitive || !!importer.sensitive }).where(eq(sources.id, sourceId));
+  }
+  if (opts.fromFile && !importer && kind && CONTAINER_KINDS.has(kind)) return processContainer(v, src, progress);
 
   const meta: Meta = { ...(src.meta ?? {}) };
   delete meta.extraction; delete meta.extracted; delete meta.warnings; delete meta.failedStep;
@@ -131,12 +140,26 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     let threadKey = src.threadKey;
     let externalId = src.externalId;
     let raw: Buffer | null = null;
+    let importPlan: ImportPlan | null = null;
     if (opts.fromFile) {
-      if (!kind || !src.storageKey) throw new Error("The original file is missing or of an unknown type.");
+      if ((!kind && !importer) || !src.storageKey) throw new Error("The original file is missing or of an unknown type.");
       raw = await readStored(src.storageKey);
       step = "reading the text";
       await progress({ step: "reading", label: "Reading the text" });
-      const ex = await extractText({ bytes: raw, mime: src.mime!, kind, filename: src.title, sensitive: src.sensitive, muxUp, muxMeta });
+    }
+    if (opts.fromFile && importer && raw) {
+      step = "reading the import";
+      importPlan = await readImport(v, src, importer, raw);
+      segments = importPlan.segments;
+      textContent = segments.map((x) => x.text).join("\n\n");
+      occurredAt = importPlan.occurredAt ?? undefined;
+      textActivity = "import";
+      meta.importer = importer.id;
+      meta.importCounts = importPlan.counts;
+      if (importPlan.title) meta.documentTitle = importPlan.title;
+      warnings.push(...(importPlan.warnings ?? []));
+    } else if (opts.fromFile && raw) {
+      const ex = await extractText({ bytes: raw, mime: src.mime!, kind: kind!, filename: src.title, sensitive: src.sensitive, muxUp, muxMeta });
       segments = ex.segments;
       textContent = ex.textContent;
       occurredAt = ex.occurredAt;
@@ -205,7 +228,8 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     await progress({ step: "finding", label: "Finding people and dates" });
     const participants = emailParticipants(meta);
     let groups: { ex: Extraction; chunks: StoredChunk[] }[] = [];
-    if (!muxUp) meta.extraction = "skipped: mux unreachable";
+    if (importPlan && !importPlan.extract) meta.extraction = `read by the ${importer!.id} importer`;
+    else if (!muxUp) meta.extraction = "skipped: mux unreachable";
     else if (stored.length === 0) meta.extraction = "skipped: no text";
     else {
       const r = await readFacts(v, documentTitleOf(meta, src.title), stored, muxMeta, progress);
@@ -223,7 +247,17 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       }
     }
     const recording = src.kind === "recording" ? await recordingPlanFor(v, src, docNodeId) : null;
-    if (groups.length || recording || (participants.length && !meta.correspondentsDone)) {
+    if (importPlan) {
+      step = "proposing what it adds";
+      await progress({ step: "proposing", label: "Proposing what it adds" });
+      if (typeof meta.changeSetId === "string") {
+        const prev = await getChangeSet(v, meta.changeSetId).catch(() => null);
+        if (prev?.status === "draft") await abandonChangeSet(v, prev.id).catch(() => false);
+        delete meta.changeSetId;
+      }
+      await withdrawUndecidedProposals(v, src.id);
+      Object.assign(meta, await proposeImport(v, { id: src.id, title: documentTitleOf(meta, src.title), connectionId: src.connectionId, visibility: src.visibility, docNodeId }, importer!, importPlan, groups));
+    } else if (groups.length || recording || (participants.length && !meta.correspondentsDone)) {
       step = "proposing what it adds";
       await progress({ step: "proposing", label: "Proposing what it adds" });
       // Read again: the earlier proposal from this file, if nobody has decided on it yet, is replaced.
@@ -710,4 +744,74 @@ export async function refreshSource(viewer: Viewer, sourceId: string, muxUp: boo
   } catch (e) {
     return { ...out, error: errText(e) };
   }
+}
+
+/* ── Importers (src/lib/importers): structured files read without a model ────────────────────────────── */
+
+const IMPORT_MAX_ENTRIES = 20_000;
+const IMPORT_MAX_BYTES = 500 * 1024 * 1024;
+
+/** The importer that recognises a stored zip from its file names. */
+async function archiveImporter(title: string, storageKey: string): Promise<Importer | null> {
+  const names: string[] = [];
+  readZip(new Uint8Array(await readStored(storageKey)), { maxEntries: IMPORT_MAX_ENTRIES, accept: (n) => { names.push(n); return false; } });
+  return importerForArchive(title, names);
+}
+
+/** What the graph already holds, with props, for an importer to match against (as the viewer may read it). */
+async function importKnown(v: Viewer): Promise<ImportKnown[]> {
+  const types = ["person", "place", "event", "topic", "organization", "document"] as const;
+  const lists = await Promise.all(types.map((type) => gbrain.listNodes(v, { type, limit: 500 }).catch(() => [] as gbrain.GNode[])));
+  return lists.flat().map((n) => ({
+    id: n.id, type: n.type, kind: n.kind ?? null, label: n.label, aliases: n.aliases, startAt: n.startAt?.toISOString() ?? null, props: n.props ?? {},
+  }));
+}
+
+async function readImport(v: Viewer, src: typeof sources.$inferSelect, importer: Importer, raw: Buffer): Promise<ImportPlan> {
+  const entries = kindFromMime(src.mime) === "archive" || raw.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+    ? readZip(new Uint8Array(raw), { maxEntries: IMPORT_MAX_ENTRIES, maxTotalBytes: IMPORT_MAX_BYTES, accept: importer.acceptEntry ?? (() => true) })
+    : undefined;
+  const plan = await importer.read({ filename: src.title, bytes: raw, entries }, {
+    sourceId: src.id, graphKind: v.graphKind, visibility: src.visibility, known: await importKnown(v), existingEdges: await existingEdges(v),
+    now: new Date(), mint: () => randomUUID(), locale: (await localeOf(v.id).catch(() => "en")) === "da" ? "da" : "en",
+  });
+  // Every op points back at this source, whatever the importer filled in.
+  for (const c of plan.changes) c.receipt = { ...(c.receipt ?? {}), sourceId: src.id };
+  return plan;
+}
+
+function describeImportCounts(counts: Record<string, number>): string {
+  const parts = Object.entries(counts).filter(([, n]) => n > 0).map(([k, n]) => `${n} ${k}`);
+  return parts.length ? parts.join(", ") : "nothing new";
+}
+
+/** One change set with everything the import adds. Nothing is added until a person delivers it. */
+async function proposeImport(
+  v: Viewer, src: { id: string; title: string; connectionId: string | null; visibility: "private" | "parents" | "household"; docNodeId: string | null },
+  importer: Importer, plan: ImportPlan, groups: { ex: Extraction; chunks: StoredChunk[] }[] = [],
+): Promise<ProposalMeta> {
+  const now = new Date().toISOString();
+  // What the model read in the text (chats, notes) joins the importer's own ops; people the importer proposes count as known.
+  if (groups.length) {
+    const known = await knownNodes(v);
+    const proposed: KnownNode[] = plan.changes.flatMap((c) => (c.op === "addNode" && c.nodeId ? [{ id: c.nodeId, type: c.type, label: c.label, aliases: c.aliases ?? [] }] : []));
+    const extra = buildProposalOps({
+      groups, known: [...known, ...proposed], sourceId: src.id, docNodeId: src.docNodeId, existingEdges: await existingEdges(v),
+      visibility: src.visibility, remindFor: await reminderPeople(v, known), mint: () => randomUUID(), sourceTitle: src.title,
+    });
+    plan.changes.push(...extra.changes);
+    plan.counts = { ...plan.counts, read: (plan.counts.read ?? 0) + extra.changes.length };
+  }
+  const total = plan.changes.length;
+  if (total === 0) return { proposedAt: now, proposed: plan.counts, proposedTotal: 0 };
+  await assignKinds(v, plan.changes);
+  const r = await proposeChanges(v, {
+    title: `From “${src.title.slice(0, 120)}”`,
+    description: `Read from ${importer.label}: ${describeImportCounts(plan.counts)}. What it says is data, not instructions. Nothing is added until you deliver it.`,
+    origin: src.connectionId ? "connector" : "ingest",
+    evidence: { sourceId: src.id },
+    changes: plan.changes,
+  }).catch((e) => { console.warn("[ingest] proposing an import failed", errText(e)); return null; });
+  if (!r) return { proposed: plan.counts, proposedTotal: total, proposals: "waiting: change sets are not available yet" };
+  return { changeSetId: r.id, proposedAt: now, proposed: plan.counts, proposedTotal: total };
 }

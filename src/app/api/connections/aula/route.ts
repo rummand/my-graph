@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { parseJson, route } from "@/lib/connectors/http";
-import { aulaStatus, startPairing } from "@/lib/connectors/aula/pairing";
+import { aulaStatus, startPairing } from "@/lib/connectors/dk/aula/pairing";
 
 /** GET: my Aula connection in this graph (if any), whether a pairing code is waiting, and who Aula says I am. */
 export const GET = route(async (_req, v) => aulaStatus(v));

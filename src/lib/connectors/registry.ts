@@ -3,7 +3,7 @@
  * sync function. Aula messages is unofficial (a MitID sign-in through the Connect Aula helper; see aula/connector.ts).
  */
 import type { Manifest } from "./manifest";
-import { aulaConnector } from "./aula/connector";
+import { aulaConnector } from "./dk/aula/connector";
 import { aulaCalendarConnector, icsConnector } from "./ics/connector";
 import { imapConnector } from "./imap/connector";
 import { dropboxConnector } from "./dropbox";
@@ -14,7 +14,7 @@ import { recordConnector } from "./record/connector";
 import { pluginConnector } from "@/lib/plugins/connector";
 import type { Connector } from "./types";
 
-export { aulaManifest } from "./aula/connector";
+export { aulaManifest } from "./dk/aula/connector";
 
 /** In the order the gallery shows them. */
 export const CONNECTORS: Connector[] = [
@@ -51,14 +51,14 @@ export function offeredIn(graphKind: string, admin = false): Connector[] {
 }
 
 /** A manifest as the browser sees it: no zod schemas, just what the form and gallery need. */
-export type ConnectorInfo = Pick<Manifest, "id" | "version" | "status" | "icon" | "fields" | "schedule"> & {
+export type ConnectorInfo = Pick<Manifest, "id" | "version" | "status" | "icon" | "fields" | "schedule" | "region"> & {
   authType: Manifest["auth"]["type"]; streams: string[]; maps: string[];
 };
 
 export function connectorInfo(c: Connector): ConnectorInfo {
   const m = c.manifest;
   return {
-    id: m.id, version: m.version, status: m.status, icon: m.icon, fields: m.fields, schedule: m.schedule,
+    id: m.id, version: m.version, status: m.status, icon: m.icon, fields: m.fields, schedule: m.schedule, region: m.region,
     authType: m.auth.type, streams: m.streams.map((s) => s.name), maps: [...new Set(Object.values(m.maps))],
   };
 }

@@ -5,7 +5,7 @@ import { clsx } from "clsx";
 import { Check, Copy, Download } from "lucide-react";
 import { Button, buttonClass, Field, Section, Select } from "@/components/ui";
 import { useFormatDate, useT } from "@/lib/i18n/client";
-import type { AulaStatus } from "@/lib/connectors/aula/pairing";
+import type { AulaStatus } from "@/lib/connectors/dk/aula/pairing";
 import { api, StatusDot } from "../bits";
 
 type Pairing = { code: string; expiresAt: string };

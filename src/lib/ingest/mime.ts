@@ -2,8 +2,9 @@
  * File type detection for uploads. Pure: decides from the file name, the browser's declared type and the first bytes
  * (magic numbers), so a renamed executable never gets through as a "pdf".
  */
+import { importerForFile } from "@/lib/importers/registry";
 
-export type FileKind = "pdf" | "docx" | "pptx" | "spreadsheet" | "text" | "image" | "audio" | "email" | "mailbox" | "archive";
+export type FileKind = "pdf" | "docx" | "pptx" | "spreadsheet" | "text" | "image" | "audio" | "email" | "mailbox" | "archive" | "import";
 export type FileCategory = "pdf" | "document" | "slides" | "spreadsheet" | "text" | "image" | "audio" | "email" | "mailbox" | "other";
 
 /** Containers are split into messages (each its own source); they are not read as one document. */
@@ -21,7 +22,7 @@ const SPREADSHEET_MIMES = new Set([XLSX_MIME, XLS_MIME, ODS_MIME, CSV_MIME, "app
 export const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 
 export type DetectResult =
-  | { ok: true; mime: string; kind: FileKind; ext: string }
+  | { ok: true; mime: string; kind: FileKind; ext: string; /** Set when an importer (src/lib/importers) reads it. */ importer?: string }
   | { ok: false; reason: string };
 
 /** Plain-English list of what the library accepts, for error messages and the upload zone. */
@@ -78,6 +79,13 @@ export function detectFileType(name: string, declaredMime: string, head: Uint8Ar
   const ext = extensionOf(name);
   const declared = (declaredMime || "").toLowerCase().split(";")[0].trim();
   if (head.length === 0) return { ok: false, reason: `"${name}" is empty.` };
+
+  // Structured files an importer reads without a model (.ged, .vcf, a chat export …). Zips are matched later, from
+  // their file names, when the archive is opened.
+  if (!startsWith(head, [0x50, 0x4b, 0x03, 0x04])) {
+    const imp = importerForFile(name, head);
+    if (imp) return { ok: true, mime: imp.mime, kind: "import", ext, importer: imp.id };
+  }
 
   // Binary formats — trust the bytes.
   if (startsWith(head, [0x25, 0x50, 0x44, 0x46, 0x2d])) return { ok: true, mime: "application/pdf", kind: "pdf", ext: "pdf" };

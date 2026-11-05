@@ -29,11 +29,11 @@ import * as gbrain from "@/lib/gbrain";
 import { reprocessSource } from "@/lib/ingest";
 import { guardedTransport, type Transport } from "@/lib/mcp-client/transport";
 import { getMetaModel, isTombstone } from "@/lib/meta";
-import { encryptSecrets } from "../crypto";
-import { ConnectorError, needsYou, willRetry } from "../errors";
-import { defineManifest } from "../manifest";
-import { cursorOf } from "../state";
-import type { Connector, RunContext, Tx } from "../types";
+import { encryptSecrets } from "../../crypto";
+import { ConnectorError, needsYou, willRetry } from "../../errors";
+import { defineManifest } from "../../manifest";
+import { cursorOf } from "../../state";
+import type { Connector, RunContext, Tx } from "../../types";
 import { AulaApi, AulaError } from "./client";
 import { aulaBases, type AulaBases } from "./constants";
 import { copenhagenDay, type PostsCursor, type ThreadsCursor } from "./cursor";
@@ -62,7 +62,7 @@ export const aulaConfig = z.object({
 export type AulaConfig = z.infer<typeof aulaConfig>;
 
 export const aulaManifest = defineManifest({
-  id: "aula", version: "1", status: "unofficial", icon: "school", graphKinds: ["family"],
+  id: "aula", version: "1", status: "unofficial", icon: "school", graphKinds: ["family"], region: "dk",
   auth: { type: "mitid_session" },
   config: aulaConfig,
   secrets: aulaSecrets,

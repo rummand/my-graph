@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requireUser } from "@/lib/auth";
-import { aulaStatus } from "@/lib/connectors/aula/pairing";
+import { aulaStatus } from "@/lib/connectors/dk/aula/pairing";
 import { getT } from "@/lib/i18n";
 import { Badge, PageHeader } from "@/components/ui";
 import { AulaConnect } from "@/components/connections/aula/aula-connect";

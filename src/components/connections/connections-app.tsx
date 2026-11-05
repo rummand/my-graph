@@ -26,6 +26,12 @@ export function ConnectionsApp({ initial, connectors, people, family, graphName 
   const [leaving, setLeaving] = useState<ConnectionDTO | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const galleryRef = useRef<HTMLDivElement>(null);
+  // A country's own services (Aula, Digital Post …) under their own heading, the rest after them.
+  const danish = connectors.filter((c) => c.region === "dk");
+  const groups = [
+    ...(danish.length ? [{ key: "dk", title: t("connections.regions.dk"), items: danish }] : []),
+    { key: "all", title: danish.length ? t("connections.regions.everywhere") : null, items: connectors.filter((c) => c.region !== "dk") },
+  ];
 
   // Back from a server's sign-in page with a problem: say it.
   useEffect(() => {
@@ -73,24 +79,29 @@ export function ConnectionsApp({ initial, connectors, people, family, graphName 
       <div ref={galleryRef} className="scroll-mt-6">
         <Section title={t("connections.addTitle")}>
           <p className="mb-4 max-w-[65ch] text-sm text-muted">{t("connections.addLead", { graph: graphName })}</p>
-          <ul className="divide-y divide-line rounded-lg bg-surface">
-            {connectors.map((info) => (
-              <li key={info.id} className="px-4 py-4">
-                <GalleryItem info={info} open={open === info.id} onToggle={() => setOpen(open === info.id ? null : info.id)}>
-                  {isOAuthConnector(info.id) ? (
-                    <OAuthConnectForm info={info} people={people} family={family} onCancel={() => setOpen(null)} />
-                  ) : MCP.has(info.id) ? (
-                    <McpConnectForm info={info} family={family} onCancel={() => setOpen(null)}
-                      onDone={(c) => { patch(c); setOpen(null); setNotice(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
-                  ) : (
-                    <ConnectForm info={info} people={people} family={family}
-                      onCancel={() => setOpen(null)}
-                      onDone={(c) => { patch(c); setOpen(null); setNotice(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
-                  )}
-                </GalleryItem>
-              </li>
-            ))}
-          </ul>
+          {groups.map((g) => (
+            <div key={g.key} className={g.key === "dk" ? "mb-6" : undefined}>
+              {g.title && <h3 className="mb-2 text-sm font-semibold">{g.title}</h3>}
+              <ul className="divide-y divide-line rounded-lg bg-surface">
+                {g.items.map((info) => (
+                  <li key={info.id} className="px-4 py-4">
+                    <GalleryItem info={info} open={open === info.id} onToggle={() => setOpen(open === info.id ? null : info.id)}>
+                      {isOAuthConnector(info.id) ? (
+                        <OAuthConnectForm info={info} people={people} family={family} onCancel={() => setOpen(null)} />
+                      ) : MCP.has(info.id) ? (
+                        <McpConnectForm info={info} family={family} onCancel={() => setOpen(null)}
+                          onDone={(c) => { patch(c); setOpen(null); setNotice(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+                      ) : (
+                        <ConnectForm info={info} people={people} family={family}
+                          onCancel={() => setOpen(null)}
+                          onDone={(c) => { patch(c); setOpen(null); setNotice(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+                      )}
+                    </GalleryItem>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
           <p className="mt-3 max-w-[65ch] text-sm text-muted">{t("connections.rules")}</p>
         </Section>
       </div>

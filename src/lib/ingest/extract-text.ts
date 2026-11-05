@@ -34,6 +34,7 @@ export async function extractText(opts: {
     case "image": return extractImage(opts);
     case "audio": return extractAudio(opts);
     case "mailbox": case "archive": throw new Error("A mail import is split into messages, not read as one document.");
+    case "import": throw new Error("This file is read by its importer (src/lib/importers), not as a document.");
   }
 }
 

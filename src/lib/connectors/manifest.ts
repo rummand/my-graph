@@ -14,8 +14,14 @@ export type AuthType = (typeof AUTH_TYPES)[number];
 export const CONNECTOR_STATUSES = ["official", "unofficial", "coming_soon"] as const;
 export type ConnectorStatus = (typeof CONNECTOR_STATUSES)[number];
 
+export const CONNECTOR_ICONS = [
+  "calendar", "school", "mail", "folder", "globe", "mic", "plug",
+  "contacts", "photo", "tree", "trophy", "letter", "health", "chat", "note", "map", "work", "home", "baby",
+] as const;
+export type ConnectorIconName = (typeof CONNECTOR_ICONS)[number];
+
 /** What a stream's items become: a calendar event, an email in a correspondence, a document, a photo. */
-export const MAP_TARGETS = ["event", "correspondence", "document", "photo", "recording", "catalog"] as const;
+export const MAP_TARGETS = ["event", "correspondence", "document", "photo", "recording", "catalog", "person", "place", "note", "message", "activity", "task"] as const;
 export type MapTarget = (typeof MAP_TARGETS)[number];
 
 export type StreamSpec = {
@@ -45,7 +51,9 @@ export type Manifest<C extends z.ZodType = z.ZodType, S extends z.ZodType = z.Zo
   status: ConnectorStatus;
   /** Only offered in these graph kinds (Aula is for a family graph). Empty = everywhere. */
   graphKinds?: string[];
-  icon: "calendar" | "school" | "mail" | "folder" | "globe" | "mic" | "plug";
+  icon: ConnectorIconName;
+  /** A country's own services (Aula, Digital Post …), grouped under that country in the gallery. Code lives in connectors/<region>/. */
+  region?: "dk";
   auth: { type: AuthType };
   config: C;
   secrets: S;
@@ -82,7 +90,8 @@ export const manifestShape = z.object({
   version: z.string().regex(/^\d+(\.\d+){0,2}$/),
   status: z.enum(CONNECTOR_STATUSES),
   graphKinds: z.array(z.string()).optional(),
-  icon: z.enum(["calendar", "school", "mail", "folder", "globe", "mic", "plug"]),
+  icon: z.enum(CONNECTOR_ICONS),
+  region: z.enum(["dk"]).optional(),
   auth: z.object({ type: z.enum(AUTH_TYPES) }),
   fields: z.array(fieldSchema),
   streams: z.array(streamSchema),

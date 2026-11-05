@@ -91,7 +91,7 @@ nothing links two graphs. The family graph keeps the household rules; other grap
   only). What they bring in is stored as sources (url, externalId, connectionId, fetchedAt) and everything derived is
   proposed, never written directly. Page `/connections`. Connectors: ICS link, Aula calendar, **Aula messages**
   (unofficial, family graph only, read-only; MitID sign-in via the one-file helper from `/connections/aula` + a one-time
-  pairing code, see `connectors/aula`), IMAP, **Gmail, Google Calendar, Google Drive (picker, `drive.file`), Outlook
+  pairing code, see `connectors/dk/aula`), IMAP, **Gmail, Google Calendar, Google Drive (picker, `drive.file`), Outlook
   and OneDrive (one Microsoft sign-in), Dropbox** (`connectors/oauth`: the household's own developer apps, PKCE,
   rotated refresh tokens, env `GOOGLE_*`, `MICROSOFT_*`, `DROPBOX_*`), MCP servers and Record (the assistant may use
   their tools; writing tools always need a single-use approval from the person, unattended runs get reading tools

@@ -9,7 +9,7 @@
  *
  * Nothing here is official: Aula offers parents no API. This is the unofficial route every community integration uses.
  */
-import { allowPrivate } from "../ssrf";
+import { allowPrivate } from "../../ssrf";
 
 export const AULA_OAUTH = Object.freeze({
   clientId: "_99949a54b8b65423862aac1bf629599ed64231607a",

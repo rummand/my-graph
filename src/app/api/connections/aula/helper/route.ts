@@ -1,6 +1,6 @@
 /** GET /api/connections/aula/helper: the Connect Aula helper script, with this My Graph's address and my language in it. */
 import { requireUserApi } from "@/lib/auth";
-import { HELPER_FILENAME, helperSource } from "@/lib/connectors/aula/helper/script";
+import { HELPER_FILENAME, helperSource } from "@/lib/connectors/dk/aula/helper/script";
 import { appOrigin } from "@/lib/connectors/mcp/oauth-flow";
 import { getLocale } from "@/lib/i18n";
 

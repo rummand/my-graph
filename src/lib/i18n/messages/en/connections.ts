@@ -10,6 +10,7 @@ const messages: MessageTree = {
   none: "Connect a calendar link or a mailbox below. New dates and messages then arrive by themselves, with a link back to where they came from.",
   addTitle: "Add a connection",
   addLead: "Each connection runs as you, reads only into {graph}, and only you can see or change it.",
+  regions: { dk: "Danish connectors", everywhere: "Everywhere" },
   rules: "Every connection suggests: nothing it finds becomes part of the graph until someone approves it. Passwords and calendar links are stored encrypted and are never shown again, never written to the log and never sent to the assistant.",
   byHandTitle: "Bring old mail in by hand",
   byHand: "To bring in years of mail at once, export a mailbox as an .mbox file (or a .zip of .eml files) and upload it in the library.",

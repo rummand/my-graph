@@ -50,7 +50,7 @@ export const icsManifest = defineManifest({
 });
 
 export const aulaCalendarManifest = defineManifest({
-  id: "aula_calendar", version: "1", status: "official", icon: "school", graphKinds: ["family"],
+  id: "aula_calendar", version: "1", status: "official", icon: "school", graphKinds: ["family"], region: "dk",
   auth: { type: "ics_url" },
   config: icsConfig,
   secrets: z.object({ yearUrl: urlString.optional().or(z.literal("")), weekUrl: urlString.optional().or(z.literal("")) })

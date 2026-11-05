@@ -4,6 +4,7 @@
  * and embeds it, then asks mux to extract entities/events/facts and writes them into GBrain with provenance pointing
  * at the exact chunk and quote. Reading runs from the durable job queue (src/lib/jobs), so a restart never loses it.
  */
+import { importerById } from "@/lib/importers/registry";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { sources } from "@/db/schema";
@@ -26,6 +27,10 @@ export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "p
   const bytes = new Uint8Array(await file.arrayBuffer());
   const type = detectFileType(name, file.type, bytes.subarray(0, 8192));
   if (!type.ok) throw new IngestError(415, type.reason);
+  const importer = importerById(type.importer);
+  if (importer?.graphKinds?.length && !importer.graphKinds.includes(v.graphKind)) {
+    throw new IngestError(415, `"${name}" is ${importer.label}, which can only be imported into a ${importer.graphKinds.join(" or ")} graph.`);
+  }
 
   const sha256 = sha256Hex(bytes);
   const [dup] = await db.select({ id: sources.id }).from(sources)
@@ -44,10 +49,10 @@ export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "p
     storageKey: stored.storageKey,
     sha256,
     size: stored.size,
-    meta: { originalName: name, kind: type.kind, declaredMime: file.type || null },
+    meta: { originalName: name, kind: type.kind, declaredMime: file.type || null, ...(importer ? { importer: importer.id } : {}) },
     status: "pending",
     visibility: opts?.visibility ?? "private",
-    sensitive: opts?.sensitive ?? false,
+    sensitive: (opts?.sensitive ?? false) || !!importer?.sensitive,
   }).returning({ id: sources.id });
 
   void audit(v, "library.upload", { type: "source", id: row.id }, { mime: type.mime, size: stored.size }).catch(() => {});
