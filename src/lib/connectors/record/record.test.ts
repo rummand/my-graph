@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateManifest } from "../manifest";
 import { approvalToken, approvalValid, spendApproval } from "../mcp/hook";
+import { memoryOnceStore, OneTimeTokens } from "@/lib/security/once";
 import { enabledTools } from "../mcp/config";
 import { audioFrom, makeLimiter, mayPlay, passStatus, proxyHeaders, rangeToForward, reuseUntil, type PlayableSource } from "./audio-proxy";
 import { capabilitiesOf, planMeetings, recordManifest } from "./connector";
@@ -103,12 +104,16 @@ describe("tools a graph allows, and approvals", () => {
     expect(approvalValid(token.replace(/.$/, (c) => (c === "A" ? "B" : "A")), base)).toBe(false);
   });
 
-  it("an approval runs its call once", () => {
+  it("an approval runs its call once, even after a restart (the shared record says it was used)", async () => {
     const base = { userId: "u1", graphId: "g1", connectionId: "c1", tool: "complete_todo", args: { id: "t9" } };
     const token = approvalToken({ ...base, expiresAt: Date.now() + 60_000 });
-    expect(spendApproval(token)).toBe(true);
-    expect(spendApproval(token)).toBe(false);
-    expect(spendApproval(approvalToken({ ...base, expiresAt: Date.now() + 60_001 }))).toBe(true);
+    const shared = memoryOnceStore(); // stands in for the used_approvals table
+    const first = new OneTimeTokens(shared);
+    expect(await spendApproval(token, Date.now(), first)).toBe(true);
+    expect(await spendApproval(token, Date.now(), first)).toBe(false);
+    const afterRestart = new OneTimeTokens(shared); // a new process: empty cache, same table
+    expect(await spendApproval(token, Date.now(), afterRestart)).toBe(false);
+    expect(await spendApproval(approvalToken({ ...base, expiresAt: Date.now() + 60_001 }), Date.now(), afterRestart)).toBe(true);
   });
 });
 

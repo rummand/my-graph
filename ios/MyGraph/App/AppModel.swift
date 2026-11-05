@@ -70,7 +70,7 @@ final class AppModel {
             print("[debug] session status: \(s.status)")
             #endif
             switch s.status {
-            case "active": isOffline = false; await loadGraphs(); await loadMe()
+            case "active": isOffline = false; await loadGraphs(); await loadMe(); await PushRegistration.registerIfAllowed()
             case "pending": phase = .pending
             default: clearLocal(); phase = .signedOut
             }
@@ -93,18 +93,20 @@ final class AppModel {
         if a.pending == true { phase = .pending; return }
         phase = .signedIn
         graphToken = UUID()
-        Task { await loadGraphs(); await loadMe() }
+        Task { await loadGraphs(); await loadMe(); await PushRegistration.registerIfAllowed() }
     }
 
     /// Polls while a parent approves this device.
     func checkPending() async -> Bool {
         guard let s: SessionStatus = try? await API.shared.get("/api/auth/status") else { return false }
-        if s.status == "active" { phase = .signedIn; graphToken = UUID(); await loadGraphs(); await loadMe(); return true }
+        if s.status == "active" { phase = .signedIn; graphToken = UUID(); await loadGraphs(); await loadMe(); await PushRegistration.registerIfAllowed(); return true }
         if s.status == "none" { phase = .signedOut }
         return false
     }
 
     func signOut() async {
+        // Stop pushes to this iPhone first, while the session still works (the server also drops them with it).
+        await PushRegistration.unregister()
         _ = try? await API.shared.send(API.shared.request("POST", "/api/auth/logout"), quietAuth: true)
         clearLocal()
         signOutReason = String(localized: "You're signed out.")
@@ -127,6 +129,7 @@ final class AppModel {
         AppGroup.defaults.removeObject(forKey: "myName")
         AppGroup.defaults.removeObject(forKey: "myPersonId")
         ReminderNotifications.removeAll()
+        PushRegistration.forgetLocally()
         WidgetCenter.shared.reloadAllTimelines()
     }
 
@@ -155,6 +158,15 @@ final class AppModel {
         } catch {
             banner = error.plainMessage
         }
+    }
+
+    /// Switches to the graph a notification is about (when it's another one the person is in). False when they aren't.
+    func switchGraph(id: String) async -> Bool {
+        if id == currentGraphId { return true }
+        if graphs.isEmpty { await loadGraphs() }
+        guard let g = graphs.first(where: { $0.id == id }) else { return false }
+        await switchGraph(to: g)
+        return currentGraphId == id
     }
 
     /// Who is signed in, their language and the graph they're in, in one request.

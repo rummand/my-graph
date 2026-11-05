@@ -6,6 +6,7 @@
  * reminders, the brief or by id — and Anna, switching graphs, sees only the graph she is in.
  * Also runs the invite flow (new account, own household) and checks that a viewer can't write.
  */
+export {};
 const BASE = process.env.BASE ?? "http://localhost:3918";
 const PASSWORD = "demo-demo-demo";
 let failures = 0;
@@ -90,7 +91,7 @@ async function main() {
 
   // ── Sara.
   const saraGraphs = (await sara.req("/api/graphs")).json.graphs as { id: string; name: string }[];
-  ok(saraGraphs.length === 2 && saraGraphs.some((x) => x.id === forSara.id) && saraGraphs.some((x) => x.name === "Personal"), `Sara's graphs: ${saraGraphs.map((x) => x.name).join(", ")}`);
+  ok(saraGraphs.some((x) => x.id === forSara.id) && saraGraphs.some((x) => x.name === "Personal") && !saraGraphs.some((x) => x.id === fam.id || x.id === work.id),`Sara's graphs: ${saraGraphs.map((x) => x.name).join(", ")}`);
   ok((await sara.req("/api/graphs/switch", { method: "POST", body: { graphId: fam.id } })).status === 404, "Sara can't switch to Anna's Family graph");
   ok((await sara.req("/api/graphs/switch", { method: "POST", body: { graphId: work.id } })).status === 404, "Sara can't switch to Anna's Work graph");
   ok((await sara.req(`/api/graphs/${fam.id}/members`)).status === 404, "Sara can't list Family members");

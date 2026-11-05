@@ -4,6 +4,7 @@ import { AdminNav } from "@/components/admin/admin-nav";
 import { requirePlatformAdmin } from "@/lib/plans/admin";
 import { adminTotals } from "@/lib/plans/admin-data";
 import { getAdminT } from "@/lib/plans/i18n";
+import { getObsT } from "@/lib/observability/i18n";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false } };
@@ -11,7 +12,7 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
 /** The platform admin console. Every page under it checks again (layouts alone don't guard a route). */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   await requirePlatformAdmin();
-  const [t, totals] = await Promise.all([getAdminT(), adminTotals()]);
+  const [t, totals, obsT] = await Promise.all([getAdminT(), adminTotals(), getObsT()]);
   const lead = [
     t("admin.totals.accounts", { count: totals.accounts }),
     t("admin.totals.households", { count: totals.households }),
@@ -24,6 +25,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         { href: "/admin", label: t("admin.nav.accounts") },
         { href: "/admin/households", label: t("admin.nav.households") },
         { href: "/admin/graphs", label: t("admin.nav.graphs") },
+        { href: "/admin/billing", label: t("admin.nav.billing") },
+        { href: "/admin/errors", label: obsT("obs.nav.errors") },
+        { href: "/admin/performance", label: obsT("obs.nav.performance") },
+        { href: "/admin/backups", label: t("admin.nav.backups") },
         { href: "/admin/audit", label: t("admin.nav.audit") },
       ]} />
       {children}

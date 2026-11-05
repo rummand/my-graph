@@ -5,6 +5,10 @@
  * for them); a set nobody in particular proposed (a connector, the system) is seen by everyone who may write in the
  * graph. A proposal carries quotes from its evidence, so it is never shown more widely than that.
  */
+import { isLocale, makeT, type TFn } from "@/lib/i18n/core";
+import { DICTIONARIES } from "@/lib/i18n/messages";
+import { localizeTitle, titleKeyFor, type TitleKey } from "./titles";
+
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, notInArray, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
@@ -20,6 +24,8 @@ import {
   ALL_OPS, canSeeSet, emptyNow, fingerprintOf, groupReasons, matchExisting, mergeUpdateSet, summarize, summaryOf, toStored, verdictsFor,
   type ChangeRowLike, type Now, type Origin, type RemapEntry, type Resolution, type Verdict,
 } from "./pure";
+
+const tFor = (l: "en" | "da"): TFn => makeT(l, DICTIONARIES[l], DICTIONARIES.en);
 
 export class ChangeError extends Error {
   constructor(public status: 400 | 403 | 404 | 409 | 422, message: string) { super(message); this.name = "ChangeError"; }
@@ -77,7 +83,7 @@ function authorFor(origin: ChangeSetOrigin, v: Viewer): { authorKind: string; au
 
 /* ── Proposing ───────────────────────────────────────────────────────────────────────────────────────── */
 
-export async function propose(v: Viewer, input: { title: string; description?: string; origin: ChangeSetOrigin; evidence?: Receipt; forUserId?: string; changes: ChangeInput[] }): Promise<{ id: string; nodeIds: Record<number, string> } | null> {
+export async function propose(v: Viewer, input: { title: string; titleKey?: TitleKey | null; description?: string; origin: ChangeSetOrigin; evidence?: Receipt; forUserId?: string; changes: ChangeInput[] }): Promise<{ id: string; nodeIds: Record<number, string> } | null> {
   if (!member(v) || v.role === "guest") return null;
   if (!ORIGINS.includes(input.origin)) throw new ChangeError(400, "Unknown origin.");
   const ops = input.changes.filter((c) => c && ALL_OPS.has(c.op));
@@ -96,7 +102,7 @@ export async function propose(v: Viewer, input: { title: string; description?: s
   const forUserId = isId(input.forUserId) ? input.forUserId : null;
   const id = await db.transaction(async (tx) => {
     const [set] = await tx.insert(changeSets).values({
-      graphId: v.graphId, title, description: input.description?.slice(0, 2000) ?? null, status: "draft", origin: input.origin,
+      graphId: v.graphId, title, ...titleKeyFor(title, input.titleKey), description: input.description?.slice(0, 2000) ?? null, status: "draft", origin: input.origin,
       createdBy: v.id, forUserId, evidence: (input.evidence ?? {}) as Record<string, unknown>,
     }).returning({ id: changeSets.id });
     const inserted = await tx.insert(changes).values(rows.map((r) => ({
@@ -217,8 +223,9 @@ async function originsOf(v: Viewer, ctx: AccessCtx, ids: string[]): Promise<Map<
     .from(graphEvents).where(and(eq(graphEvents.graphId, v.graphId), inArray(graphEvents.subjectId, ids), eq(graphEvents.kind, "created"))).orderBy(asc(graphEvents.at));
   const setIds = [...new Set(created.map((r) => r.changeSetId).filter((x): x is string => !!x))];
   const sets = new Map((setIds.length
-    ? await db.select({ id: changeSets.id, title: changeSets.title, evidence: changeSets.evidence }).from(changeSets).where(and(inArray(changeSets.id, setIds), await visibleSql(v)))
+    ? await db.select({ id: changeSets.id, title: changeSets.title, titleKey: changeSets.titleKey, titleParams: changeSets.titleParams, evidence: changeSets.evidence }).from(changeSets).where(and(inArray(changeSets.id, setIds), await visibleSql(v)))
     : []).map((s) => [s.id, s]));
+  const t = await readerT(v);
   const firstSource = new Map<string, string>();
   for (const r of await db.select({ subjectId: provenance.subjectId, sourceId: provenance.sourceId }).from(provenance)
     .where(and(eq(provenance.subjectType, "node"), inArray(provenance.subjectId, ids), isNotNull(provenance.sourceId))).orderBy(asc(provenance.createdAt))) {
@@ -229,7 +236,7 @@ async function originsOf(v: Viewer, ctx: AccessCtx, ids: string[]): Promise<Map<
     const set = r.changeSetId ? sets.get(r.changeSetId) : undefined;
     const ev = (set?.evidence ?? {}) as Record<string, unknown>;
     const sourceId = (isId(ev.sourceId) ? ev.sourceId : null) ?? firstSource.get(r.subjectId) ?? null;
-    out.set(r.subjectId, { changeSetId: set?.id ?? null, changeSetTitle: set?.title ?? null, sourceId, sourceTitle: null, at: r.at.toISOString(), by: r.by });
+    out.set(r.subjectId, { changeSetId: set?.id ?? null, changeSetTitle: set ? localizeTitle(set, t) : null, sourceId, sourceTitle: null, at: r.at.toISOString(), by: r.by });
   }
   for (const id of ids) {
     if (!out.has(id) && firstSource.has(id)) out.set(id, { changeSetId: null, changeSetTitle: null, sourceId: firstSource.get(id)!, sourceTitle: null, at: null, by: null });
@@ -244,6 +251,12 @@ async function originsOf(v: Viewer, ctx: AccessCtx, ids: string[]): Promise<Map<
     }
   }
   return out;
+}
+
+/** A translator in the viewer's own language (their setting), for titles stored with a key. Works outside requests. */
+export async function readerT(v: Viewer): Promise<TFn> {
+  const [u] = await db.select({ locale: users.locale }).from(users).where(eq(users.id, v.id)).limit(1).catch(() => []);
+  return tFor(isLocale(u?.locale) ? u.locale : "en");
 }
 
 async function relationLabels(v: Viewer): Promise<(key: string) => string> {
@@ -263,14 +276,15 @@ async function views(v: Viewer, sets: SetRow[]): Promise<ChangeSetView[]> {
   const drafts = new Set(sets.filter((s) => s.status === "draft").map((s) => s.id));
   const now = await nowFor(v, rows, rows.some((r) => drafts.has(r.changeSetId) && (r.op === "addKind" || r.op === "addRelationType" || r.op === "addAttribute")));
   const rel = await relationLabels(v);
+  const t = await readerT(v);
   const creators = [...new Set(sets.map((s) => s.createdBy).filter((x): x is string => !!x))];
   const names = new Map((creators.length ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, creators)) : []).map((u) => [u.id, u.name]));
   // Partly delivered sets point at their follow-up and back; a link is named only when the viewer may see that set.
   const linkOf = (s: SetRow, k: "restIn" | "restOf") => { const x = (s.evidence ?? {})[k]; return isId(x) ? x : null; };
   const linkIds = [...new Set(sets.flatMap((s) => [linkOf(s, "restIn"), linkOf(s, "restOf")]).filter((x): x is string => !!x))];
   const linked = new Map((linkIds.length
-    ? await db.select({ id: changeSets.id, title: changeSets.title, status: changeSets.status }).from(changeSets).where(and(inArray(changeSets.id, linkIds), await visibleSql(v)))
-    : []).map((r) => [r.id, r]));
+    ? await db.select({ id: changeSets.id, title: changeSets.title, titleKey: changeSets.titleKey, titleParams: changeSets.titleParams, status: changeSets.status }).from(changeSets).where(and(inArray(changeSets.id, linkIds), await visibleSql(v)))
+    : []).map((r) => [r.id, { id: r.id, title: localizeTitle(r, t), status: r.status }]));
   const bySet = new Map<string, ChangeRow[]>();
   for (const r of rows) bySet.set(r.changeSetId, [...(bySet.get(r.changeSetId) ?? []), r]);
   return sets.map((s) => {
@@ -287,7 +301,7 @@ async function views(v: Viewer, sets: SetRow[]): Promise<ChangeSetView[]> {
     for (const [id, r] of Object.entries(reasons)) verdicts[id] = r.verdict;
     const remapped = Array.isArray((s.evidence ?? {}).remapped) ? ((s.evidence ?? {}).remapped as RemapEntry[]) : [];
     return {
-      id: s.id, title: s.title, description: s.description, status: s.status, origin: s.origin as ChangeSetOrigin,
+      id: s.id, title: localizeTitle(s, t), description: s.description, status: s.status, origin: s.origin as ChangeSetOrigin,
       createdAt: s.createdAt, deliveredAt: s.deliveredAt, createdByName: s.createdBy ? names.get(s.createdBy) ?? null : null,
       fingerprint: s.fingerprint,
       restIn: linked.get(linkOf(s, "restIn") ?? "") ?? null,
@@ -307,6 +321,18 @@ export async function getOne(v: Viewer, id: string): Promise<ChangeSetView | nul
   const row = await loadRow(v, id);
   if (!row) return null;
   return (await views(v, [row]))[0] ?? null;
+}
+
+/**
+ * Several change sets by id in one pass (the viewer's visibility applies, as in getOne), in the order of `ids`.
+ * Use this instead of calling getOne in a loop: one query for the rows and one shared view build for all of them.
+ */
+export async function getMany(v: Viewer, ids: string[]): Promise<ChangeSetView[]> {
+  const want = [...new Set(ids.filter(isId))];
+  if (!want.length || !member(v)) return [];
+  const rows = await db.select().from(changeSets).where(and(inArray(changeSets.id, want), await visibleSql(v)));
+  const built = new Map((await views(v, rows)).map((x) => [x.id, x]));
+  return want.flatMap((id) => (built.has(id) ? [built.get(id)!] : []));
 }
 
 export async function list(v: Viewer, opts: { status?: "draft" | "delivered" | "abandoned" | "all"; origin?: ChangeSetOrigin; limit?: number } = {}): Promise<ChangeSetView[]> {

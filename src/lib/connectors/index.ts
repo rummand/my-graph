@@ -8,5 +8,6 @@ export {
   connectionsNeedingYou, createConnection, disconnect, getConnection, importedCount, listConnections, runNow, updateConnection,
   ConnectionError, type ConnectionDTO, type RunDTO, type ConnectionStatusView,
 } from "./store";
+export { revokeConnection, type Revocation, type RevocationStatus } from "./revoke";
 export { connectorById, connectorInfo, offeredIn, CONNECTORS, type ConnectorInfo } from "./registry";
 export { startConnectorScheduler, stopConnectorScheduler, tick as connectorTick } from "./run";

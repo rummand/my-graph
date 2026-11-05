@@ -2,7 +2,8 @@ import type { NextRequest } from "next/server";
 import { audit } from "@/lib/auth";
 import { errorJson, handle, parseBody } from "@/lib/auth/http";
 import { verifyPassword } from "@/lib/auth/passwords";
-import { accountKey, accountLimiter, attemptKey, clientIp, loginLimiter } from "@/lib/auth/rate-limit";
+import { accountKey, attemptKey, clientIp } from "@/lib/auth/rate-limit";
+import { sharedLoginLimiter as loginLimiter, sharedAccountLimiter as accountLimiter } from "@/lib/security";
 import { loginBody } from "@/lib/auth/schemas";
 import { completeSignIn, findUserByLogin } from "@/lib/auth/signin";
 import { signInBlocked } from "@/lib/auth/store";
@@ -16,8 +17,8 @@ export async function POST(req: NextRequest) {
     const ip = clientIp(req.headers);
     const key = attemptKey(ip, body.email);
     const acct = accountKey(body.email);
-    const ipLimit = loginLimiter.check(key);
-    const acctLimit = accountLimiter.check(acct);
+    const ipLimit = await loginLimiter.check(key);
+    const acctLimit = await accountLimiter.check(acct);
     const limit = !ipLimit.allowed ? ipLimit : acctLimit;
     const user = await findUserByLogin(body.email);
     if (!limit.allowed) {
@@ -28,8 +29,8 @@ export async function POST(req: NextRequest) {
     }
     const ok = await verifyPassword(body.password, user?.passwordHash);
     if (!user || !ok) {
-      loginLimiter.fail(key);
-      accountLimiter.fail(acct);
+      await loginLimiter.fail(key);
+      await accountLimiter.fail(acct);
       if (user) await audit(user, "auth.login_failed", { type: "user", id: user.id }, { ip, method: "password" });
       else await audit(null, "auth.login_failed", undefined, { ip, method: "password", unknownLogin: true });
       return errorJson(401, WRONG);
@@ -39,8 +40,8 @@ export async function POST(req: NextRequest) {
       await audit(user, "auth.login_refused", { type: "user", id: user.id }, { ip, reason: "guest_access_ended" });
       return errorJson(403, blocked);
     }
-    loginLimiter.reset(key);
-    accountLimiter.reset(acct);
+    await loginLimiter.reset(key);
+    await accountLimiter.reset(acct);
     const res = await completeSignIn(req, user, "password");
     await audit(user, "auth.login", { type: "user", id: user.id }, { ip, method: "password" });
     return res;

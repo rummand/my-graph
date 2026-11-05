@@ -4,9 +4,11 @@
  *
  *   { "id": "rss", "name": "RSS and Atom feeds", "version": "1.0.0", "protocol": 1,
  *     "runtime": "node", "entry": "index.mjs", "description": "…",
- *     "limits": { "timeoutSeconds": 120, "memoryMb": 256, "maxRecords": 2000 } }
+ *     "limits": { "timeoutSeconds": 120, "memoryMb": 256, "maxRecords": 2000, "cpuSeconds": 60 },
+ *     "network": true }
  *
- * `runtime` is "node" (run with this server's Node, with a memory cap) or "executable" (the entry is run as it is).
+ * `runtime` is "node" (run with this server's Node in its permission sandbox, see sandbox.ts) or "executable" (the entry
+ * is run as it is; only when the platform admin sets MG_PLUGINS_ALLOW_EXECUTABLE=1). `network` says what it may reach.
  * The entry must be a file inside the plugin's folder (symlinks are resolved and must stay inside).
  *
  * Where: MG_PLUGINS_DIR. In development, when it is not set, the repo's `examples/plugin-*` folders.
@@ -15,6 +17,7 @@ import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "n
 import path from "node:path";
 import { z } from "zod";
 import { PROTOCOL_VERSION } from "./protocol";
+import { executablesAllowed, HOST_PATTERN } from "./sandbox";
 
 export const pluginManifestSchema = z.object({
   id: z.string().regex(/^[a-z][a-z0-9_]{1,39}$/, "a plugin id is lower-case letters, digits and _"),
@@ -28,7 +31,13 @@ export const pluginManifestSchema = z.object({
     timeoutSeconds: z.number().int().min(5).max(600).optional(),
     memoryMb: z.number().int().min(32).max(2048).optional(),
     maxRecords: z.number().int().min(1).max(50_000).optional(),
+    cpuSeconds: z.number().int().min(1).max(600).optional(),
   }).optional(),
+  /**
+   * The network the plugin needs. Left out or false: none. true: the public internet (no private addresses). A list of
+   * host names ("feeds.example.com", "*.example.org"): only those. See sandbox.ts.
+   */
+  network: z.union([z.boolean(), z.array(z.string().toLowerCase().regex(HOST_PATTERN, "a host is a name like feeds.example.com or *.example.org")).max(50)]).optional(),
 }).strict();
 export type PluginManifest = z.infer<typeof pluginManifestSchema>;
 
@@ -67,6 +76,7 @@ export function installedPlugins(env: Record<string, string | undefined> = proce
     try {
       const p = readPlugin(sub);
       if (plugins.some((x) => x.id === p.id)) problems.push(`${name}: the id "${p.id}" is used twice.`);
+      else if (p.runtime !== "node" && !executablesAllowed(env)) problems.push(`${name}: plugins that aren't Node are turned off (MG_PLUGINS_ALLOW_EXECUTABLE=1 turns them on).`);
       else plugins.push(p);
     } catch (e) {
       problems.push(`${name}: ${e instanceof z.ZodError ? e.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ") : e instanceof Error ? e.message : String(e)}`);

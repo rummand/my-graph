@@ -127,6 +127,55 @@
       "when": 1793818161694,
       "tag": "0017_mcp_server",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793823984527,
+      "tag": "0018_security_limits",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793823993307,
+      "tag": "0019_changes_title_keys",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793824000210,
+      "tag": "0020_billing_stripe",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793824071901,
+      "tag": "0021_push_devices",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793824243831,
+      "tag": "0022_data_safety_exports",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793824801266,
+      "tag": "0023_perf_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793824807692,
+      "tag": "0024_observability_errors",
+      "breakpoints": true
     }
   ]
 }

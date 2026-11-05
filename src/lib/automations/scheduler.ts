@@ -79,6 +79,9 @@ export function start(): void {
   state.keeperTimer = setInterval(keep, 15 * 60_000);
   (state.keeperTimer as { unref?: () => void }).unref?.();
   setTimeout(keep, 5 * 60_000).unref?.();
+  // iPhone push (src/lib/push): due reminders, waiting suggestions and change sets, connections that need you and
+  // clinical risk flags, every minute. Without APNS_* it logs once that push is off and stays idle.
+  void import("@/lib/push").then((p) => p.startPushTicker()).catch((e) => console.error("[scheduler] push failed to start:", e instanceof Error ? e.message : e));
   console.log("[scheduler] started (every 60s; Brain Keeper every 15 min)");
 }
 

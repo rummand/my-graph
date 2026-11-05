@@ -4,7 +4,8 @@ import { z } from "zod";
 import { writeAudit } from "@/lib/auth/audit";
 import { peekResetToken, redeemResetToken } from "@/lib/auth/account-controls";
 import { passwordProblem } from "@/lib/auth/passwords";
-import { clientIp, loginLimiter } from "@/lib/auth/rate-limit";
+import { clientIp } from "@/lib/auth/rate-limit";
+import { sharedLoginLimiter as loginLimiter } from "@/lib/security";
 import { isWellFormedToken } from "@/lib/auth/session";
 import { getT } from "@/lib/i18n";
 
@@ -19,11 +20,11 @@ export async function resetPassword(raw: { token: string; password: string }): P
   if (!parsed.success || !isWellFormedToken(parsed.data.token)) return { ok: false, error: t("settings.resetLink.invalid") };
   const { token, password } = parsed.data;
   const key = `reset|${clientIp(await headers())}`;
-  if (!loginLimiter.check(key).allowed) return { ok: false, error: t("settings.resetLink.tooMany") };
+  if (!(await loginLimiter.check(key)).allowed) return { ok: false, error: t("settings.resetLink.tooMany") };
 
   const peek = await peekResetToken(token);
   if (!peek.user) {
-    loginLimiter.fail(key);
+    await loginLimiter.fail(key);
     return { ok: false, error: t(`settings.resetLink.state.${peek.state}`) };
   }
   const problem = passwordProblem(password, { email: peek.user.email, name: peek.user.name });
@@ -31,10 +32,10 @@ export async function resetPassword(raw: { token: string; password: string }): P
 
   const r = await redeemResetToken(token, password);
   if (!r.ok) {
-    loginLimiter.fail(key);
+    await loginLimiter.fail(key);
     return { ok: false, error: t(`settings.resetLink.state.${r.state}`) };
   }
-  loginLimiter.reset(key);
+  await loginLimiter.reset(key);
   await writeAudit({ id: r.userId, householdId: r.householdId }, "password.reset_link_used", { type: "user", id: r.userId });
   return { ok: true };
 }

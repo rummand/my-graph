@@ -18,6 +18,7 @@
  * Every source carries url, externalId, connectionId and fetchedAt; everything derived is a proposal. Nothing is ever
  * written to Aula, and nothing marks a thread as read (see client.ts).
  */
+import { sourceTitleKey } from "@/lib/ingest/titles";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, like, notInArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
@@ -242,7 +243,8 @@ export async function syncAula(ctx: RunContext<AulaConfig>, transport: Transport
     externalId: "aula:account", kind: "connector", title: `Aula: ${account.name ?? "your login"}`, mime: "text/plain",
     text: [`Aula login: ${account.name ?? "unknown"}`, ...account.children.map((c) => `Child: ${c.name}${c.institutionName ? `, ${c.institutionName}` : ""}`)].join("\n"),
     sensitive: false, documentDate: null, precision: null, url: web, threadKey: null,
-    meta: { kind: "aula_account", noRead: true }, fingerprint: fingerprint([account.name, account.children]),
+    meta: { kind: "aula_account", noRead: true, ...(account.name ? sourceTitleKey("aulaAccount", { name: account.name }) : sourceTitleKey("aulaAccountUnknown")) },
+    fingerprint: fingerprint([account.name, account.children]),
   };
   const accountExisting = await existingByExternal(ctx, [accountDraft.externalId]);
   let accountSourceId = accountExisting.get(accountDraft.externalId)?.id;

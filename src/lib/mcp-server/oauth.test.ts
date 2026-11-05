@@ -3,6 +3,10 @@ import { describe, expect, it } from "vitest";
 import { approve, authorizationServerMetadata, challenge, checkAuthorize, connectedApps, credentialForAccessToken, disconnectApp, mcpResource, protectedResourceMetadata, redirectAllowed, registerClient, revokeToken, token, type TokenEvent } from "./oauth";
 import { memoryStore } from "./store-memory";
 import { hashToken } from "./tokens";
+import { memoryCountStore, RateLimiter } from "@/lib/security/rate-limit";
+
+/** The registration limit counted in memory here (the app counts it in Postgres). */
+const testLimiter = new RateLimiter({ store: memoryCountStore() });
 
 const ORIGIN = "https://graph.example.dk";
 const USER = "11111111-1111-4111-8111-111111111111";
@@ -19,7 +23,7 @@ function setup() {
 }
 
 async function register(store: ReturnType<typeof setup>, extra: Record<string, unknown> = {}) {
-  const r = await registerClient(store, { client_name: "Claude", redirect_uris: ["https://claude.ai/api/mcp/auth_callback"], token_endpoint_auth_method: "none", ...extra }, `ip-${Math.random()}`);
+  const r = await registerClient(store, { client_name: "Claude", redirect_uris: ["https://claude.ai/api/mcp/auth_callback"], token_endpoint_auth_method: "none", ...extra }, `ip-${Math.random()}`, testLimiter);
   expect(r.status).toBe(201);
   return r.body as { client_id: string; client_secret?: string };
 }
@@ -61,8 +65,8 @@ describe("metadata", () => {
 describe("registration (RFC 7591)", () => {
   it("refuses bad redirects and odd grants; keeps a secret only as a hash", async () => {
     const store = setup();
-    expect((await registerClient(store, { redirect_uris: ["http://evil.example/cb"] }, "a")).status).toBe(400);
-    expect((await registerClient(store, { redirect_uris: ["https://ok.example/cb"], grant_types: ["password"] }, "a")).status).toBe(400);
+    expect((await registerClient(store, { redirect_uris: ["http://evil.example/cb"] }, "a", testLimiter)).status).toBe(400);
+    expect((await registerClient(store, { redirect_uris: ["https://ok.example/cb"], grant_types: ["password"] }, "a", testLimiter)).status).toBe(400);
     const c = await register(store, { token_endpoint_auth_method: "client_secret_basic" });
     expect(c.client_secret).toMatch(/^mgs_/);
     expect(store.tables.clients[0].secretHash).toBe(hashToken(c.client_secret!));

@@ -25,9 +25,23 @@ ENV NODE_ENV=production \
     RUN_MIGRATIONS=1 \
     MIGRATIONS_DIR=/app/drizzle
 
-# Non-root user that owns the upload volume.
+# pg_dump and psql for the nightly backups (src/lib/backup). From the PostgreSQL apt repository, so the client is at
+# least as new as the database server (pg_dump refuses to dump a newer server). Without it, backups fall back to a
+# table-by-table JSON dump.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl \
+ && install -d /usr/share/postgresql-common/pgdg \
+ && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+ && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo "$VERSION_CODENAME")-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client-17 \
+ && apt-get purge -y curl && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+ENV PG_DUMP_PATH=/usr/lib/postgresql/17/bin/pg_dump \
+    PSQL_PATH=/usr/lib/postgresql/17/bin/psql
+
+# Non-root user that owns the upload volume (and the backups and exports beside it).
 RUN groupadd --system --gid 1001 app && useradd --system --uid 1001 --gid app app \
- && mkdir -p /data/uploads && chown -R app:app /data
+ && mkdir -p /data/uploads /data/backups /data/exports && chown -R app:app /data
 
 COPY --from=builder --chown=app:app /app/public ./public
 COPY --from=builder --chown=app:app /app/.next/standalone ./

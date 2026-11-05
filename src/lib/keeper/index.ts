@@ -13,6 +13,7 @@
  * empties its inbox without judgement (see fallbackActions).
  */
 import { voiceOf } from "@/lib/assistant/locale";
+import { localizeTitle, readerT } from "@/lib/changes";
 import type { TFn } from "@/lib/i18n/core";
 import { and, desc, eq, gt, inArray, isNotNull, like, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
@@ -178,11 +179,12 @@ async function material(v: Viewer, since: Date): Promise<{ evidence: Evidence[];
     .orderBy(desc(assistantActivity.createdAt)).limit(15);
   acts.forEach((a, i) => evidence.push({ ref: `a${i + 1}`, type: "activity", text: clip(a.summary, 240) }));
 
-  const sets = await db.select({ id: changeSets.id, title: changeSets.title }).from(changeSets)
+  const sets = await db.select({ id: changeSets.id, title: changeSets.title, titleKey: changeSets.titleKey, titleParams: changeSets.titleParams }).from(changeSets)
     .where(and(eq(changeSets.graphId, v.graphId), eq(changeSets.status, "delivered"), gt(changeSets.deliveredAt, since),
       or(eq(changeSets.createdBy, v.id), eq(changeSets.deliveredBy, v.id))))
     .orderBy(desc(changeSets.deliveredAt)).limit(8);
-  sets.forEach((s, i) => evidence.push({ ref: `d${i + 1}`, type: "changeset", changeSetId: s.id, title: clip(s.title, 200) }));
+  const tr = await readerT(v);
+  sets.forEach((s, i) => evidence.push({ ref: `d${i + 1}`, type: "changeset", changeSetId: s.id, title: clip(localizeTitle(s, tr), 200) }));
 
   const read = { conversations: ci, proposals: inbox.length, sources: srcs.length, activity: acts.length, changeSets: sets.length };
   return { evidence, read, sensitive };

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct RootView: View {
     @Environment(AppModel.self) private var app
@@ -64,11 +65,52 @@ struct MainTabs: View {
             }
         }
         .animation(.easeOut(duration: 0.2), value: app.banner)
+        .onReceive(NotificationCenter.default.publisher(for: .mgOpenTarget)) { note in
+            guard let t = note.object as? PushTarget else { return }
+            Task { await open(t) }
+        }
         .task {
+            if let t = AppDelegate.pendingTarget { await open(t) }
             if let t = DebugHooks.tab { tab = t }
             if let r = DebugHooks.route { routers[tab]?.push(r) }
             if let q = DebugHooks.ask { tab = .ask; routers[.ask]?.push(.debugAsk(q)) }
             if DebugShare.request != nil { try? await Task.sleep(for: .seconds(1)); DebugShare.presentIfAsked() }
+        }
+    }
+
+    /// Opens what a tapped notification is about: in its graph (switching first; the new tabs then open it), on the
+    /// tab it belongs to, or on the web for screens the app doesn't have (connections, the practice).
+    private func open(_ target: PushTarget) async {
+        if let g = target.graphId, g != app.currentGraphId {
+            AppDelegate.pendingTarget = target
+            if await app.switchGraph(id: g) { return }
+            AppDelegate.pendingTarget = nil
+            tab = .today
+            return
+        }
+        AppDelegate.pendingTarget = nil
+        switch target.destination {
+        case .today:
+            tab = .today
+            routers[.today]?.path = []
+        case .route(let r):
+            let t = Self.tab(for: r)
+            tab = t
+            routers[t]?.path = [r]
+        case .web(let href):
+            var c = URLComponents(url: ServerConfig.current, resolvingAgainstBaseURL: false)
+            c?.path = href
+            if let u = c?.url { await UIApplication.shared.open(u) }
+        }
+    }
+
+    private static func tab(for r: Route) -> AppTab {
+        switch r {
+        case .person: return .people
+        case .chat, .conversations: return .ask
+        case .timeline: return .timeline
+        case .source: return .library
+        default: return .today
         }
     }
 

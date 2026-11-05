@@ -74,6 +74,8 @@ targets:
       properties:
         com.apple.security.application-groups: [$(APP_GROUP)]
         com.apple.developer.associated-domains: [webcredentials:$(WEB_DOMAIN)]
+        # Remote notifications (APNs). Xcode switches this to "production" when it exports for TestFlight/App Store.
+        aps-environment: development
     dependencies:
       - target: MyGraphShare
       - target: MyGraphWidget

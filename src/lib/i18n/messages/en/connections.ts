@@ -217,6 +217,7 @@ const messages: MessageTree = {
     confirm: "Disconnect",
     removed: { one: "Disconnected. {count} item removed.", other: "Disconnected. {count} items removed." },
     kept: "Disconnected. Everything it brought in is kept.",
+    ok: "Done",
   },
   detail: {
     settingsTitle: "Settings",

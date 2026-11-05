@@ -32,7 +32,10 @@ import recordings from "./recordings";
 import clinical from "./clinical";
 import profile from "./profile";
 import providers from "./providers";
+import push from "./push";
+import stored from "./stored";
+import security from "./security";
 
-const da: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, wiki, graph, changes, history, memory, automations, connections, aula, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance, profile, clinical, mcp, mcpServer, recordings, providers };
+const da: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, wiki, graph, changes, history, memory, automations, connections, aula, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance, profile, clinical, mcp, mcpServer, recordings, providers, push, stored, security };
 
 export default da;

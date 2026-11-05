@@ -3,8 +3,8 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import Link from "next/link";
-import { ArrowRight, Download } from "lucide-react";
-import { Badge, Button, PageHeader, buttonClass } from "@/components/ui";
+import { ArrowRight } from "lucide-react";
+import { Badge, PageHeader } from "@/components/ui";
 import { getSession, isParent, requireUser } from "@/lib/auth";
 import { familyMembers, myAccount, myPasskeys, mySessions } from "@/lib/auth/settings-data";
 import { canUseAssistantTools } from "@/lib/automations/policy";
@@ -12,6 +12,7 @@ import { loadGraphViews } from "@/components/graphs/data";
 import { GraphSettings } from "@/components/settings/graph-settings";
 import { LanguageChoice, ThemeChoice, TimeZoneChoice } from "@/components/settings/preferences";
 import { getFormatDate, getPrefs, getT } from "@/lib/i18n";
+import { DataSection } from "./_components/data-section";
 import { PasskeyList } from "./_components/passkey-list";
 import { PlanSection } from "./_components/plan-section";
 import { PasswordForm, ProfileForm } from "./_components/profile-forms";
@@ -165,21 +166,7 @@ export default async function SettingsPage() {
       )}
 
       <Group id="data">
-        <Row id="data-h" title={t("settings.data.title")} lead={t("settings.data.lead")}>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <p className="max-w-[52ch] text-sm text-muted">{t("settings.data.exportHint")}</p>
-            <a href="/api/settings/export" download className={buttonClass("secondary")}>
-              <Download size={16} aria-hidden />{t("settings.data.export")}
-            </a>
-          </div>
-          <div className="mt-5 flex flex-wrap items-start justify-between gap-3 border-t border-line pt-5">
-            <div className="min-w-0 max-w-[52ch]">
-              <p className="font-medium">{t("settings.data.deleteTitle")}</p>
-              <p className="mt-0.5 text-sm text-muted">{v.role === "owner" ? t("settings.data.deleteHintOwner") : t("settings.data.deleteHint")}</p>
-            </div>
-            <Button variant="danger" disabled>{t("settings.data.delete")}</Button>
-          </div>
-        </Row>
+        <DataSection v={v} />
       </Group>
     </>
   );

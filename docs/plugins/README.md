@@ -15,8 +15,43 @@ The example in [`examples/plugin-rss`](../../examples/plugin-rss) reads an RSS o
   `examples/plugin-*` folders are installed.
 - **Only the platform admin runs them** (`PLATFORM_ADMIN_EMAILS`): a Plugin connection made by anyone else stops with
   "needs you" before the plugin starts.
-- A plugin is trusted code on your server. My Graph limits what it can do by accident (below), but it is not a
-  sandbox against a hostile plugin. Read a plugin before you install it, as you would any server software.
+- A plugin is code on your server. My Graph runs it in a sandbox (below), which stops most of what a careless or
+  hostile plugin could do, but read a plugin before you install it, as you would any server software.
+- **Only Node plugins run by default.** Plugins with `"runtime": "executable"` (any other language) get fewer
+  protections, so they are listed and run only when the platform admin sets `MG_PLUGINS_ALLOW_EXECUTABLE=1`.
+
+## The sandbox
+
+Every run, enforced by My Graph (`src/lib/plugins/sandbox.ts`), in layers:
+
+| Layer | Node plugins | Executable plugins |
+| --- | --- | --- |
+| Files | Node's permission model (`--permission`): read only the plugin's own folder; no writing anywhere | the operating system's rules for the user it runs as |
+| Other programs, worker threads, native addons, WASI | refused (`--permission` without `--allow-child-process`, `--allow-worker`, `--allow-addons`, `--allow-wasi`); `process.binding` closed; no `eval`/`new Function` | not limited |
+| Network | none unless `plugin.json` declares `"network"` (below), enforced by a guard loaded before the plugin that locks `net`, `dgram` and `dns` | not limited by My Graph: use the container's egress rules |
+| Environment | an allow-list only: `PATH`, an empty `HOME`/`TMPDIR` of its own, `LANG`, `TZ`, `NODE_ENV`, `MG_PLUGIN_*` | same |
+| User | when the server runs as root (a container), the plugin runs as `MG_PLUGIN_UID`/`MG_PLUGIN_GID` (default 65534, `nobody`) | same |
+| CPU and output | `ulimit -t` CPU seconds (`limits.cpuSeconds`, default 60, at most 300; 15 for spec/check/discover), largest file 200 MB, 256 open files; memory (`--max-old-space-size`); wall-clock and idle timeouts; 64 MB and `maxRecords` on stdout, one line ≤ 512 KB, 16 KB of stderr | same, without the memory cap |
+
+**Network.** Node 22's permission model has no network switch (Node 25 adds `--allow-net`), so My Graph loads a guard
+with `--require` before the plugin. It replaces `net.Socket#connect`, `net.Server#listen`, `dgram` and (with no network)
+`dns` with checked versions that can't be reassigned or reconfigured, so `fetch`, `http`, `https`, `tls`, `http2` and
+WebSocket all pass through it.
+
+```json
+"network": false                                  // the default: nothing at all, not even DNS
+"network": true                                   // the public internet; private and loopback addresses are refused,
+                                                  // also when a name resolves to one (allowed in development only)
+"network": ["feeds.example.com", "*.example.org"] // only these hosts (and their public addresses)
+```
+
+The guard is a strong limit for JavaScript, not a kernel boundary. For a hard boundary, also limit the container's
+egress, or set `MG_PLUGINS_PROXY` to an egress proxy that enforces its own allow-list: plugins with network then get
+`HTTPS_PROXY`/`HTTP_PROXY` (and `NODE_USE_ENV_PROXY=1`) pointing at it, and the guard lets them reach the proxy.
+
+**Running as another user.** In the container, make the plugin directory readable by that user
+(`chmod -R o+rX $MG_PLUGINS_DIR` or `chown -R 65534 $MG_PLUGINS_DIR`). When the server isn't root, plugins run as the
+server's own user (Node's permission checks still apply).
 
 ## A plugin's folder
 
@@ -37,7 +72,8 @@ my-plugin/
   "runtime": "node",
   "entry": "index.mjs",
   "description": "Reads a news feed: each new item becomes a document in the library.",
-  "limits": { "timeoutSeconds": 60, "memoryMb": 128, "maxRecords": 500 }
+  "limits": { "timeoutSeconds": 60, "memoryMb": 128, "maxRecords": 500, "cpuSeconds": 30 },
+  "network": true
 }
 ```
 
@@ -45,9 +81,10 @@ my-plugin/
 | --- | --- |
 | `id` | Lower-case letters, digits and `_`, unique on the server. A connection names its plugin by this id. |
 | `protocol` | `1`, this document. |
-| `runtime` | `node`: run with the server's own Node, with `--max-old-space-size` set to `memoryMb`. `executable`: the entry is run as it is (a binary, a script with a `#!` line), so it can be written in any language. |
+| `runtime` | `node`: run with the server's own Node in the sandbox, with `--max-old-space-size` set to `memoryMb`. `executable`: the entry is run as it is (a binary, a script with a `#!` line), so it can be written in any language; only when the admin sets `MG_PLUGINS_ALLOW_EXECUTABLE=1`. |
 | `entry` | A path inside the folder. Symlinks are resolved and must stay inside the folder. |
-| `limits` | Optional, never above the server's ceiling: `timeoutSeconds` (5–600, default 120 for `read`; `spec`, `check` and `discover` get 30), `memoryMb` (32–2048, default 256), `maxRecords` per run (default 2000). |
+| `limits` | Optional, never above the server's ceiling: `timeoutSeconds` (5–600, default 120 for `read`; `spec`, `check` and `discover` get 30), `memoryMb` (32–2048, default 256), `maxRecords` per run (default 2000), `cpuSeconds` (1–600, default 60, at most 300). |
+| `network` | Optional: `false` (default, no network), `true` (the public internet) or a list of host names. See The sandbox. |
 
 ## Running a plugin
 

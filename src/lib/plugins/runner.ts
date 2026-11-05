@@ -1,22 +1,27 @@
 /**
  * Running an installed plugin (server-only): one command, one process, its messages as an async stream.
  *
- * Limits, all enforced here: a wall-clock timeout and an idle timeout (no output for a while), a cap on stdout bytes,
- * on the length of one line and on the number of RECORDs, a memory cap for Node plugins (--max-old-space-size), and
- * the process runs in its own process group so a timeout kills everything it started. The environment is scrubbed:
- * the plugin never sees My Graph's database address, keys or anything else in this server's environment; it gets only
- * PATH, a temporary HOME, LANG, TZ and MG_PLUGIN_* variables. Settings (secrets included) go in on stdin, never in
- * arguments (which other users of the machine can read in the process list) or files.
+ * The process starts inside the sandbox (sandbox.ts: Node's permission model, the network guard, another user when
+ * the server is root, CPU-time and file-size limits). Limits enforced here on top: a wall-clock timeout and an idle
+ * timeout (no output for a while), a cap on stdout bytes, on the length of one line and on the number of RECORDs, 16 KB
+ * of stderr, and the process runs in its own process group so a timeout kills everything it started. The environment
+ * is an allow-list: the plugin never sees My Graph's database address, keys or anything else in this server's
+ * environment; it gets only PATH, an empty HOME of its own, LANG, TZ, NODE_ENV and MG_PLUGIN_* variables. Settings
+ * (secrets included) go in on stdin, never in arguments (which other users of the machine can read in the process
+ * list) or files.
  */
 import { spawn } from "node:child_process";
+import { chownSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
+import path from "node:path";
 import { allowPrivate } from "@/lib/connectors/ssrf";
 import type { InstalledPlugin } from "./manifest";
 import { inputLine, MAX_LINE, parseLine, type Command, type Message } from "./protocol";
+import { ENV_ALLOW, sandboxPlan } from "./sandbox";
 
-export type RunLimits = { timeoutMs: number; idleMs: number; memoryMb: number; maxRecords: number; maxBytes: number; maxStderr: number };
+export type RunLimits = { timeoutMs: number; idleMs: number; memoryMb: number; maxRecords: number; maxBytes: number; maxStderr: number; cpuSeconds: number };
 
-export const DEFAULT_LIMITS: RunLimits = { timeoutMs: 120_000, idleMs: 60_000, memoryMb: 256, maxRecords: 2000, maxBytes: 64 * 1024 * 1024, maxStderr: 16 * 1024 };
+export const DEFAULT_LIMITS: RunLimits = { timeoutMs: 120_000, idleMs: 60_000, memoryMb: 256, maxRecords: 2000, maxBytes: 64 * 1024 * 1024, maxStderr: 16 * 1024, cpuSeconds: 60 };
 
 /** Limits for one run: the plugin's own (never above the server's ceiling), shorter for spec/check/discover. */
 export function limitsFor(plugin: Pick<InstalledPlugin, "limits">, command: Command, over: Partial<RunLimits> = {}): RunLimits {
@@ -27,11 +32,12 @@ export function limitsFor(plugin: Pick<InstalledPlugin, "limits">, command: Comm
     timeoutMs: quick ? 30_000 : Math.min(600_000, (l.timeoutSeconds ?? 120) * 1000),
     memoryMb: Math.min(2048, l.memoryMb ?? DEFAULT_LIMITS.memoryMb),
     maxRecords: Math.min(50_000, l.maxRecords ?? DEFAULT_LIMITS.maxRecords),
+    cpuSeconds: quick ? 15 : Math.min(300, l.cpuSeconds ?? DEFAULT_LIMITS.cpuSeconds),
     ...over,
   };
 }
 
-export type PluginFailure = "spawn" | "timeout" | "idle" | "limit" | "protocol" | "crashed" | "aborted";
+export type PluginFailure = "spawn" | "timeout" | "idle" | "limit" | "protocol" | "crashed" | "aborted" | "sandbox";
 
 export class PluginRunError extends Error {
   constructor(readonly failure: PluginFailure, message: string, readonly stderr = "") {
@@ -42,20 +48,17 @@ export class PluginRunError extends Error {
 
 export type RunSummary = { exitCode: number | null; records: number; stderr: string; ms: number };
 
-/** The environment a plugin gets: nothing of the server's own. */
-export function pluginEnv(plugin: Pick<InstalledPlugin, "id">): Record<string, string> {
-  return {
+/** The environment a plugin gets: an allow-list, nothing of the server's own. */
+export function pluginEnv(plugin: Pick<InstalledPlugin, "id">, home: string = tmpdir()): Record<string, string> {
+  const env: Record<string, string> = {
     PATH: "/usr/local/bin:/usr/bin:/bin",
-    HOME: tmpdir(), TMPDIR: tmpdir(), LANG: "C.UTF-8", TZ: "UTC", NODE_ENV: "production",
+    HOME: home, TMPDIR: home, LANG: "C.UTF-8", TZ: "UTC", NODE_ENV: "production",
     MG_PLUGIN_ID: plugin.id, MG_PLUGIN_PROTOCOL: "1",
     // Whether private addresses (localhost) may be fetched: only in development, as for every connector.
     MG_ALLOW_PRIVATE: allowPrivate() ? "1" : "0",
   };
-}
-
-function commandLine(plugin: Pick<InstalledPlugin, "runtime" | "entryPath">, command: Command, memoryMb: number): [string, string[]] {
-  if (plugin.runtime === "node") return [process.execPath, [`--max-old-space-size=${memoryMb}`, "--disallow-code-generation-from-strings", plugin.entryPath, command]];
-  return [plugin.entryPath, [command]];
+  for (const k of Object.keys(env)) if (!(ENV_ALLOW as readonly string[]).includes(k) && !k.startsWith("MG_")) delete env[k];
+  return env;
 }
 
 /**
@@ -63,15 +66,27 @@ function commandLine(plugin: Pick<InstalledPlugin, "runtime" | "entryPath">, com
  * something that isn't the protocol, or exits with a failure. Breaking out of the loop kills the plugin.
  */
 export async function* runPlugin(
-  plugin: Pick<InstalledPlugin, "id" | "runtime" | "entryPath" | "dir" | "limits">,
+  plugin: Pick<InstalledPlugin, "id" | "runtime" | "entryPath" | "dir" | "limits" | "network">,
   command: Command,
   input: { config: Record<string, unknown>; catalog?: unknown; state?: unknown },
   opts: { limits?: Partial<RunLimits>; signal?: AbortSignal; redact?: (s: string) => string } = {},
 ): AsyncGenerator<Message, RunSummary, void> {
   const limits = limitsFor(plugin, command, opts.limits);
   const t0 = Date.now();
-  const [cmd, args] = commandLine(plugin, command, limits.memoryMb);
-  const child = spawn(cmd, args, { cwd: plugin.dir, env: pluginEnv(plugin) as unknown as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"] as const, detached: true, windowsHide: true });
+  // An empty HOME of its own for this run (the user it runs as owns it), removed afterwards.
+  const home = mkdtempSync(path.join(realpathSync(tmpdir()), "mg-plugin-home-"));
+  let plan: ReturnType<typeof sandboxPlan>;
+  try {
+    plan = sandboxPlan({ runtime: plugin.runtime, dir: plugin.dir, entryPath: plugin.entryPath, network: plugin.network, command, memoryMb: limits.memoryMb, cpuSeconds: limits.cpuSeconds, env: pluginEnv(plugin, home) });
+    if (plan.uid !== undefined) chownSync(home, plan.uid, plan.gid ?? plan.uid);
+  } catch (e) {
+    rmSync(home, { recursive: true, force: true });
+    throw new PluginRunError("sandbox", e instanceof Error ? e.message : String(e));
+  }
+  const child = spawn(plan.cmd, plan.args, {
+    cwd: plugin.dir, env: plan.env as unknown as NodeJS.ProcessEnv, stdio: ["pipe", "pipe", "pipe"] as const, detached: true, windowsHide: true,
+    ...(plan.uid !== undefined ? { uid: plan.uid, gid: plan.gid } : {}),
+  });
 
   const queue: Message[] = [];
   let failure: PluginRunError | null = null;
@@ -138,7 +153,13 @@ export async function* runPlugin(
       else if (r.message) queue.push(r.message);
     }
     if (!failure && (code !== 0 || signal)) {
-      failure = new PluginRunError("crashed", `The plugin stopped with ${signal ? `signal ${signal}` : `exit code ${code}`}.`, redact(stderr.slice(-2000)));
+      failure = signal === "SIGXCPU" || (signal === "SIGKILL" && /cpu/i.test(stderr))
+        ? new PluginRunError("limit", `The plugin used more than ${limits.cpuSeconds} seconds of processor time and was stopped.`, redact(stderr.slice(-2000)))
+        : code === 125 && !signal
+          ? new PluginRunError("sandbox", "The plugin's limits couldn't be set on this server, so it wasn't started.", redact(stderr.slice(-2000)))
+          : /ERR_ACCESS_DENIED/.test(stderr)
+            ? new PluginRunError("crashed", `The plugin tried something it isn't allowed to (files outside its folder, other programs or the network it didn't declare) and stopped.`, redact(stderr.slice(-2000)))
+            : new PluginRunError("crashed", `The plugin stopped with ${signal ? `signal ${signal}` : `exit code ${code}`}.`, redact(stderr.slice(-2000)));
     }
     notify();
   });
@@ -155,6 +176,7 @@ export async function* runPlugin(
     clearTimeout(idle);
     opts.signal?.removeEventListener("abort", onAbort);
     kill();
+    setTimeout(() => rmSync(home, { recursive: true, force: true }), 3000).unref?.();
   }
   return { exitCode, records, stderr: redact(stderr), ms: Date.now() - t0 };
 }

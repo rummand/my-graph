@@ -11,7 +11,7 @@ import { scopeOf } from "@/lib/graphs/pure";
 import { graphsOfUser } from "@/lib/graphs/store";
 import { readableSnapshots, readableState, wholeGraph } from "@/lib/gbrain/versioning";
 import { pageReadSql } from "@/lib/wiki/access";
-import type { HistoryEvent } from "@/lib/changes";
+import { localizeTitle, readerT, type HistoryEvent } from "@/lib/changes";
 import { diffStates, isActiveEdge, isLiveNode, rewind, type GraphState, type StateDiff, type StoredEvent } from "./pure";
 import { restoreOps } from "./read-pure";
 import { getPrefs, getT } from "@/lib/i18n";
@@ -151,10 +151,10 @@ export async function whoSaidField(v: Viewer, nodeId: string, field?: string | n
   if (!row) return null;
   let changeSet: FieldBlame["changeSet"] = null;
   if (row.changeSetId) {
-    const [cs] = await db.select({ id: changeSets.id, title: changeSets.title, origin: changeSets.origin, createdBy: changeSets.createdBy, forUserId: changeSets.forUserId, graphId: changeSets.graphId })
+    const [cs] = await db.select({ id: changeSets.id, title: changeSets.title, titleKey: changeSets.titleKey, titleParams: changeSets.titleParams, origin: changeSets.origin, createdBy: changeSets.createdBy, forUserId: changeSets.forUserId, graphId: changeSets.graphId })
       .from(changeSets).where(eq(changeSets.id, row.changeSetId));
     const { canSee } = await import("@/lib/changes/store");
-    if (cs && canSee(v, cs)) changeSet = { id: cs.id, title: cs.title, origin: cs.origin };
+    if (cs && canSee(v, cs)) changeSet = { id: cs.id, title: localizeTitle(cs, await readerT(v)), origin: cs.origin };
   }
   // The provenance written with that change: same moment (a few seconds), this node, this graph.
   const near = new Date(row.at.getTime() - 5000), after = new Date(row.at.getTime() + 5000);

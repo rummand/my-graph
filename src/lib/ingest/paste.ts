@@ -2,6 +2,7 @@
  * Pasted into the library (server-only): text becomes a note, a URL becomes a saved web page. Both then go through
  * the same reading as an upload (chunks, search, extraction, a change set to review).
  */
+import { hit } from "@/lib/security/limits";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { sources } from "@/db/schema";
@@ -39,8 +40,18 @@ function readInBackground(v: Viewer, sourceId: string, web: boolean) {
 }
 
 /** Pasted text → a note (kind "manual", text/plain), with the page it came from when the clipboard said. */
+/** Pastes per person, shared across server processes (a pasted link makes My Graph fetch a page). */
+async function assertPasteRoom(v: Viewer): Promise<void> {
+  const room = await hit("paste", `user|${v.id}`);
+  if (!room.allowed) {
+    const mins = Math.max(1, Math.ceil(room.retryAfterSec / 60));
+    throw new IngestError(429, `That's a lot of pasting in a short time. Wait ${mins} minute${mins === 1 ? "" : "s"} and try again.`);
+  }
+}
+
 export async function addPastedText(v: Viewer, input: { title: string; text: string; sourceUrl?: string | null } & Sharing): Promise<PasteResult> {
   assertCanAdd(v);
+  await assertPasteRoom(v);
   const text = input.text.replace(/\r\n/g, "\n").trim();
   if (!text) throw new IngestError(400, "There is no text to save.");
   const title = input.title.replace(/\s+/g, " ").trim().slice(0, 200) || "Pasted text";
@@ -70,6 +81,7 @@ export async function addPastedText(v: Viewer, input: { title: string; text: str
  */
 export async function addPastedUrl(v: Viewer, input: { url: string; title?: string | null; signal?: AbortSignal } & Sharing): Promise<PasteResult> {
   assertCanAdd(v);
+  await assertPasteRoom(v);
   const guard = await checkPublicUrl(input.url);
   if (!guard.ok) {
     throw new IngestError(400, guard.reason === "unresolved" ? "That address could not be found." : "Only pages on the public web can be saved.");

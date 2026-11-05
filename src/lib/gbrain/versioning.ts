@@ -2,7 +2,7 @@
  * GBrain reads for versioning (server-only): the rows a change set's verdicts and the history's rewind need, always
  * filtered for the viewer and their current graph. Kept apart from index.ts so the contract file stays the contract.
  */
-import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray, isNull, notInArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { edges, nodes, shares } from "@/db/schema";
@@ -11,13 +11,16 @@ import { canReadItem, edgeSelfReadSql, liveNodeSql, nodeReadSql, type AccessCtx 
 import { accessContext, isUuid } from "./index";
 import { edgeSnap, nodeSnap, type EdgeSnap, type GraphState, type NodeSnap } from "@/lib/history/pure";
 
+/** Node columns a snapshot needs: not the search vector or the 1024-float embedding (~12 KB a row as text). */
+const { embedding: _embedding, search: _search, ...SNAP_NODE_COLS } = getTableColumns(nodes);
+
 /** Readable nodes (merged ones too) and facts (inactive too) by id, as snapshots. */
 export async function readableSnapshots(v: Viewer, ids: { nodeIds?: string[]; edgeIds?: string[] }): Promise<{ nodes: Map<string, NodeSnap>; edges: Map<string, EdgeSnap> }> {
   const ctx = await accessContext(v);
   const nodeIds = [...new Set(ids.nodeIds ?? [])].filter(isUuid), edgeIds = [...new Set(ids.edgeIds ?? [])].filter(isUuid);
   const f = alias(nodes, "gf"), t = alias(nodes, "gt");
   const [n, e] = await Promise.all([
-    nodeIds.length ? db.select().from(nodes).where(and(inArray(nodes.id, nodeIds), nodeReadSql(ctx, "nodes"))) : Promise.resolve([]),
+    nodeIds.length ? db.select(SNAP_NODE_COLS).from(nodes).where(and(inArray(nodes.id, nodeIds), nodeReadSql(ctx, "nodes"))) : Promise.resolve([]),
     edgeIds.length
       ? db.select({ e: edges }).from(edges).innerJoin(f, eq(f.id, edges.fromId)).innerJoin(t, eq(t.id, edges.toId))
         .where(and(inArray(edges.id, edgeIds), edgeSelfReadSql(ctx, "edges"), nodeReadSql(ctx, "gf"), nodeReadSql(ctx, "gt")))
@@ -49,7 +52,7 @@ export async function namesOfType(v: Viewer, types: string[]): Promise<{ id: str
 export async function wholeGraph(v: Viewer): Promise<GraphState> {
   if (!v.graphId) return { nodes: new Map(), edges: new Map() };
   const [n, e] = await Promise.all([
-    db.select().from(nodes).where(eq(nodes.graphId, v.graphId)).limit(50_000),
+    db.select(SNAP_NODE_COLS).from(nodes).where(eq(nodes.graphId, v.graphId)).limit(50_000),
     db.select().from(edges).where(eq(edges.graphId, v.graphId)).limit(100_000),
   ]);
   return { nodes: new Map(n.map((r) => [r.id, nodeSnap(r)])), edges: new Map(e.map((r) => [r.id, edgeSnap(r)])) };

@@ -907,6 +907,16 @@
         }
       }
     },
+    "Connections that need you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forbindelser, der har brug for dig"
+          }
+        }
+      }
+    },
     "Could use some attention": {
       "localizations": {
         "da": {
@@ -1413,6 +1423,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Venner og naboer"
+          }
+        }
+      }
+    },
+    "From": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra"
           }
         }
       }
@@ -2177,6 +2197,16 @@
         }
       }
     },
+    "Nothing arrives in quiet hours. What fell due waits until they end.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der kommer intet i de stille timer. Det, der forfaldt, venter, til de er slut."
+          }
+        }
+      }
+    },
     "Nothing coming up": {
       "localizations": {
         "da": {
@@ -2313,6 +2343,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Notifikationer"
+          }
+        }
+      }
+    },
+    "Notifications from My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifikationer fra My Graph"
           }
         }
       }
@@ -2697,6 +2737,16 @@
         }
       }
     },
+    "Practice: something to review": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Praksis: noget at gennemgå"
+          }
+        }
+      }
+    },
     "Preferences": {
       "localizations": {
         "da": {
@@ -2783,6 +2833,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Spørgsmål"
+          }
+        }
+      }
+    },
+    "Quiet hours": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stille timer"
           }
         }
       }
@@ -2883,6 +2943,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Påmindelser på denne iPhone"
+          }
+        }
+      }
+    },
+    "Reminders when they're due": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Påmindelser, når de forfalder"
           }
         }
       }
@@ -3123,6 +3193,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sender…"
+          }
+        }
+      }
+    },
+    "Sent by My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendt af My Graph"
           }
         }
       }
@@ -3493,6 +3573,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Forslag"
+          }
+        }
+      }
+    },
+    "Suggestions and changes come together in one notification, at most as many a day as your assistant may suggest. Anything sensitive only says there is something to look at.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forslag og ændringer samles i én notifikation, højst så mange om dagen, som din assistent må foreslå. Er noget følsomt, står der kun, at der er noget at kigge på."
+          }
+        }
+      }
+    },
+    "Suggestions and changes waiting for you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forslag og ændringer, der venter på dig"
           }
         }
       }
@@ -3923,6 +4023,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ulæst"
+          }
+        }
+      }
+    },
+    "Until": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Til"
           }
         }
       }

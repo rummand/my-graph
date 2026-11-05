@@ -179,10 +179,8 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
   const delivered = new Set(chosen.map((c) => c.id));
   const rest = all.filter((c) => !delivered.has(c.id));
   let restId: string | null = null;
-  let restPrefix = "Rest of";
-  if (rest.length) {
-    try { const { getT } = await import("@/lib/i18n"); restPrefix = (await getT())("changes.rest.titlePrefix"); } catch { /* outside a request: English */ }
-  }
+  // Stored in English with a key ("Rest of …" → stored.titles.restOf), so each reader sees it in their own language.
+  const restBase = set.title.replace(/^((Rest of|Resten af)\s+)+/i, "").trim() || set.title;
   const household = v.graphHouseholdId ?? v.householdId;
   try {
     await historyStore.run(scope, () => db.transaction(async (tx) => {
@@ -292,7 +290,8 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
       //     out to exist now refer to the existing one, so they don't read as "gone" later.
       if (rest.length) {
         const [follow] = await tx.insert(changeSets).values({
-          graphId: set.graphId, title: restTitle(set.title, restPrefix), description: set.description, status: "draft", origin: set.origin,
+          graphId: set.graphId, title: restTitle(restBase, "Rest of"), titleKey: "stored.titles.restOf", titleParams: { title: restBase },
+          description: set.description, status: "draft", origin: set.origin,
           createdBy: set.createdBy, forUserId: set.forUserId, evidence: { ...(set.evidence ?? {}), restOf: set.id, restIn: undefined },
         }).returning({ id: changeSets.id });
         restId = follow.id;

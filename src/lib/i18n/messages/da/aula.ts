@@ -66,7 +66,7 @@ const messages: MessageTree = {
     tokens: "My Graph får kun Aulas login-nøgler. De gemmes krypteret, vises aldrig igen, skrives aldrig i loggen og sendes aldrig til assistenten.",
     renew: "My Graph holder selv login'et i live. Når Aula afslutter det (efter nogle uger, eller hvis du logger ud overalt), står der „Kræver dig: forbind Aula igen“, og så kører du hjælperen igen. Den starter aldrig selv et MitID-login.",
     reads: "Den læser hvert kvarter: nye beskeder og opslag, kalenderen for de næste 13 uger, dagens afhentninger og sygedage og nye fotoalbum som links.",
-    sensitive: "Følsomme beskeder (dem, Aula kræver en ekstra MitID-godkendelse for at åbne) bliver aldrig åbnet. De vises som „Sensitive, open in Aula“.",
+    sensitive: "Følsomme beskeder (dem, Aula kræver en ekstra MitID-godkendelse for at åbne) bliver aldrig åbnet. De vises som „Følsom besked – åbn den i Aula“.",
     never: "Den sender aldrig beskeder, melder aldrig sygdom, ændrer aldrig afhentninger, markerer aldrig beskeder som læst og henter aldrig billeder ned.",
     proposals: "Personer, datoer og frister, den finder, venter på din godkendelse, hver med et link til beskeden, de kom fra.",
   },

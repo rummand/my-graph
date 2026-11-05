@@ -43,6 +43,18 @@ const LABELS: Record<string, string> = {
   "connections.update": "Changed a connection",
   "connections.disconnect": "Disconnected a connection",
   "account.export": "Downloaded their data",
+  "account.export_requested": "Asked for a copy of their data",
+  "account.deletion_requested": "Asked to delete their account",
+  "account.deletion_cancelled": "Cancelled deleting their account",
+  "account.deleted": "Account deleted",
+  "account.deleted.billing": "Stopped the deleted account's subscription",
+  "account.deleted.billing_failed": "Couldn't stop the deleted account's subscription: cancel it in Stripe",
+  "household.transfer": "Handed the household to another parent",
+  "graph.transfer": "Handed a graph to someone else",
+  "billing.checkout": "Started paying for a plan",
+  "billing.portal": "Opened the subscription page",
+  "push.device.register": "Turned on notifications on a device",
+  "push.device.remove": "Turned off notifications on a device",
   "assistant.proposal.approve": "Approved an assistant suggestion",
   "chat.delete": "Deleted a conversation",
   "library.upload": "Added a file to the library",
@@ -71,7 +83,7 @@ export function auditActionLabel(action: string): string {
 
 /** Entries worth highlighting in the log. */
 export function auditIsWarning(action: string): boolean {
-  return /failed|refused|rate_limited|deny|remove|disabled|expired/.test(action);
+  return /failed|refused|rate_limited|deny|remove|disabled|expired|deletion_requested|deleted/.test(action);
 }
 
 const ROLE_LABELS = { owner: "Owner", parent: "Parent", child: "Child", guest: "Guest" } as const;

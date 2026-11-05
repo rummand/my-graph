@@ -217,6 +217,7 @@ const messages: MessageTree = {
     confirm: "Afbryd",
     removed: { one: "Afbrudt. {count} ting fjernet.", other: "Afbrudt. {count} ting fjernet." },
     kept: "Afbrudt. Alt, den hentede, er beholdt.",
+    ok: "Færdig",
   },
   detail: {
     settingsTitle: "Indstillinger",

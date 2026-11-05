@@ -4,6 +4,7 @@ import BackgroundTasks
 
 @main
 struct MyGraphApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var app = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -24,6 +25,7 @@ struct MyGraphApp: App {
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active, app.phase == .signedIn else { return }
             Task {
+                await PushRegistration.registerIfAllowed()
                 await ReminderNotifications.refresh()
                 BackgroundRefresh.schedule()
             }

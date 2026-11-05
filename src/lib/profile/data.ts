@@ -7,7 +7,7 @@ import { and, desc, eq, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { changes, changeSets } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
-import { getChangeSet, type ChangeSetView } from "@/lib/changes";
+import { getChangeSets, type ChangeSetView } from "@/lib/changes";
 import { loadNodeDetail } from "@/lib/gbrain/detail";
 import { scopeOf } from "@/lib/graphs/pure";
 import { getMeta, type Meta } from "@/lib/meta";
@@ -39,14 +39,9 @@ async function draftsMentioning(v: Viewer, nodeId: string, limit = 8): Promise<C
     .innerJoin(changeSets, eq(changeSets.id, changes.changeSetId))
     .where(and(eq(changeSets.graphId, v.graphId), eq(changeSets.status, "draft"), eq(changes.included, true), touches))
     .orderBy(desc(changeSets.createdAt)).limit(limit * 2);
-  const out: ChangeSetView[] = [];
-  for (const r of rows) {
-    if (out.length >= limit) break;
-    // getChangeSet applies who-may-see-this-proposal (its evidence must be readable to the viewer).
-    const cs = await getChangeSet(v, r.id).catch(() => null);
-    if (cs && cs.status === "draft") out.push(cs);
-  }
-  return out;
+  // getChangeSets applies who-may-see-this-proposal (its evidence must be readable to the viewer), for all at once.
+  const sets = await getChangeSets(v, rows.map((r) => r.id));
+  return sets.filter((cs) => cs.status === "draft").slice(0, limit);
 }
 
 export async function loadProfile(v: Viewer, nodeId: string): Promise<ProfileView> {

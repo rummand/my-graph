@@ -4,7 +4,8 @@ import { users } from "@/db/schema";
 import { audit, getSession, requireUserApi } from "@/lib/auth";
 import { AuthError, handle, parseBody } from "@/lib/auth/http";
 import { hashPassword, passwordProblem, verifyPassword } from "@/lib/auth/passwords";
-import { accountKey, accountLimiter, attemptKey, clientIp, loginLimiter } from "@/lib/auth/rate-limit";
+import { accountKey, attemptKey, clientIp } from "@/lib/auth/rate-limit";
+import { sharedLoginLimiter as loginLimiter, sharedAccountLimiter as accountLimiter } from "@/lib/security";
 import { changePasswordBody } from "@/lib/auth/schemas";
 import { deleteOtherSessions } from "@/lib/auth/store";
 
@@ -17,17 +18,17 @@ export async function POST(req: Request) {
     if (u?.hash) {
       const key = attemptKey(clientIp(req.headers), `pw-change:${v.id}`);
       const acct = accountKey(`pw-change:${v.id}`);
-      if (!accountLimiter.check(acct).allowed) throw new AuthError(429, "Too many attempts. Wait a few minutes and try again.");
-      const limit = loginLimiter.check(key);
+      if (!(await accountLimiter.check(acct)).allowed) throw new AuthError(429, "Too many attempts. Wait a few minutes and try again.");
+      const limit = await loginLimiter.check(key);
       if (!limit.allowed) throw new AuthError(429, "Too many attempts. Wait a few minutes and try again.");
       if (!body.currentPassword || !(await verifyPassword(body.currentPassword, u.hash))) {
-        loginLimiter.fail(key);
-        accountLimiter.fail(acct);
+        await loginLimiter.fail(key);
+        await accountLimiter.fail(acct);
         await audit(v, "password.change_failed", { type: "user", id: v.id });
         throw new AuthError(400, "Your current password isn't right.", { fields: [{ key: "currentPassword", message: "Not right." }] });
       }
-      loginLimiter.reset(key);
-      accountLimiter.reset(acct);
+      await loginLimiter.reset(key);
+      await accountLimiter.reset(acct);
     }
     const problem = passwordProblem(body.newPassword, { email: v.email, name: v.name });
     if (problem) throw new AuthError(400, problem, { fields: [{ key: "newPassword", message: problem }] });

@@ -9,6 +9,7 @@
  * set they deliver in My Graph). A token acts as its person, never beyond them, in that graph only, and only on the MCP
  * server. Codes and tokens are kept as hashes. No Next.js here: the routes and the consent page are thin around it.
  */
+import { limiter, type RateLimiter } from "@/lib/security/rate-limit";
 import { CLIENT_PREFIX, ACCESS_PREFIX, CODE_PREFIX, REFRESH_PREFIX, SECRET_PREFIX, challengeOk, hashToken, isOAuthToken, random, sameHash, verifierMatches } from "./tokens";
 import { AUTH_METHODS, SCOPES, type AuthMethod, type ClientRow, type Credential, type GrantRow, type McpStore, type Scope } from "./types";
 
@@ -86,22 +87,16 @@ export function redirectAllowed(uri: unknown): uri is string {
 }
 
 export const REGISTRATIONS_PER_HOUR = 30;
-const registrations = new Map<string, { start: number; n: number }>();
-export function registrationLimited(ip: string, now = Date.now()): boolean {
-  const w = registrations.get(ip);
-  if (!w || now - w.start >= 3_600_000) {
-    registrations.set(ip, { start: now, n: 1 });
-    if (registrations.size > 10_000) for (const [k, v] of registrations) if (now - v.start >= 3_600_000) registrations.delete(k);
-    return false;
-  }
-  return ++w.n > REGISTRATIONS_PER_HOUR;
+/** Apps registered per IP an hour, counted by the shared limiter (holds across restarts and processes). */
+export async function registrationLimited(ip: string, l: RateLimiter = limiter()): Promise<boolean> {
+  return !(await l.hit({ bucket: "mcp.register", limit: REGISTRATIONS_PER_HOUR, windowMs: 3_600_000 }, `ip|${ip}`)).allowed;
 }
 
 export type Answer = { status: number; body: Record<string, unknown> | null; headers?: Record<string, string> };
 const oauthError = (status: number, error: string, description: string, headers?: Record<string, string>): Answer => ({ status, body: { error, error_description: description }, headers });
 
-export async function registerClient(store: McpStore, input: unknown, ip = ""): Promise<Answer> {
-  if (registrationLimited(ip || "unknown")) return oauthError(429, "slow_down", "Too many apps registered from here. Try again in an hour.");
+export async function registerClient(store: McpStore, input: unknown, ip = "", l?: RateLimiter): Promise<Answer> {
+  if (await registrationLimited(ip || "unknown", l)) return oauthError(429, "slow_down", "Too many apps registered from here. Try again in an hour.");
   const m = (input && typeof input === "object" && !Array.isArray(input) ? input : {}) as Record<string, unknown>;
   const uris = m.redirect_uris;
   if (!Array.isArray(uris) || !uris.length || uris.length > 10) return oauthError(400, "invalid_redirect_uri", "Give one to ten redirect_uris.");

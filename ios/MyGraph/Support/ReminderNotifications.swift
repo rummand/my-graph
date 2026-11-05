@@ -4,7 +4,7 @@ import BackgroundTasks
 import WidgetKit
 
 /// Local notifications for reminders that fall due. Refreshed when the app opens and by background refresh.
-/// (Remote push needs server work; see ios/README.md.)
+/// When the server pushes reminders to this iPhone (`PushRegistration.serverHandlesReminders`), these stay off.
 enum ReminderNotifications {
     private static let prefix = "reminder-"
     private static let declinedKey = "notificationsDeclined"
@@ -19,7 +19,9 @@ enum ReminderNotifications {
     static func declineAsking() { AppGroup.defaults.set(true, forKey: declinedKey) }
 
     static func requestPermission() async -> Bool {
-        (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        let ok = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        if ok { await PushRegistration.registerIfAllowed() }
+        return ok
     }
 
     static func isAuthorized() async -> Bool {
@@ -37,6 +39,7 @@ enum ReminderNotifications {
     /// Replaces the pending reminder notifications with these (open, due in the future; iOS allows 64 at most).
     static func schedule(_ reminders: [Reminder]) async {
         guard await isAuthorized() else { return }
+        if PushRegistration.serverHandlesReminders { removeAll(); return }
         let center = UNUserNotificationCenter.current()
         let now = Date()
         let due = reminders.filter { !$0.done && $0.dueAt > now }.sorted { $0.dueAt < $1.dueAt }.prefix(50)

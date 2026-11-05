@@ -77,7 +77,7 @@ describe("the runner", () => {
     const { messages } = await collect(p, "spec", { config: {} });
     const keys = JSON.parse(messages[0].type === "LOG" ? messages[0].log.message : "[]") as string[];
     expect(keys).not.toContain("DATABASE_URL_TEST_LEAK");
-    expect(keys.filter((k) => !["PATH", "HOME", "TMPDIR", "LANG", "TZ", "NODE_ENV", "MG_PLUGIN_ID", "MG_PLUGIN_PROTOCOL", "MG_ALLOW_PRIVATE", "__CF_USER_TEXT_ENCODING"].includes(k))).toEqual([]);
+    expect(keys.filter((k) => !["PATH", "HOME", "TMPDIR", "LANG", "TZ", "NODE_ENV", "MG_PLUGIN_ID", "MG_PLUGIN_PROTOCOL", "MG_PLUGIN_NET", "MG_ALLOW_PRIVATE", "__CF_USER_TEXT_ENCODING"].includes(k))).toEqual([]);
     expect(Object.keys(pluginEnv({ id: "x" }))).not.toContain("DATABASE_URL");
   });
 

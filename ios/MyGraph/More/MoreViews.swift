@@ -126,6 +126,9 @@ struct SettingsView: View {
             } header: { Text("Notifications") } footer: {
                 Text("A notification when a reminder is due. Refreshed when you open the app and now and then in the background.")
             }
+            if notifications == .authorized || notifications == .provisional {
+                PushSettingsSection()
+            }
             Section {
                 Picker("Language", selection: Binding(get: { app.locale }, set: { l in Task { await app.setLanguage(l) } })) {
                     Text(verbatim: "English").tag("en")

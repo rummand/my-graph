@@ -66,7 +66,7 @@ export async function serveMcp(request: Request): Promise<Response> {
     return rpcError(401, "My Graph's MCP server needs you to sign in: connect it from your assistant, or send a personal access key (made in My Graph under Settings, AI apps) as Authorization: Bearer mgk_….",
       { "www-authenticate": challenge(origin, token ? "invalid_token" : undefined) });
   }
-  const wait = rateLimited(cred.id);
+  const wait = await rateLimited(cred.id);
   if (wait !== null) return rpcError(429, `Too many requests. Try again in ${wait} seconds.`, { "retry-after": String(wait) });
   const version = request.headers.get("mcp-protocol-version");
   if (version && !PROTOCOL_VERSIONS.includes(version)) return rpcError(400, `My Graph speaks MCP ${PROTOCOL_VERSIONS.join(", ")}.`);

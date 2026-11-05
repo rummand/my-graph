@@ -18,6 +18,7 @@
 import { createHash } from "node:crypto";
 import type { ChangeInput, Receipt } from "@/lib/changes";
 import { htmlToText } from "@/lib/ingest/email";
+import { sourceTitleKey } from "@/lib/ingest/titles";
 import { matchKnownPerson } from "@/lib/ingest/extraction";
 import { aulaLinks } from "./constants";
 
@@ -205,6 +206,8 @@ export function sensitiveSource(thread: AulaThread, web: string): SourceDraft {
     documentDate: thread.latestAt, precision: thread.latestAt ? "minute" : null, url: aulaLinks(web).thread(thread.id), threadKey: threadKeyOf(thread.id),
     meta: {
       kind: "email", docKind: "mail", originalName: SENSITIVE_TITLE, correspondentsDone: true, noRead: true,
+      // Shown in the reader's language ("Følsom besked – åbn den i Aula"); the English stays in the title.
+      ...sourceTitleKey("aulaSensitive"),
       email: { from: thread.creator?.name ?? null, subject: SENSITIVE_TITLE, messageId: `aula:sensitive:${thread.id}` },
       aula: { threadId: thread.id, sensitive: true, institution: thread.institution, children: thread.children },
     },

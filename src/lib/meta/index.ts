@@ -7,6 +7,7 @@
  *
  * Pure helpers (taking a MetaModel) are re-exported for client components via "@/lib/meta/model".
  */
+import { cache } from "react";
 import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { metaAttributes, metaKinds, metaRelations } from "@/db/schema";
@@ -92,6 +93,18 @@ function differs(have: Record<string, unknown>, want: Record<string, unknown>): 
  * The graph's template is seeded on first read.
  */
 export async function getMetaModel(viewer: MetaScope): Promise<MetaModel> {
+  return metaModelOnce(viewer.householdId, viewer.graphHouseholdId ?? null, viewer.graphId ?? null, viewer.graphKind ?? null);
+}
+
+/**
+ * One read of the model per request and graph while a page renders (React cache; a page asks for it from many places).
+ * Keyed by the values the model depends on. Outside a render (route handlers, jobs) cache() passes straight through,
+ * so a write followed by a read there always sees the new model.
+ */
+const metaModelOnce = cache((householdId: string, graphHouseholdId: string | null, graphId: string | null, graphKind: string | null) =>
+  loadMetaModel({ householdId, graphHouseholdId: graphHouseholdId ?? undefined, graphId, graphKind }));
+
+async function loadMetaModel(viewer: MetaScope): Promise<MetaModel> {
   await ensureBuiltins();
   const hh = viewer.graphHouseholdId ?? viewer.householdId;
   if (viewer.graphId) await ensureTemplateSeeded(viewer).catch((e) => console.error("[meta] template seed failed", e));

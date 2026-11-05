@@ -38,6 +38,11 @@ export async function completeSignIn(req: NextRequest, user: UserRow, method: "p
     userAgent: req.headers.get("user-agent"), deviceId, method, ip: clientIp(req.headers),
     previousToken: isWellFormedToken(previous) ? previous : null,
   });
+  // Signing in again (on an approved device) cancels an account deletion that is still in its grace period.
+  if (s.approved) {
+    await import("@/lib/export").then((m) => m.cancelIfSignedIn(user.id))
+      .catch((e) => console.error("[auth] cancelling a pending deletion failed:", e instanceof Error ? e.message : e));
+  }
   const res = NextResponse.json({ ok: true, pending: !s.approved });
   res.cookies.set(SESSION_COOKIE, s.token, sessionCookieOptions());
   if (deviceId !== existingDevice) res.cookies.set(DEVICE_COOKIE, deviceId, deviceCookieOptions());

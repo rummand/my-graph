@@ -72,7 +72,7 @@ export const sessions = pgTable("sessions", {
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex("sessions_token_idx").on(t.tokenHash)]);
+}, (t) => [uniqueIndex("sessions_token_idx").on(t.tokenHash), index("sessions_user_idx").on(t.userId)]);
 
 export const passkeys = pgTable("passkeys", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -83,7 +83,7 @@ export const passkeys = pgTable("passkeys", {
   transports: text("transports").array(),
   name: text("name"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [uniqueIndex("passkeys_credential_idx").on(t.credentialId)]);
+}, (t) => [uniqueIndex("passkeys_credential_idx").on(t.credentialId), index("passkeys_user_idx").on(t.userId)]);
 
 /** Short-lived WebAuthn challenges. */
 export const authChallenges = pgTable("auth_challenges", {
@@ -244,7 +244,7 @@ export const sources = pgTable("sources", {
   connectionId: uuid("connection_id"),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("sources_thread_idx").on(t.graphId, t.threadKey), index("sources_docdate_idx").on(t.graphId, t.documentDate), index("sources_owner_idx").on(t.ownerId, t.createdAt), index("sources_graph_idx").on(t.graphId, t.createdAt)]);
+}, (t) => [index("sources_thread_idx").on(t.graphId, t.threadKey), index("sources_docdate_idx").on(t.graphId, t.documentDate), index("sources_owner_idx").on(t.ownerId, t.createdAt), index("sources_graph_idx").on(t.graphId, t.createdAt), index("sources_node_idx").on(t.nodeId)]);
 
 /** Text chunks of a source for retrieval; locator points back into the source (page, offsets, bbox, time). */
 export const chunks = pgTable("chunks", {
@@ -290,7 +290,7 @@ export const provenance = pgTable("provenance", {
   confidence: real("confidence").notNull().default(1),
   note: text("note"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("provenance_subject_idx").on(t.subjectType, t.subjectId), index("provenance_graph_idx").on(t.graphId)]);
+}, (t) => [index("provenance_subject_idx").on(t.subjectType, t.subjectId), index("provenance_graph_idx").on(t.graphId), index("provenance_source_idx").on(t.sourceId)]);
 
 /** Explicit share of a node to a user (guests, or a private item shown to one person). */
 export const shares = pgTable("shares", {
@@ -300,7 +300,7 @@ export const shares = pgTable("shares", {
   canEdit: boolean("can_edit").notNull().default(false),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [index("shares_node_idx").on(t.nodeId)]);
 
 /* ── Wiki ─────────────────────────────────────────────────────────────────────────────────────────────── */
 
@@ -336,7 +336,7 @@ export const wikiRevisions = pgTable("wiki_revisions", {
   authorKind: authorKindEnum("author_kind").notNull(),
   summary: text("summary"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [index("wiki_revisions_page_idx").on(t.pageId, t.createdAt)]);
 
 /* ── Assistant ────────────────────────────────────────────────────────────────────────────────────────── */
 
@@ -378,7 +378,7 @@ export const messages = pgTable("messages", {
   /** Thumbs up (1) or down (-1) from the person who asked. */
   feedback: integer("feedback"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [index("messages_conversation_idx").on(t.conversationId, t.createdAt)]);
 
 export type AssistantStep = { kind: "search" | "read" | "timeline" | "people" | "memory" | "think" | "write" | "other"; label: string; count?: number; ms?: number; /** A change set this step proposed (shown as a link). */ changeSetId?: string };
 
@@ -506,7 +506,7 @@ export const observations = pgTable("observations", {
   visibility: visibilityEnum("visibility").notNull().default("private"),
   sensitive: boolean("sensitive").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("observations_person_at_idx").on(t.personNodeId, t.at), index("observations_graph_idx").on(t.graphId)]);
+}, (t) => [index("observations_person_at_idx").on(t.personNodeId, t.at), index("observations_graph_idx").on(t.graphId), index("observations_source_idx").on(t.sourceId)]);
 
 
 /* ── Always-on assistant (inspired by Microsoft Scout, see docs/scout-research.md) ───────────────────────── */
@@ -700,6 +700,9 @@ export const changeSets = pgTable("change_sets", {
   id: uuid("id").primaryKey().defaultRandom(),
   graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
+  /** The title as an i18n key + params ("changes.titles.fromSource", { title }), so each reader sees it in their language. `title` keeps the English. */
+  titleKey: text("title_key"),
+  titleParams: jsonb("title_params").$type<Record<string, string | number>>(),
   description: text("description"),
   status: changeSetStatusEnum("status").notNull().default("draft"),
   /** person | assistant | chat | connector | web | ingest | automation | heartbeat | restore */
@@ -1524,3 +1527,228 @@ export const mcpKeys = pgTable("mcp_keys", {
   lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
 }, (t) => [uniqueIndex("mcp_keys_hash_uq").on(t.tokenHash), index("mcp_keys_user_idx").on(t.userId, t.revokedAt)]);
+
+/* ── Security: shared limits (hardening) ──────────────────────────────────────────────────────────────── */
+
+/**
+ * Fixed-window counters shared by every server process: one row per (bucket, key, window start). `bucket` names the
+ * limit ("mcp", "transcribe", "paste", "login.ip", ...), `key` who it counts (a hashed credential, user or IP), and
+ * `windowStart` the start of the window. Old windows are swept on use. Keys are hashed; nothing personal is stored.
+ */
+export const rateLimits = pgTable("rate_limits", {
+  bucket: text("bucket").notNull(),
+  key: text("key").notNull(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  count: integer("count").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (t) => [primaryKey({ columns: [t.bucket, t.key, t.windowStart] }), index("rate_limits_expires_idx").on(t.expiresAt)]);
+
+/** One-time tokens already spent (MCP tool approvals): the hash of the token, until the token would have expired. */
+export const usedApprovals = pgTable("used_approvals", {
+  tokenHash: text("token_hash").primaryKey(),
+  kind: text("kind").notNull(),
+  userId: uuid("user_id"),
+  usedAt: timestamp("used_at", { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (t) => [index("used_approvals_expires_idx").on(t.expiresAt)]);
+
+/**
+ * Payments (Stripe) for the public paid plans. One row per account that has ever started a checkout. The webhook
+ * keeps it in step with Stripe and sets account_plans from it; Ultimate (admin-assigned) is never touched by billing.
+ * `reviewAt`: the next moment the plan can change without a webhook (a held downgrade or the end of a grace period).
+ */
+export const billingAccounts = pgTable("billing_accounts", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  stripeCustomerId: text("stripe_customer_id").notNull(),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  /** The plan Stripe is billing for now (plus | family), from the subscription's price. */
+  planKey: text("plan_key"),
+  /** month | year */
+  interval: text("interval"),
+  /** Stripe's subscription status: active, trialing, past_due, unpaid, canceled, incomplete, incomplete_expired, paused. */
+  status: text("status"),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  /** A downgrade made mid-period keeps the paid-for plan until here. */
+  heldPlanKey: text("held_plan_key"),
+  heldUntil: timestamp("held_until", { withTimezone: true }),
+  /** A failed payment keeps the plan until here. */
+  graceUntil: timestamp("grace_until", { withTimezone: true }),
+  reviewAt: timestamp("review_at", { withTimezone: true }),
+  /** `created` of the newest subscription event applied (Stripe doesn't promise order). */
+  subscriptionEventAt: timestamp("subscription_event_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("billing_accounts_customer_uq").on(t.stripeCustomerId), index("billing_accounts_review_idx").on(t.reviewAt)]);
+
+/** Every Stripe webhook event received, by Stripe's event id: processing is idempotent and retried until done. */
+export const billingEvents = pgTable("billing_events", {
+  id: text("id").primaryKey(),
+  type: text("type").notNull(),
+  userId: uuid("user_id"),
+  stripeCreatedAt: timestamp("stripe_created_at", { withTimezone: true }),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  attempts: integer("attempts").notNull().default(0),
+  /** What went wrong on the last attempt (never contains secrets or card data). */
+  error: text("error"),
+}, (t) => [index("billing_events_received_idx").on(t.receivedAt)]);
+
+/* ── iPhone push (push workstream): devices, per-person push settings and what was sent ───────────────── */
+
+/**
+ * One app install that can receive push: its APNs device token (hex), tied to the session it registered from, so
+ * signing out (or a revoked session) removes it with the session. The token is a routing address, not a secret.
+ */
+export const deviceTokens = pgTable("device_tokens", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sessionId: uuid("session_id").references(() => sessions.id, { onDelete: "cascade" }),
+  token: text("token").notNull(),
+  /** ios */
+  platform: text("platform").notNull().default("ios"),
+  /** sandbox | production: which APNs host accepts this token (debug builds are sandbox). Null = APNS_ENV. */
+  environment: text("environment"),
+  appVersion: text("app_version"),
+  /** en | da: the language notifications are written in for this device. */
+  locale: text("locale"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("device_tokens_token_uq").on(t.token), index("device_tokens_user_idx").on(t.userId)]);
+
+/** Per person: whether push is on, which kinds, and quiet hours (minutes after local midnight, in users.time_zone). */
+export const pushSettings = pgTable("push_settings", {
+  userId: uuid("user_id").primaryKey().references(() => users.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(true),
+  /** { reminders, waiting, connections, clinical }: false turns that kind off. Missing = on. */
+  categories: jsonb("categories").$type<Record<string, boolean>>().notNull().default({}),
+  /** Null start or end = no quiet hours. */
+  quietStart: integer("quiet_start").default(1320),
+  quietEnd: integer("quiet_end").default(420),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Every push decided for a person: sent, or skipped (no device, failed). `key` makes each thing notify once
+ * ("reminder:<id>", "risk:<id>", "connection:<id>:<since>", "waiting:<graph>:<newest>"). `counted` = it counts
+ * toward the daily cap (assistant_settings.daily_suggestion_cap). Holds no notification text.
+ */
+export const pushDeliveries = pgTable("push_deliveries", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").references(() => graphs.id, { onDelete: "cascade" }),
+  key: text("key").notNull(),
+  /** reminders | waiting | connections | clinical | test */
+  category: text("category").notNull(),
+  counted: boolean("counted").notNull().default(false),
+  /** sent | failed | no_device */
+  status: text("status").notNull(),
+  devices: integer("devices").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("push_deliveries_user_key_uq").on(t.userId, t.key), index("push_deliveries_user_idx").on(t.userId, t.createdAt)]);
+
+/* ── Data safety: exports and account deletion ───────────────────────────────────────────────────────── */
+
+/**
+ * A person's download of their data: one graph they own, or their whole account, built in the background into a zip
+ * under EXPORT_DIR (see src/lib/export). The link works for its owner only, until `expiresAt` (24 hours after it is
+ * ready); then the file is removed and the row says `expired`.
+ */
+export const dataExports = pgTable("data_exports", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  /** graph | account */
+  scope: text("scope").notNull(),
+  /** The graph (scope = graph); null for the whole account. */
+  graphId: uuid("graph_id").references(() => graphs.id, { onDelete: "cascade" }),
+  /** queued | running | ready | failed | expired */
+  status: text("status").notNull().default("queued"),
+  progress: jsonb("progress").$type<{ step: string; done?: number; total?: number }>(),
+  /** { bytes, sha256, counts: { nodes, edges, … }, files } once ready. */
+  info: jsonb("info").$type<Record<string, unknown>>().notNull().default({}),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  startedAt: timestamp("started_at", { withTimezone: true }),
+  finishedAt: timestamp("finished_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+}, (t) => [index("data_exports_user_idx").on(t.userId, t.createdAt), index("data_exports_status_idx").on(t.status, t.expiresAt)]);
+
+/**
+ * A request to delete an account, carried out after a 7-day grace period unless the person signs in again.
+ * No foreign key on `userId`: the row outlives the account, and holds nothing personal (no name, no email).
+ * `formerId` is the stand-in account their kept contributions in shared graphs are attributed to ("a former member").
+ */
+export const accountDeletions = pgTable("account_deletions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id").notNull(),
+  householdId: uuid("household_id").notNull(),
+  /** scheduled | cancelled | done | failed */
+  status: text("status").notNull().default("scheduled"),
+  requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+  scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  /** signed_in | by_person | blocked */
+  cancelReason: text("cancel_reason"),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  formerId: uuid("former_id"),
+  /** What was deleted and what was kept, as counts. */
+  summary: jsonb("summary").$type<Record<string, unknown>>().notNull().default({}),
+  error: text("error"),
+  attempts: integer("attempts").notNull().default(0),
+}, (t) => [
+  index("account_deletions_due_idx").on(t.status, t.scheduledFor),
+  uniqueIndex("account_deletions_one_scheduled_uq").on(t.userId).where(sql`status = 'scheduled'`),
+]);
+
+/* ── Observability (performance workstream): server errors, slow requests and route timings ──────────────────────── */
+
+/**
+ * One row per kind of server problem, grouped by a fingerprint of (kind, error name, message shape, top stack frames,
+ * route). Metadata only: the message is redacted (ids, numbers, quoted text, e-mails, tokens removed), frames are code
+ * locations, users are counted by a salted hash. Never a request body, header, query string or anything a person wrote.
+ */
+export const serverErrors = pgTable("server_errors", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  fingerprint: text("fingerprint").notNull(),
+  /** "error" (thrown), "status" (answered 5xx without throwing), "slow" (took longer than the slow threshold). */
+  kind: text("kind").notNull(),
+  name: text("name").notNull(),
+  message: text("message").notNull(),
+  stackHash: text("stack_hash").notNull(),
+  frames: jsonb("frames").$type<string[]>().notNull().default([]),
+  /** The route pattern ("/people/[id]"), never the concrete URL. */
+  route: text("route").notNull(),
+  method: text("method").notNull().default(""),
+  /** Where it happened: render, route, action, middleware or request. */
+  source: text("source").notNull().default("request"),
+  status: integer("status"),
+  digest: text("digest"),
+  count: integer("count").notNull().default(0),
+  /** Salted hashes of the accounts that hit it (at most 50 kept), for "how many people saw this". */
+  userHashes: jsonb("user_hashes").$type<string[]>().notNull().default([]),
+  lastDurationMs: integer("last_duration_ms"),
+  maxDurationMs: integer("max_duration_ms"),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Set by an admin; cleared when it happens again. */
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+}, (t) => [uniqueIndex("server_errors_fingerprint_uq").on(t.fingerprint), index("server_errors_last_seen_idx").on(t.lastSeenAt)]);
+
+/**
+ * Request timings per route and minute, flushed from each server process's in-memory collector. `hist` counts
+ * requests per latency bucket (bounds in src/lib/observability/histogram.ts), so p50/p95 over any window are read by
+ * summing buckets. Route patterns only, never URLs.
+ */
+export const routeTimings = pgTable("route_timings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  bucket: timestamp("bucket", { withTimezone: true }).notNull(),
+  route: text("route").notNull(),
+  method: text("method").notNull(),
+  count: integer("count").notNull().default(0),
+  errors: integer("errors").notNull().default(0),
+  slow: integer("slow").notNull().default(0),
+  sumMs: integer("sum_ms").notNull().default(0),
+  maxMs: integer("max_ms").notNull().default(0),
+  hist: integer("hist").array().notNull(),
+}, (t) => [uniqueIndex("route_timings_bucket_route_uq").on(t.bucket, t.route, t.method), index("route_timings_bucket_idx").on(t.bucket)]);

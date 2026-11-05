@@ -84,6 +84,15 @@ None of this is compiled into Release builds.
 - **Notifications.** Local notifications are scheduled for open reminders due in the next 14 days (up to 50). They
   are refreshed when the app opens and by `BGAppRefreshTask` (`<bundle id>.refresh`). The permission prompt is a card
   on Today after sign-in, never a cold system alert.
+- **Push.** Once notifications are allowed and someone is signed in, the app registers with APNs and sends the token
+  (`POST /api/devices { token, platform: "ios", environment: sandbox|production, appVersion, locale }`) on every
+  start; sign-out calls `DELETE /api/devices { token }` first (the server also drops a device with its session).
+  The answer's `remindersByPush` says whether the server pushes reminders; then the app stops scheduling its own local
+  ones, so nothing arrives twice. A server without APNs configured answers `false` and local reminders carry on.
+  A tap opens the right screen (`Shared/PushPayload.swift`): a person, a change set, Changes, Today; it switches graph
+  first when the notification is about another one, and opens the web for screens the app doesn't have
+  (connections, the practice). Settings → "Sent by My Graph" shows the server's switches and quiet hours
+  (`/api/devices/settings`). Debug builds register as `sandbox`, Release as `production`.
 - **Widget.** "Next up" fetches reminders and today's events with the shared session. If it can't, it falls back to
   the snapshot the app writes to the App Group.
 - **Design.** Colours follow DESIGN.md's tokens for light and dark (`Shared/Theme.swift`).
@@ -118,8 +127,16 @@ None of this is compiled into Release builds.
    The Keychain sharing relies on it.
 4. **Associated Domains** on the app's App ID, for passkeys: `webcredentials:<your domain>` (`WEB_DOMAIN` in
    `project.yml`). The server must publish the matching file; see below.
-5. **Background fetch** and **Push Notifications** capabilities. Push is only needed once the server sends it.
-6. Archive with the `MyGraph` scheme (Release), upload with Xcode Organizer, and add testers in App Store Connect.
+5. **Background fetch** and **Push Notifications** capabilities (`aps-environment` is in the entitlements; Xcode
+   turns it into `production` when it exports for TestFlight or the App Store).
+6. **APNs key for the server.** In Certificates, Identifiers & Profiles → Keys, create a key with "Apple Push
+   Notifications service (APNs)", download the `.p8` (once) and note its Key ID and your Team ID. On the server
+   (Railway → Variables) set `APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_KEY` (the `.p8` contents; newlines as `\n` or the
+   whole file base64-encoded on one line), `APNS_BUNDLE_ID=app.mygraph.ios` (your `BUNDLE_ID`) and `APNS_ENV`
+   (`production` for TestFlight/App Store; `sandbox` only if every device runs Xcode debug builds; each device's own
+   environment is sent with its token and wins). Redeploy; the log says "iPhone push is on". Check with
+   `POST /api/devices/test` from a signed-in iPhone session.
+7. Archive with the `MyGraph` scheme (Release), upload with Xcode Organizer, and add testers in App Store Connect.
    `ITSAppUsesNonExemptEncryption` is already `false`.
 
 ## Server routes made for the app
@@ -149,13 +166,7 @@ None of this is compiled into Release builds.
      already accepts when it equals `APP_URL`.
    - The app's passkey code is in `MyGraph/Auth/PasskeySignIn.swift`. It is not testable on localhost (`rpId` is
      `localhost`).
-2. **Push (optional, for remote notifications).**
-   - A device-token route: `POST /api/devices { token, platform: "ios", locale }` and `DELETE` on sign-out.
-   - A `device_tokens` table: user, graph, token, created, last seen.
-   - An APNs HTTP/2 sender with a `.p8` key (`APNS_KEY_ID`, `APNS_TEAM_ID`, `APNS_KEY`, `APNS_TOPIC=app.mygraph.ios`),
-     sent in-process from the existing reminder, suggestion and approval code paths.
-   - Pushes should respect visibility and send titles only, without sensitive detail.
-   - Local reminder notifications already work without any of this.
+2. **Push** is built (`src/lib/push`, `/api/devices`); it needs only the APNs variables above.
 3. **Share extension auth.** No change is needed: the extension reuses the Keychain-shared cookie. A bearer token
    would only be needed if cookies stop being shareable.
 4. **History sentences.** `/api/history` returns raw events; the app writes the sentences itself

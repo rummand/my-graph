@@ -2,7 +2,7 @@
  * People reads (server). Direct drizzle queries with local access checks (see access.ts) so the people pages work
  * while gbrain's read API is being built; every query filters by the viewer.
  */
-import { and, desc, eq, gte, inArray, isNull, lte, notInArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, isNull, lte, notInArray, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { edges, nodes, observations, provenance, reminders, shares, sources, users } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
@@ -20,7 +20,9 @@ import type {
   CenterOption, Citation, FeedItem, Observation, PeopleOverview, PersonProfile, PersonSummary, RelationshipGroup,
 } from "./types";
 
-type NodeRow = typeof nodes.$inferSelect;
+/** Node columns people pages read: everything but the search vector and the 1024-float embedding (~12 KB a row as text). */
+const { embedding: _embedding, search: _search, ...NODE_COLS } = getTableColumns(nodes);
+type NodeRow = Omit<typeof nodes.$inferSelect, "embedding" | "search">;
 type EdgeRow = typeof edges.$inferSelect;
 
 const DEAD_EDGE = ["rejected", "superseded"];
@@ -40,13 +42,13 @@ export async function viewerPersonId(v: Viewer): Promise<string | null> {
 
 /** Visible, unmerged, not retired nodes of the given types. */
 export async function visibleNodes(v: Viewer, types: NodeRow["type"][], limit = 5000): Promise<NodeRow[]> {
-  return db.select().from(nodes).where(and(inArray(nodes.type, types), isNull(nodes.mergedInto), liveNodeSql("nodes"), visibleWhere(v, nodes)))
+  return db.select(NODE_COLS).from(nodes).where(and(inArray(nodes.type, types), isNull(nodes.mergedInto), liveNodeSql("nodes"), visibleWhere(v, nodes)))
     .orderBy(nodes.label).limit(limit);
 }
 
 /** A single visible node, or null. */
 export async function visibleNode(v: Viewer, id: string): Promise<NodeRow | null> {
-  const [row] = await db.select().from(nodes).where(and(eq(nodes.id, id), isNull(nodes.mergedInto), visibleWhere(v, nodes)));
+  const [row] = await db.select(NODE_COLS).from(nodes).where(and(eq(nodes.id, id), isNull(nodes.mergedInto), visibleWhere(v, nodes)));
   return row ?? null;
 }
 
@@ -259,7 +261,7 @@ export async function personProfile(v: Viewer, id: string): Promise<PersonProfil
 
   const touching = await edgesTouching(v, [id]);
   const otherIds = [...new Set(touching.map((e) => (e.fromId === id ? e.toId : e.fromId)))];
-  const others = otherIds.length ? await db.select().from(nodes).where(and(inArray(nodes.id, otherIds), isNull(nodes.mergedInto), liveNodeSql("nodes"), visibleWhere(v, nodes))) : [];
+  const others = otherIds.length ? await db.select(NODE_COLS).from(nodes).where(and(inArray(nodes.id, otherIds), isNull(nodes.mergedInto), liveNodeSql("nodes"), visibleWhere(v, nodes))) : [];
   const otherById = new Map(others.map((n) => [n.id, n]));
   const live = touching.filter((e) => otherById.has(e.fromId === id ? e.toId : e.fromId));
   const [edgeCites, nodeCites, obs, docSources] = await Promise.all([

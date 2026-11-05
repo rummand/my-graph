@@ -65,7 +65,9 @@ export function formatDate(input: Date | string | number, style: DateStyle = "da
     case "dateLong": return f({ weekday: "long", day: "numeric", month: "long", year: "numeric" });
     case "dateTime": return `${f({ day: "numeric", month: "short", ...year })}, ${f({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" })}`;
     case "time": return f({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-    case "weekday": return f({ weekday: "short", day: "numeric", month: "short", ...year });
+    // Composed rather than one format: Node's and the browser's ICU disagree on the comma ("Tue, 3 Nov" / "Tue 3 Nov"),
+    // which breaks hydration.
+    case "weekday": return `${f({ weekday: "short" })} ${f({ day: "numeric", month: "short", ...year })}`;
     case "monthYear": return f({ month: "long", year: "numeric" });
   }
 }

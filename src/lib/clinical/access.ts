@@ -3,7 +3,7 @@
  * goes through `loadClient`, which applies `clinicalAccess` (src/lib/clinical/pure) to the client node, the viewer's
  * share on it and the client's consents.
  */
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, getTableColumns, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { clinicalConsents, graphMembers, nodes, shares, sources, users } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
@@ -13,6 +13,10 @@ import {
   CLIENT_KIND, DISCIPLINES, FEATURE_OF, PURPOSE_OF, checkConsent, clinicalAccess, consentInForce, consentSummary, disciplineOfKind,
   type ClinicalAccess, type ConsentRow, type ConsentSummary, type Discipline, type Work,
 } from "./pure";
+
+/** Client node columns without the search vector and embedding (large, never needed for a record). */
+const { embedding: _embedding, search: _search, ...NODE_COLS } = getTableColumns(nodes);
+type ClientNodeRow = Omit<typeof nodes.$inferSelect, "embedding" | "search">;
 
 export class ClinicalError extends Error {
   constructor(public status: number, public key: string, public vars: Record<string, string | number> = {}, public code?: string) {
@@ -71,10 +75,10 @@ const CLIENT_KINDS = ["client", "patient"];
 export async function accessibleClients(v: Viewer, disciplines: Discipline[]): Promise<ClientRecord[]> {
   const kinds = disciplines.map((d) => CLIENT_KIND[d]);
   if (!kinds.length) return [];
-  const mine = await db.select().from(nodes).where(and(eq(nodes.graphId, v.graphId), eq(nodes.type, "person"), inArray(nodes.kind, kinds), isNull(nodes.mergedInto), eq(nodes.ownerId, v.id)));
+  const mine = await db.select(NODE_COLS).from(nodes).where(and(eq(nodes.graphId, v.graphId), eq(nodes.type, "person"), inArray(nodes.kind, kinds), isNull(nodes.mergedInto), eq(nodes.ownerId, v.id)));
   const sharedIds = (await db.select({ nodeId: shares.nodeId }).from(shares).where(eq(shares.userId, v.id))).map((s) => s.nodeId);
   const shared = sharedIds.length
-    ? await db.select().from(nodes).where(and(eq(nodes.graphId, v.graphId), eq(nodes.type, "person"), inArray(nodes.kind, kinds), isNull(nodes.mergedInto), inArray(nodes.id, sharedIds)))
+    ? await db.select(NODE_COLS).from(nodes).where(and(eq(nodes.graphId, v.graphId), eq(nodes.type, "person"), inArray(nodes.kind, kinds), isNull(nodes.mergedInto), inArray(nodes.id, sharedIds)))
     : [];
   const all = [...mine, ...shared.filter((n) => n.ownerId !== v.id)].filter((n) => n.props?.retired !== true);
   const consents = await consentRows(v.graphId, all.map((n) => n.id));
@@ -92,7 +96,7 @@ export async function accessibleClients(v: Viewer, disciplines: Discipline[]): P
   return out.sort((a, b) => a.label.localeCompare(b.label));
 }
 
-function toRecord(n: typeof nodes.$inferSelect, discipline: Discipline, access: Exclude<ClinicalAccess, null>, rows: ConsentRow[], ownerName: string | null, now: Date): ClientRecord {
+function toRecord(n: ClientNodeRow, discipline: Discipline, access: Exclude<ClinicalAccess, null>, rows: ConsentRow[], ownerName: string | null, now: Date): ClientRecord {
   return {
     id: n.id, label: n.label, kind: n.kind as "client" | "patient", discipline, ownerId: n.ownerId, ownerName, summary: n.summary, props: n.props ?? {},
     createdAt: n.createdAt, access, consents: rows, consent: consentSummary(rows, now),
@@ -111,7 +115,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export async function loadClient(v: Viewer, id: string, need: "read" | "write" = "read"): Promise<ClientRecord> {
   const ds = await requireClinical(v);
   if (!UUID.test(id)) throw new ClinicalError(404, "clinical.err.notFound");
-  const [n] = await db.select().from(nodes).where(and(eq(nodes.id, id), eq(nodes.graphId, v.graphId), eq(nodes.type, "person"), inArray(nodes.kind, CLIENT_KINDS), isNull(nodes.mergedInto)));
+  const [n] = await db.select(NODE_COLS).from(nodes).where(and(eq(nodes.id, id), eq(nodes.graphId, v.graphId), eq(nodes.type, "person"), inArray(nodes.kind, CLIENT_KINDS), isNull(nodes.mergedInto)));
   const discipline = disciplineOfKind(n?.kind);
   if (!n || !discipline || !ds.includes(discipline)) throw new ClinicalError(404, "clinical.err.notFound");
   const shareRows = n.ownerId === v.id ? [] : await db.select().from(shares).where(and(eq(shares.nodeId, n.id), eq(shares.userId, v.id)));

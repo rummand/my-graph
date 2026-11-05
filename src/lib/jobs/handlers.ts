@@ -10,6 +10,7 @@ import { scopeOf } from "@/lib/graphs/pure";
 import { processSource, refreshSource } from "@/lib/ingest/pipeline";
 import * as mux from "@/lib/mux";
 import { clinicalDraftJob, clinicalTranscribeJob } from "@/lib/clinical/jobs";
+import { exportBuildJob } from "@/lib/export/jobs";
 import { PermanentJobError, type JobProgress } from "./policy";
 import type { JobRow } from "./queue";
 
@@ -61,4 +62,6 @@ export const HANDLERS: Record<string, Handler> = {
   "ingest.read": read, "ingest.rebuild": rebuild,
   // Clinical background work (transcription, drafting): the handlers re-check the clinician's access and the consent.
   "clinical.transcribe": clinicalTranscribeJob, "clinical.draft": clinicalDraftJob,
+  // Data exports (Settings > Your data): the handler re-checks that the export is the job person's own.
+  "export.build": exportBuildJob,
 };

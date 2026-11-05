@@ -24,11 +24,17 @@ const SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
  */
 const BEARER_ONLY = new Set(["/api/mcp", "/api/mcp/oauth/register", "/api/mcp/oauth/token", "/api/mcp/oauth/revoke"]);
 
+/**
+ * Server-to-server webhooks that authenticate by a signature over the raw body (never a session cookie), so they skip
+ * the origin check. Stripe: /api/webhooks/stripe, verified with STRIPE_WEBHOOK_SECRET in the handler.
+ */
+const SIGNED_WEBHOOKS = new Set(["/api/webhooks/stripe"]);
+
 export function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   const isApi = pathname.startsWith("/api/") || pathname === "/api";
 
-  if (isApi && !SAFE.has(req.method) && !BEARER_ONLY.has(pathname)) {
+  if (isApi && !SAFE.has(req.method) && !BEARER_ONLY.has(pathname) && !SIGNED_WEBHOOKS.has(pathname)) {
     const ok = isAllowedOrigin({
       origin: req.headers.get("origin"),
       secFetchSite: req.headers.get("sec-fetch-site"),

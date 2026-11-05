@@ -3,11 +3,7 @@ import { requireUser } from "@/lib/auth";
 import * as mux from "@/lib/mux";
 import { firstIssue, handle, jsonError } from "@/lib/assistant/http";
 import { checkAudio, dictationLanguageSchema, MAX_DICTATION_BYTES } from "@/lib/assistant/transcribe";
-import { AttemptLimiter } from "@/lib/auth/rate-limit";
-
-const g = globalThis as unknown as { __mgDictationLimiter?: AttemptLimiter };
-/** 30 dictations a minute per person: enough for anyone talking, not enough to run up the speech model. */
-const limiter = g.__mgDictationLimiter ?? (g.__mgDictationLimiter = new AttemptLimiter(30, 60 * 1000));
+import { hit } from "@/lib/security";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -20,10 +16,9 @@ export const runtime = "nodejs";
 export function POST(req: Request) {
   return handle(async () => {
     const v = await requireUser();
-    const key = `dictation|${v.id}`;
-    const room = limiter.check(key);
+    // 30 dictations a minute per person (LIMITS.transcribe), counted across server processes.
+    const room = await hit("transcribe", `dictation|${v.id}`);
     if (!room.allowed) return jsonError(429, "That's a lot of dictation in a short time. Wait a moment and try again.", { retryAfterSec: room.retryAfterSec });
-    limiter.fail(key);
     if (!req.headers.get("content-type")?.toLowerCase().startsWith("multipart/form-data")) {
       return jsonError(415, "Send the recording as a form with an “audio” field.");
     }

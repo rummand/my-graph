@@ -13,6 +13,8 @@ import { scopeOf } from "@/lib/graphs/pure";
 import { deleteSource } from "@/lib/ingest/library";
 import { decryptSecrets, encryptSecrets } from "./crypto";
 import { ConnectorError } from "./errors";
+import { revokeConnection, type Revocation } from "./revoke";
+import { guardedTransport, type Transport } from "@/lib/mcp-client/transport";
 import { clampEvery } from "./manifest";
 import { connectorById, offeredIn } from "./registry";
 import { isPlatformAdmin } from "@/lib/plans";
@@ -249,9 +251,12 @@ export async function runNow(v: Viewer, id: string): Promise<void> {
  * removes its stored items, abandons its proposals that nobody has decided on, and proposes retiring the timeline
  * events it already added (a person delivers that, like any change to the graph).
  */
-export async function disconnect(v: Viewer, id: string, opts: { keep: boolean }): Promise<{ removed: number; changeSetId: string | null }> {
+export async function disconnect(v: Viewer, id: string, opts: { keep: boolean; transport?: Transport }): Promise<{ removed: number; changeSetId: string | null; revocation: Revocation }> {
   assertMayConnect(v);
   const row = await ownRow(v, id);
+  // The sign-in, read before the row (and its encrypted secrets) goes; handed back to the provider below.
+  let secrets: Record<string, string> = {};
+  try { secrets = decryptSecrets(row.secrets, row.id); } catch { /* unreadable: nothing to hand back */ }
   let removed = 0;
   let changeSetId: string | null = null;
   // The proposals its runs opened (read before the runs go with the connection).
@@ -260,6 +265,9 @@ export async function disconnect(v: Viewer, id: string, opts: { keep: boolean })
   for (const r of runs) for (const cs of ((r.counts as { changeSets?: string[] })?.changeSets ?? [])) draftIds.add(cs);
   // Stop it first, so a run in progress stores nothing more (run.ts checks the row inside each commit).
   await db.delete(connections).where(and(eq(connections.id, id), eq(connections.graphId, v.graphId), eq(connections.userId, v.id)));
+  // Hand the access back at the provider (Google, Dropbox, MCP servers with RFC 7009). Bounded and never throws: the
+  // tokens are gone from My Graph either way.
+  const revocation = await revokeConnection(row, secrets, opts.transport ?? guardedTransport());
   if (!opts.keep) {
     const items = await db.select({ id: sources.id, meta: sources.meta }).from(sources)
       .where(and(eq(sources.graphId, v.graphId), eq(sources.connectionId, id), eq(sources.ownerId, v.id)));
@@ -291,8 +299,8 @@ export async function disconnect(v: Viewer, id: string, opts: { keep: boolean })
       changeSetId = res?.id ?? null;
     }
   }
-  void audit(v, "connections.disconnect", { type: "connection", id }, { connector: row.connector, keep: opts.keep, removed }).catch(() => {});
-  return { removed, changeSetId };
+  void audit(v, "connections.disconnect", { type: "connection", id }, { connector: row.connector, keep: opts.keep, removed, revoked: revocation.status }).catch(() => {});
+  return { removed, changeSetId, revocation };
 }
 
 /** How much a connection has brought in, for the disconnect dialog. */

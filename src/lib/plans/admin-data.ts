@@ -7,6 +7,11 @@ import { db } from "@/db";
 import { accountAddons, accountControls, accountPlans, auditLog, graphMembers, graphs, households, passkeys, sessions, users } from "@/db/schema";
 import { effectivePlan, emailIsAdmin } from "./catalog";
 import { adminEmails } from "./store";
+import { FORMER_EMAIL_DOMAIN, FORMER_HOUSEHOLD_ID } from "@/lib/export/deletion-policy";
+
+/** Stand-ins for deleted accounts ("A former member") are not people: they stay out of the lists and totals. */
+const realUser = sql`${users.email} not like ${`%@${FORMER_EMAIL_DOMAIN}`}`;
+const realHousehold = sql`${households.id} <> ${FORMER_HOUSEHOLD_ID}::uuid`;
 
 const lastActive = sql<string | null>`greatest(
   (select max(s.last_seen_at) from sessions s where s.user_id = ${users.id}),
@@ -43,7 +48,7 @@ export async function listAccounts(opts: { q?: string; limit?: number } = {}): P
     .innerJoin(households, eq(households.id, users.householdId))
     .leftJoin(accountPlans, eq(accountPlans.userId, users.id))
     .leftJoin(accountControls, eq(accountControls.userId, users.id))
-    .where(pattern ? or(ilike(users.name, pattern), ilike(users.email, pattern), ilike(households.name, pattern)) : undefined)
+    .where(and(realUser, pattern ? or(ilike(users.name, pattern), ilike(users.email, pattern), ilike(households.name, pattern)) : undefined))
     .orderBy(desc(users.createdAt)).limit(Math.min(opts.limit ?? 200, 500));
   return withPlans(rows);
 }
@@ -123,7 +128,7 @@ export async function listHouseholds(opts: { q?: string } = {}): Promise<Househo
     graphs: sql<number>`(select count(*)::int from graphs g where g.household_id = ${households.id} and g.archived_at is null)`,
     sources: sql<number>`(select count(*)::int from sources s where s.household_id = ${households.id})`,
     bytes: sql<number>`(select coalesce(sum(s.size), 0)::float8 from sources s where s.household_id = ${households.id})`,
-  }).from(households).where(q ? ilike(households.name, `%${escapeLike(q)}%`) : undefined).orderBy(desc(households.createdAt)).limit(500);
+  }).from(households).where(and(realHousehold, q ? ilike(households.name, `%${escapeLike(q)}%`) : undefined)).orderBy(desc(households.createdAt)).limit(500);
   if (!rows.length) return [];
   const owners = await db.select({ householdId: users.householdId, id: users.id, name: users.name, email: users.email, planKey: accountPlans.planKey })
     .from(users).leftJoin(accountPlans, eq(accountPlans.userId, users.id))
@@ -188,8 +193,8 @@ export async function adminAudit(opts: { targetId?: string; limit?: number } = {
 /** Numbers for the console's header. */
 export async function adminTotals() {
   const [[u], [h], [gr], [m]] = await Promise.all([
-    db.select({ n: sql<number>`count(*)::int` }).from(users),
-    db.select({ n: sql<number>`count(*)::int` }).from(households),
+    db.select({ n: sql<number>`count(*)::int` }).from(users).where(realUser),
+    db.select({ n: sql<number>`count(*)::int` }).from(households).where(realHousehold),
     db.select({ n: sql<number>`count(*)::int` }).from(graphs).where(sql`${graphs.archivedAt} is null`),
     db.select({ n: sql<number>`count(distinct ${graphMembers.userId})::int` }).from(graphMembers),
   ]);

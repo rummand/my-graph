@@ -3,11 +3,14 @@
  * and after, the difference is one `graph_events` row per field, and rapid edits by the same hand fold together.
  * Recording never fails the write: it runs in its own savepoint and a failure is logged, not thrown.
  */
-import { and, desc, eq, gte, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, gte, inArray, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { edges, graphEvents, metaAttributes, metaKinds, metaRelations, nodes } from "@/db/schema";
 import { currentScope, type Actor, type Tx } from "./context";
 import { coalesce, diffEdge, diffMeta, diffNode, edgeSnap, MOMENT_MS, nodeSnap, sameHand, type EdgeSnap, type EventDraft, type MetaSnap, type NodeSnap } from "./pure";
+
+/** Node columns a snapshot needs: not the search vector or the 1024-float embedding (~12 KB a row as text). */
+const { embedding: _embedding, search: _search, ...SNAP_NODE_COLS } = getTableColumns(nodes);
 
 export type Exec = typeof db | Tx;
 
@@ -63,7 +66,7 @@ export type Snapshot = { nodes: Map<string, NodeSnap>; edges: Map<string, EdgeSn
 export async function snapshotScope(ex: Exec, scope: Scope): Promise<Snapshot> {
   const nodeIds = [...new Set(scope.nodeIds ?? [])], edgeIds = [...new Set(scope.edgeIds ?? [])];
   const [n, e] = await Promise.all([
-    nodeIds.length ? ex.select().from(nodes).where(inArray(nodes.id, nodeIds)) : Promise.resolve([]),
+    nodeIds.length ? ex.select(SNAP_NODE_COLS).from(nodes).where(inArray(nodes.id, nodeIds)) : Promise.resolve([]),
     edgeIds.length ? ex.select().from(edges).where(inArray(edges.id, edgeIds)) : Promise.resolve([]),
   ]);
   return { nodes: new Map(n.map((r) => [r.id, nodeSnap(r)])), edges: new Map(e.map((r) => [r.id, edgeSnap(r)])) };

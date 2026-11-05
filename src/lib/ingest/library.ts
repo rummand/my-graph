@@ -7,7 +7,9 @@ import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { chunks, edges, nodes, provenance, reminders, sources, users, type Locator } from "@/db/schema";
 import { audit, type Viewer } from "@/lib/auth";
-import { getChangeSet } from "@/lib/changes";
+import { getChangeSet, readerT } from "@/lib/changes";
+import type { TFn } from "@/lib/i18n/core";
+import { localizeSourceTitle } from "./titles";
 import * as gbrain from "@/lib/gbrain";
 import { deleteStored } from "@/lib/storage";
 import { liveJobsFor, type LiveJob } from "@/lib/jobs/queue";
@@ -72,11 +74,11 @@ function categoryCondition(c: LibraryType): SQL | undefined {
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
 
-function summarize(r: typeof sources.$inferSelect & { ownerName: string | null }, v: Viewer): SourceSummary {
+function summarize(r: typeof sources.$inferSelect & { ownerName: string | null }, v: Viewer, t?: TFn): SourceSummary {
   const m = r.meta ?? {};
   const exif = (m.exif ?? null) as { takenAt?: string | null } | null;
   return {
-    id: r.id, title: r.title, mime: r.mime, category: mimeCategory(r.mime), size: r.size,
+    id: r.id, title: t ? localizeSourceTitle(r, t) : r.title, mime: r.mime, category: mimeCategory(r.mime), size: r.size,
     status: r.status, error: r.error, visibility: r.visibility, sensitive: r.sensitive,
     createdAt: r.createdAt.toISOString(), ownerId: r.ownerId, ownerName: r.ownerName, isOwner: r.ownerId === v.id,
     takenAt: exif?.takenAt ?? null,
@@ -134,7 +136,8 @@ export async function listSources(v: Viewer, f: ListFilters = {}): Promise<{ ite
     .limit(Math.min(f.limit ?? 60, 200))
     .offset(f.offset ?? 0);
   const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(sources).where(where);
-  const items = await withJobs(rows.map((r) => summarize(r, v)));
+  const t = await readerT(v);
+  const items = await withJobs(rows.map((r) => summarize(r, v, t)));
   const keys = [...new Set(items.map((i) => i.threadKey).filter((k): k is string => !!k))];
   if (keys.length) {
     const counts = await db.select({ key: sources.threadKey, n: sql<number>`count(*)::int` }).from(sources)
@@ -235,7 +238,8 @@ export async function getSourceDetail(v: Viewer, id: string): Promise<SourceDeta
     .map((n) => ({ id: n.id, label: n.label, type: n.type, summary: n.summary, startAt: n.startAt?.toISOString() ?? null }))
     .sort((a, b) => a.type.localeCompare(b.type) || a.label.localeCompare(b.label));
 
-  const [summary] = await withJobs([summarize({ ...src, ownerName: src.ownerName }, v)]);
+  const t = await readerT(v);
+  const [summary] = await withJobs([summarize({ ...src, ownerName: src.ownerName }, v, t)]);
   const m = src.meta ?? {};
 
   let thread: SourceDetail["thread"] = null;
@@ -244,7 +248,7 @@ export async function getSourceDetail(v: Viewer, id: string): Promise<SourceDeta
       .from(sources).where(and(sourceVisibleTo(v), eq(sources.threadKey, src.threadKey), isMailSql))
       .orderBy(asc(sql`coalesce(${sources.documentDate}, ${sources.createdAt})`)).limit(200);
     if (msgs.length > 1) {
-      thread = { key: src.threadKey, messages: msgs.map((x) => ({ id: x.id, title: x.title, at: new Date(x.at).toISOString(), from: ((x.meta ?? {}).email as { from?: string | null } | undefined)?.from ?? null })) };
+      thread = { key: src.threadKey, messages: msgs.map((x) => ({ id: x.id, title: localizeSourceTitle(x, t), at: new Date(x.at).toISOString(), from: ((x.meta ?? {}).email as { from?: string | null } | undefined)?.from ?? null })) };
     }
   }
   const attachments = await db.select({ id: sources.id, title: sources.title }).from(sources)
@@ -282,7 +286,15 @@ export async function updateSource(v: Viewer, id: string, patch: { title?: strin
   if (!src) throw new IngestError(404, "This file doesn't exist or you don't have access to it.");
   if (!canEditSourceRow(v, src)) throw new IngestError(403, "Only the person who added this file can change it.");
   const set: Partial<typeof sources.$inferInsert> = {};
-  if (patch.title !== undefined) set.title = patch.title;
+  if (patch.title !== undefined) {
+    set.title = patch.title;
+    // Their own words now: a title My Graph wrote (and showed in each reader's language) no longer applies.
+    if (typeof (src.meta ?? {}).titleKey === "string") {
+      const { titleKey: _k, titleParams: _p, ...rest } = src.meta ?? {};
+      void _k; void _p;
+      set.meta = rest;
+    }
+  }
   if (patch.visibility !== undefined) set.visibility = patch.visibility;
   if (patch.sensitive !== undefined) set.sensitive = patch.sensitive;
   if (Object.keys(set).length === 0) return summarize({ ...src }, v);

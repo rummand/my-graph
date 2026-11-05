@@ -2,6 +2,7 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { accountAddons, accountPlans, planFeatures, plans, users } from "@/db/schema";
+import { sweepDueBilling } from "@/lib/billing/store";
 import {
   ADDON_KEYS, PLAN_CATALOG, ULTIMATE, canGrantAddon, effectivePlan, emailIsAdmin, isAddon, parseAdminEmails, resolveFeatures,
 } from "./catalog";
@@ -74,6 +75,8 @@ export async function loadEntitlements(u: { id: string; householdId: string; ema
   const isAdmin = emailIsAdmin(u.email, adminEmails());
   if (isAdmin) await ensureAdminEntitlements(u.id);
   else await ensureCatalog();
+  // Paid plans whose downgrade hold or failed-payment grace ran out change here (billing writes account_plans).
+  await sweepDueBilling().catch((err) => console.error("[plans] billing sweep", err instanceof Error ? err.message : err));
   const [[own], addonRows] = await Promise.all([
     db.select({ planKey: accountPlans.planKey }).from(accountPlans).where(eq(accountPlans.userId, u.id)).limit(1),
     db.select({ addon: accountAddons.addon }).from(accountAddons).where(eq(accountAddons.userId, u.id)),

@@ -10,10 +10,14 @@ import type { Viewer } from "@/lib/auth";
 import { db } from "@/db";
 import { currentScope, historyStore, type HistoryScope } from "@/lib/history/context";
 import { recordMeta, snapshotMeta } from "@/lib/history/record";
-import { abandon, amendPendingUpdate, getOne, list, propose } from "./store";
+import { abandon, amendPendingUpdate, getMany, getOne, list, propose } from "./store";
 import { deliver } from "./deliver";
 import type { OpVerdict, ReasonGroup, RemapEntry, SetSummary, Verdict } from "./rebase";
 
+import type { TitleKey } from "./titles";
+/** Titles in the reader's language: `title` stays English; a key + params (given, or recognised) is stored beside it. */
+export { localizeTitle, recognizeTitle, type TitleKey, type TitleParams } from "./titles";
+export { readerT } from "./store";
 export type { OpVerdict, ReasonCode, ReasonDetails, ReasonGroup, RemapEntry, Resolution, SetSummary, Verdict } from "./rebase";
 
 export type ChangeOp =
@@ -62,7 +66,7 @@ export type ChangeSetView = {
 };
 
 /** Opens a change set with its ops (node ids for new nodes are minted here). Returns the id, or null if not allowed. */
-export async function proposeChanges(v: Viewer, input: { title: string; description?: string; origin: ChangeSetOrigin; evidence?: Receipt; forUserId?: string; changes: ChangeInput[] }): Promise<{ id: string; nodeIds: Record<number, string> } | null> {
+export async function proposeChanges(v: Viewer, input: { title: string; titleKey?: TitleKey | null; description?: string; origin: ChangeSetOrigin; evidence?: Receipt; forUserId?: string; changes: ChangeInput[] }): Promise<{ id: string; nodeIds: Record<number, string> } | null> {
   return propose(v, input);
 }
 
@@ -88,6 +92,11 @@ export async function abandonChangeSet(v: Viewer, id: string): Promise<boolean> 
 
 export async function getChangeSet(v: Viewer, id: string): Promise<ChangeSetView | null> {
   return getOne(v, id);
+}
+
+/** Several change sets by id in one pass, in the order given (those the viewer may not see are left out). */
+export async function getChangeSets(v: Viewer, ids: string[]): Promise<ChangeSetView[]> {
+  return getMany(v, ids);
 }
 
 export async function listChangeSets(v: Viewer, opts: { status?: "draft" | "delivered" | "abandoned" | "all"; origin?: ChangeSetOrigin; limit?: number } = {}): Promise<ChangeSetView[]> {
