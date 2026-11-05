@@ -2,7 +2,7 @@
 
 **A proposal for My Graph's operating-model layer: one language for how any business works, lenses for every function, and a company that keeps its own map up to date.**
 
-Draft v1 · 5 Nov 2026 · Status: proposal for review · Owner: the founder · Related: `PROPOSAL.md`, `docs/versioning-plan.md`, `docs/commitments.md`
+Draft v2 · 5 Nov 2026 · Status: proposal for review · Owner: the founder · Related: `PROPOSAL.md`, `docs/versioning-plan.md`, `docs/commitments.md`
 
 ---
 
@@ -13,7 +13,7 @@ My Graph already holds what actually happens in a company — mail, meetings, ch
 This proposal adds that second world **to the same graph**, in a small, universal grammar, and lets the first world keep it alive:
 
 1. **Facts** — what is (built).
-2. **The operating model** — how a business works: capabilities, processes, roles, rules, commitments, decisions, goals and signals. The same for every enterprise; seeded from a reference model (APQC's Process Classification Framework) as a template, then grown from evidence.
+2. **The operating model** — how a business works, expressed in our own **Enterprise Kernel** (section 5): nine questions every organisation answers (why, for whom, what, how, who, with what, under which rules, how well, what is changing), a fixed grammar of relations and five laws. Established frameworks — APQC, BIZBOK, ITIL, COBIT, IT4IT, SAFe, OKR, COSO, Team Topologies and more — become optional, licence-aware **packs** mapped onto the kernel. Seeded from our own SME edition, then grown from evidence.
 3. **Lenses** — how people look at it: declared viewpoints for a function or a question (enterprise architecture, customer service, finance, HR, compliance, management, a new employee), computed live from facts, every answer traceable to its source.
 
 The bridge between facts and model is **anchoring**: everything that comes in is placed on the capability and process it belongs to — proposed by agents, confirmed by people as patterns, not one item at a time.
@@ -99,39 +99,178 @@ The same fact appears in many lenses with different words and different context 
 
 ---
 
-## 5. Reference models and templates
+## 5. The overarching framework: the Enterprise Kernel
 
-### 5.1 The work template: APQC as the backbone
+Every established framework describes a business well **along one or two axes** — APQC the activities, BIZBOK the capabilities, ITIL the services, COBIT the governance, SAFe the delivery of change, COSO the controls, OKR the goals, Team Topologies the teams. None describes the whole, none is anchored in evidence, all are drawn by hand, and several cannot be shipped inside a product. So we do not pick one. We define **our own small kernel** that every business shares — from a family to an enterprise — and treat the established frameworks as **packs**: optional, mapped, licence-aware views onto the same kernel.
 
-APQC's **Process Classification Framework (PCF)** is the closest thing the world has to a shared map of how enterprises work: 13 categories, about 1,000 processes, five levels deep, with industry variants. Its top level:
+### 5.1 What we studied, and what each brings
 
-1. Develop vision and strategy
-2. Develop and manage products and services
-3. Market and sell products and services
-4. Manage supply chain for physical products
-5. Deliver services
-6. Manage customer service
-7. Develop and manage human capital
-8. Manage information technology
-9. Manage financial resources
-10. Acquire, construct and manage assets
-11. Manage enterprise risk, compliance, remediation and resiliency
-12. Manage external relationships
-13. Develop and manage business capabilities
+| Framework | Describes | What we take | What it lacks for us | Licence / openness (verify before shipping) |
+| --- | --- | --- | --- | --- |
+| **APQC PCF** (cross-industry + industry PCFs) | Activities: 13 categories, ~1,000 processes, 5 levels | A complete, numbered activity tree; industry variants; benchmarks | Activities only — no capabilities, goals, controls, evidence | Cross-industry reported royalty-free with attribution; industry PCFs (co-developed with IBM) carry their own terms |
+| **BIZBOK** (Business Architecture Guild) | Capabilities, value streams, information concepts, stakeholders | Capability ≠ process; value streams as stakeholder value stages; capability × value-stream matrix | Members-only; static maps | Restricted: vendor licence needed, no redistribution — **do not ship**; import if the customer is licensed |
+| **TOGAF / ArchiMate** (The Open Group) | Architecture method; layered language (motivation, strategy, business, application, technology, implementation) | Layers; motivation elements (driver, goal, outcome, principle, requirement); viewpoints | A notation and method, not a living model | Open Group terms — use concepts, not text |
+| **ISO/IEC/IEEE 42010** | Stakeholders, concerns, viewpoints, views | The lens idea itself | Abstract | Standard — concepts only |
+| **IT4IT** (The Open Group) | IT as a value chain: Strategy→Portfolio, Requirement→Deploy, Request→Fulfil, Detect→Correct | Value streams with data objects that flow between them | IT only | Open Group terms — concepts only |
+| **ITIL 4** (PeopleCert/Axelos) | Service value system: guiding principles, value chain (plan, improve, engage, design & transition, obtain/build, deliver & support), 34 practices | Services and value co-creation; the six value-chain activities | Heavy, IT-centred | Copyrighted — concepts only, no text |
+| **COBIT 2019** (ISACA) | Governance (EDM) vs management (APO, BAI, DSS, MEA) objectives; design factors; capability levels | The split between *governing* and *managing*; objectives as controllable goals; design factors that tailor | IT governance; dense | Copyrighted — structure-level mapping, licensed customers import |
+| **SAFe** | Portfolio, operational vs development value streams, lean budgets, epics, PI planning | Operational vs development value streams; lean portfolio; initiatives funded by value stream | Big-company ceremony | Trademark + licence — concepts only, never branded content |
+| **Scrum / Kanban / Lean / VSM** | Flow of work, WIP, waste, lead time | Flow metrics; value-stream mapping; cases flowing through steps | No enterprise structure | Open concepts |
+| **Porter value chain** | Primary vs support activities | Primary/support split for the SME map | Pre-digital, coarse | Public concept |
+| **Business Model Canvas / Value Proposition** | Customers, value, channels, revenue, costs, partners | The "for whom / why" axis; offerings and segments | No operations | Concepts (canvas under CC BY-SA) |
+| **OKR / Balanced Scorecard / EFQM** | Goals, key results, perspectives, excellence | Goal → outcome → signal chain; four perspectives as default lens groups | Disconnected from the work | Public concepts (EFQM model licensed) |
+| **COSO / ISO 31000 / Three Lines** | Internal control, risk management, who checks whom | Risk ↔ control ↔ evidence; three lines as role pattern | Paperwork-heavy | Concepts only |
+| **ISO 9001 / ISO 27001 / NIST CSF / NIS2 / GDPR** | Quality, security, cyber, privacy | As **rule packs** (we already read laws into Rules) | Each one silo | Laws free (EUR-Lex, retsinformation); ISO text copyrighted — customers bring their copy; NIST public domain |
+| **SCOR** (ASCM) | Supply chain: plan, source, make, deliver, return, enable | Industry pack for physical goods | Supply chain only | Licensed |
+| **eTOM / TM Forum** | Telecom process framework | Industry pack pattern | Telecom only | Member licence |
+| **BPMN / DMN / CMMN** (OMG) | Notation for processes, decisions, cases | Process steps, decision tables, case management as views | Notation, not content | Open specifications |
+| **Team Topologies** | Stream-aligned, platform, enabling, complicated-subsystem teams; interaction modes | Team types and interaction modes on the "who" axis | Teams only | Concepts |
+| **Domain-Driven Design** | Bounded contexts, ubiquitous language | Each function's vocabulary = a bounded context → lens glossary | Software-centred | Concepts |
+| **Viable System Model** (Stafford Beer) | A self-regulating organisation: operations, coordination, control, intelligence, policy | The cybernetic loop that makes the kernel self-steering (5.4) | Abstract | Concepts |
+| **Wardley maps** | Value chain × evolution (genesis → commodity) | Evolution as a property of capabilities ("build, buy, rent") | Strategy only | CC BY-SA |
+| **Cynefin** | Clear / complicated / complex / chaotic contexts | Decision context on decisions (how to decide) | No structure | Concepts |
+| **Jobs-to-be-done** | Customer jobs and outcomes | "For whom / why" from the customer's side | No operations | Concepts |
+| **McKinsey 7S** | Strategy, structure, systems, shared values, style, staff, skills | Values and skills as first-class | Consultancy framing | Concepts |
+| **RACI / DACI** | Who is responsible, accountable, consulted, informed | Responsibility edges on everything | A matrix, not a model | Concepts |
+| **PMBOK / PRINCE2** | Projects | Initiatives and change as branches | Projects only | Concepts |
+| **DORA / SPACE** | Delivery performance | Signals for the software-delivery pack | Software only | Public research |
 
-**Plan:** an **SME edition** — the 13 categories, two to three levels deep (≈ 150–250 elements), in English and Danish, written in plain words, with industry editions later (clinic, law firm, bakery, construction, SaaS, school, municipality). It is a *template*: the company keeps what fits, renames, adds and removes — every change with history.
+**What they all agree on:** a business has a *purpose*, serves *someone*, has stable *capabilities*, runs *flows* of work, organises *people and teams*, uses *information, systems and money*, is *governed* by rules and risks, is *measured* against goals, and *changes* through initiatives.
 
-> **Licensing check before shipping.** APQC publishes the PCF for free use with attribution as far as we know; confirm the current terms and attribution text before we ship the template. If the terms do not fit, we write our own SME edition aligned to the same structure (capability maps à la BIZBOK are an alternative backbone).
+**What none of them does:** stay true by itself. Every one of them is a model people maintain by hand, disconnected from the evidence of what actually happens. None handles promises (commitments), none spans a family and an enterprise, none is federated between organisations, and none puts AI agents in the picture as accountable actors. That is the gap the Enterprise Kernel fills.
 
-### 5.2 The same layer in every graph kind
+### 5.2 The Enterprise Kernel: nine questions every organisation answers
 
-| Template | Capabilities look like | Processes look like | Typical lenses |
+The kernel is the smallest set of object types and relations that lets any of the frameworks above be expressed — and lets the graph's facts anchor to them. It is organised as **nine questions**:
+
+| # | Question | Kernel objects | Inspired by |
 | --- | --- | --- | --- |
-| **Work (SME)** | APQC SME edition | Order-to-cash, hire-to-retire, complaint handling | EA, customer service, finance, HR, compliance, management |
-| **Practice** (clinic, therapist) | Treat clients, keep records, manage consent, bill | Referral → intake → sessions → closure | Clinician, practice manager, data protection |
-| **Family** | Run the home, raise the children, keep health, manage money, keep in touch | School year, moving house, insurance renewal | "Who does what at home", family admin, money |
-| **Personal** | Work, learn, health, home, relationships | Job search, training plan | You (self-insights), life admin |
-| **Project** | The project's deliverables | Plan → build → review → deliver | Status, risks, decisions |
+| 1 | **Why?** | Purpose · Value (principle) · Driver · Goal · Outcome | ArchiMate motivation, OKR, 7S |
+| 2 | **For whom?** | Stakeholder · Customer segment · Offering (product/service) · Job to be done | BMC, JTBD, ITIL services, BIZBOK stakeholders |
+| 3 | **What can we do?** | Capability (with level and evolution) | BIZBOK, Wardley, COBIT capability levels |
+| 4 | **How does work flow?** | Value stream · Process · Activity · **Case** (one instance: an order, a complaint, a hire) | APQC, IT4IT, SAFe, Lean, CMMN |
+| 5 | **Who?** | Person · Role · Team (type) · Unit · Partner · **Agent** (AI) | RACI, Team Topologies, three lines |
+| 6 | **With what?** | Information object · System · Asset · Budget / money flow | ArchiMate application/technology, Porter support activities |
+| 7 | **Under which rules?** | Rule (law, policy, standard, contract term) · Control · Risk · **Decision** · **Commitment** · **Evidence** | COSO, ISO 31000, COBIT, ADRs, Nexus |
+| 8 | **How well?** | Signal · Target · Observation | BSC, DORA, flow metrics, EFQM |
+| 9 | **What is changing?** | Initiative · Change (branch of the model) · Plan · Release | SAFe/PMBOK, our change sets |
+
+Plus two dimensions that run through all nine: **time** (every object and edge has history; the model can be read *as of* any date) and **evidence** (every object can be anchored to the facts that show it is real).
+
+### 5.3 The kernel's relations (its grammar)
+
+A small, fixed vocabulary of typed relations — the same in every graph, labelled per lens and language:
+
+| Relation | From → To | Reads as |
+| --- | --- | --- |
+| `serves` | Offering / Value stream → Stakeholder | "delivers value to" |
+| `realises` | Process / Activity → Capability | "is how we do" |
+| `stage_of` | Process → Value stream | "is a stage of" |
+| `part_of` | any → same kind | decomposition (capability levels, process levels) |
+| `flows_through` | Case → Process / Activity | "went through" (with timestamps) |
+| `performs` | Role / Team / Agent → Activity | "does" |
+| `holds` | Person → Role (in a context, over time) | already built (roles) |
+| `owns` | Role / Person → any | accountability (the A in RACI) |
+| `uses` · `produces` · `consumes` | Activity → System / Information | "with", "makes", "needs" |
+| `governs` | Rule → Capability / Process / Offering / System | "applies to" |
+| `controls` | Control → Risk / Rule | "keeps in check" |
+| `threatens` | Risk → Goal / Capability | "puts at risk" |
+| `proves` | Evidence → Control / Rule / Commitment | "shows it is met" |
+| `decides` | Decision → any | "settled" (with rationale, alternatives) |
+| `commits` | Commitment → Stakeholder / Case | "we promised" (already built) |
+| `measures` | Signal → Goal / Capability / Process | "tells us how it goes" |
+| `contributes_to` | Outcome / Capability → Goal | "helps achieve" |
+| `changes` | Initiative → any | "will alter" (a branch of the model) |
+| `depends_on` | any → any | dependency |
+| `anchored_in` | any model object → fact (message, document, meeting, event) | "we know this because" |
+
+### 5.4 The kernel's laws
+
+Five rules the kernel enforces — each a built-in rule (Rules) whose breaches show up as proposals, not as errors:
+
+1. **Everything is anchored.** A model object without evidence is a hypothesis and is shown as one.
+2. **Every capability has an owner and a reason.** No owner → proposal to assign one; no goal it contributes to → question to the owner.
+3. **Every rule has a control, and every control has proof.** Missing or expired proof is a commitment someone owns.
+4. **Every case runs through a value stream.** Work that fits no stream reveals a capability nobody named yet.
+5. **Every change is a branch.** The model is never edited in place; reorganisations, new processes and new rules are change sets with impact, reviewed and delivered by people.
+
+### 5.5 The self-steering loop (from the Viable System Model)
+
+Stafford Beer's Viable System Model describes what any organisation needs to stay alive. The kernel maps it onto features we already have or are building, so the company **steers itself with people in the loop**:
+
+| VSM system | What it does | In My Graph |
+| --- | --- | --- |
+| **1 · Operations** | Do the work | Cases flowing through processes; commitments being kept |
+| **2 · Coordination** | Stop parts colliding | Clash detection (commitments watch), shared calendars, double-coverage alerts |
+| **3 · Control** | Keep operations within rules and resources | Rules, controls, evidence, budgets; the self-healing model checks |
+| **3\* · Audit** | Look directly, sporadically | Auditor mode; "who said this"; history at a date |
+| **4 · Intelligence** | Look outside and ahead | Regulatory foresight, web research, connectors, benchmarks, what-if |
+| **5 · Policy** | Identity, purpose, balance between now and next | Purpose, values, goals; the strategy compiler; decisions with pre-mortems |
+
+### 5.6 Packs: every framework as an optional view onto the kernel
+
+A **pack** = a template (objects to seed) + a mapping (pack concept → kernel type and relation) + lenses + rules. Packs are versioned, licence-tagged, and can be combined. The kernel is ours, so the product never depends on one licensor.
+
+| Pack | Maps onto the kernel as | Ships |
+| --- | --- | --- |
+| **SME edition** (ours, 5.7) | Capabilities + processes for any small business, mapped to APQC numbers for interoperability | Built in |
+| **APQC PCF cross-industry** | Process tree with PCF ids → Process/Activity, `realises` our capabilities | If the licence allows embedding, with attribution; otherwise import of the customer's download |
+| **APQC industry PCFs** | Same, per industry | Import only (separate terms) |
+| **BIZBOK capability maps** | Capabilities, value streams, information concepts | Import only for licensed customers |
+| **ITIL-style service management** | Offerings (services), value-chain stages, practices as capabilities | Our own wording, concepts only |
+| **IT4IT-style IT value chain** | Four IT value streams with their data objects | Our own wording |
+| **COBIT-style governance** | Governance vs management objectives → Goals + Rules + Controls with capability levels | Structure-level; licensed customers import the text |
+| **SAFe-style portfolio** | Operational / development value streams, initiatives, lean budgets | Concepts only |
+| **Team Topologies** | Team types and interaction modes on Team and `depends_on` | Concepts only |
+| **OKR / Balanced Scorecard** | Goals, outcomes, signals, four perspectives as lens groups | Built in |
+| **Rule packs**: GDPR, Danish Bookkeeping Act, Working Environment Act, NIS2, ISO 27001 / 9001, NIST CSF | Rules (read from a link) + controls + evidence | Laws built in from official sources; ISO from the customer's own copy |
+| **Industry packs** (later): clinic, law firm, construction, SaaS, retail, school, municipality | SME edition + industry capabilities + rule packs + lenses | Ours |
+| **Family, personal, practice** | The same kernel at household scale (5.8) | Built in |
+
+### 5.7 The SME edition (our own default capability map)
+
+Thirteen domains, written by us in plain words (English and Danish), each mapped to APQC categories for interoperability. Primary domains create value for customers; support domains keep the company able to.
+
+| Domain | Capabilities (level 2) | ≈ APQC |
+| --- | --- | --- |
+| **Direction** | Purpose and values · Strategy · Goals and priorities · Portfolio of initiatives · Board and owners | 1, 13 |
+| **Market and customers** | Understand customers · Brand and marketing · Segments and offerings · Pricing | 2, 3 |
+| **Sales** | Find leads · Quote and win · Contracts with customers · Key accounts | 3 |
+| **Offerings** | Design products and services · Develop and improve · Launch and retire | 2 |
+| **Delivery** | Plan delivery · Produce or perform · Deliver and install · Quality | 4, 5 |
+| **Customer care** | Answer and help · Complaints and claims · Returns and warranties · Customer feedback | 6 |
+| **People** | Recruit · Onboard · Develop and review · Pay and benefits · Working environment · Leave and offboard | 7 |
+| **Money** | Budget and forecast · Invoice and collect · Pay suppliers · Bookkeeping and closing · Tax and VAT · Funding and cash | 9 |
+| **Information and technology** | Systems and tools · Data and documents · Security · Support | 8 |
+| **Assets and places** | Premises · Equipment and vehicles · Maintenance | 10 |
+| **Risk and compliance** | Laws and rules · Data protection · Internal control · Insurance · Incidents and continuity | 11 |
+| **Partners and suppliers** | Choose suppliers · Purchase · Supplier contracts · Partnerships | 4, 12 |
+| **Change and improvement** | Ideas and improvements · Projects · Process improvement · Knowledge and learning | 13 |
+
+Depth grows only where the company's own evidence asks for it: anchoring (section 6) proposes level-3 capabilities and processes when enough facts cluster under a level-2 one.
+
+### 5.8 The same kernel in every graph kind
+
+The kernel is fractal: the nine questions apply to a family as much as to a company — only the template and the depth differ.
+
+| Template | Why | For whom | What (capabilities) | How (flows) | Under which rules | Typical lenses |
+| --- | --- | --- | --- | --- | --- | --- |
+| **Work (SME)** | Purpose, goals | Customers, owners, staff | SME edition | Order-to-cash, hire-to-retire, complaint handling | Laws, policies, contracts | EA, customer service, finance, HR, compliance, management |
+| **Practice** (clinic, therapist) | Good care | Clients, patients, referrers | Treat, keep records, manage consent, bill | Referral → intake → sessions → closure | Health law, GDPR, consent | Clinician, practice manager, data protection |
+| **Family** | A good life together | The family members | Run the home, raise the children, health, money, keep in touch | School year, moving house, insurance renewal | House rules, school rules, tenancy law | Who does what at home, family admin, money |
+| **Personal** | My goals | Me | Work, learn, health, home, relationships | Job search, training plan | My own rules | You, life admin |
+| **Project** | The project's goal | Sponsor, users | The deliverables | Plan → build → review → deliver | Contract, standards | Status, risks, decisions |
+
+### 5.9 Why this is new
+
+- **Evidence-anchored:** every box on every map is backed by facts, or visibly marked as a hypothesis.
+- **Live and dated:** maps change as work changes, and can be read as of any date and compared.
+- **One kernel, many frameworks:** APQC, ITIL, COBIT, SAFe, OKR and the rest become lenses on one model rather than competing repositories.
+- **Promises and decisions are first-class:** commitments and decisions sit in the model next to processes and rules.
+- **Humans and agents in one org model:** AI agents hold roles, perform activities, are governed by rules and owned by people.
+- **Family to enterprise:** the same nine questions, the same machinery, different templates.
+- **Federated:** two organisations can share a lens on their kernels without sharing their graphs.
+- **Licence-safe:** the kernel and the SME edition are ours; third-party frameworks are packs that ship only where their terms allow.
 
 ---
 
@@ -417,7 +556,7 @@ Patterns that preceded trouble before — a key customer going quiet, an overloa
 
 | Phase | Delivers | Builds on |
 | --- | --- | --- |
-| **1. The language** | Capabilities, processes, goals in the meta model; decision node type; SME edition of the reference model (en/da) as the work template; `/model` page | Meta model, roles, rules, commitments |
+| **1. The language** | The Enterprise Kernel in the meta model (nine questions, the relation grammar, the five laws as built-in rules); decision node type; the SME edition (en/da) as the work template; `/model` page; first packs (OKR, rule packs) | Meta model, roles, rules, commitments |
 | **2. Anchoring** | Anchoring engine; pattern rules; unanchored queue; anchors in ingest and connectors | Importers, connectors, change sets |
 | **3. Lenses** | Lens language v1; lens engine; five built-in lenses (EA, customer service, finance, compliance, management) + onboarding; lenses as artifacts | Artifacts, history, search |
 | **4. Living views** | As-of and diff for lenses; "present that" to decks; meetings on lenses | Artifacts, Record, history |
@@ -430,7 +569,7 @@ Phase 1 and 2 are the foundation; Commitments (being built now) plugs straight i
 
 ## 15. Open decisions
 
-1. **Reference model and licence** — APQC PCF (confirm terms and attribution) vs our own SME edition aligned to it.
+1. **Packs and licences** — the kernel and SME edition are ours; confirm APQC's current cross-industry terms (embed with attribution vs import only), and keep BIZBOK, COBIT, ITIL, SAFe, SCOR and ISO content as customer-licensed imports or concept-level mappings.
 2. **Model objects as meta tables or as nodes** — meta tables keep the model separate and versioned like kinds; nodes make the model itself traversable in the same graph. Proposal: meta tables for the *types*, nodes for the *company's own instances* (its capabilities and processes), so both are graph and both have history.
 3. **Lens language surface** — YAML only for experts, a form for everyone, speech via the assistant; which one is primary in the UI.
 4. **Names people see** — "Operating model" / "Sådan arbejder vi"? "Lenses" / "Visninger"? "Capabilities" / "Evner"? To be tested with real users in Danish.
@@ -439,4 +578,76 @@ Phase 1 and 2 are the foundation; Commitments (being built now) plugs straight i
 
 ---
 
-*Sources of inspiration: APQC Process Classification Framework; capability-based planning (BIZBOK); ISO/IEC/IEEE 42010 and ArchiMate viewpoints; process mining (discovered vs designed processes); Nexus (rules, controls, evidence, exceptions, "what applies", plans as branches) — see the Rules work in `src/lib/corpus`.*
+*Sources of inspiration: APQC Process Classification Framework; BIZBOK; TOGAF and ArchiMate; IT4IT; ITIL 4; COBIT 2019; SAFe; Lean and value-stream mapping; Porter's value chain; Business Model Canvas; OKR, Balanced Scorecard, EFQM; COSO, ISO 31000 and the Three Lines; ISO 9001/27001, NIST CSF; SCOR; eTOM; BPMN/DMN/CMMN; Team Topologies; Domain-Driven Design; Stafford Beer's Viable System Model; Wardley maps; Cynefin; Jobs-to-be-done; McKinsey 7S; RACI; PMBOK/PRINCE2; DORA; capability-based planning (BIZBOK); ISO/IEC/IEEE 42010 and ArchiMate viewpoints; process mining (discovered vs designed processes); Nexus (rules, controls, evidence, exceptions, "what applies", plans as branches) — see the Rules work in `src/lib/corpus`.*
+
+---
+
+## Appendix A: Fifty sources of inspiration
+
+Grouped by the kernel question they mostly inform. Each line: the source, and what we take from it.
+
+**Activities, processes and value streams (How?)**
+1. **APQC Process Classification Framework** — a complete, numbered activity tree (13 categories, ~1,000 processes), industry variants, benchmarks.
+2. **IT4IT (The Open Group)** — the IT value chain as four value streams with the data objects that flow between them.
+3. **SCOR (ASCM)** — supply chain as plan, source, make, deliver, return, enable.
+4. **eTOM / TM Forum Frameworx** — an industry process framework done at depth (telecom).
+5. **Lean and value-stream mapping** — flow, waste, lead time, the customer's view of the work.
+6. **Kanban** — work in progress limits and flow metrics on any process.
+7. **BPMN 2.0 (OMG)** — a shared notation for process steps and handovers.
+8. **CMMN (OMG)** — case management for work that doesn't follow a fixed path.
+9. **Process mining (van der Aalst; Celonis, ProM)** — discovering the real process from event logs and checking conformance.
+10. **Porter's value chain** — primary vs support activities.
+
+**Capabilities and architecture (What can we do?)**
+11. **BIZBOK (Business Architecture Guild)** — capabilities, value streams, information concepts and their matrix.
+12. **TOGAF (The Open Group)** — the architecture development method and content metamodel.
+13. **ArchiMate (The Open Group)** — layered modelling language with motivation, strategy and implementation elements.
+14. **ISO/IEC/IEEE 42010** — stakeholders, concerns, viewpoints and views: the basis of lenses.
+15. **Zachman Framework** — the six interrogatives (what, how, where, who, when, why) across perspectives.
+16. **Capability-based planning** — investing by capability gaps rather than projects.
+17. **Wardley maps** — capabilities on an evolution axis (genesis → custom → product → commodity).
+18. **Domain-Driven Design** — bounded contexts and a ubiquitous language per domain: the lens glossary.
+
+**Services and IT management**
+19. **ITIL 4** — the service value system, value co-creation and the service value chain.
+20. **COBIT 2019 (ISACA)** — governance vs management objectives, design factors, capability levels.
+21. **ISO/IEC 20000** — service management as a certifiable system.
+22. **VeriSM** — service management across the whole organisation, not just IT.
+23. **DORA / Accelerate** — delivery performance signals (lead time, deployment frequency, change failure, recovery).
+24. **SPACE framework** — developer productivity beyond output counts.
+
+**Strategy, goals and measurement (Why? How well?)**
+25. **OKR (Grove, Doerr)** — objectives and measurable key results.
+26. **Balanced Scorecard (Kaplan & Norton)** and **strategy maps** — four perspectives and cause-and-effect between goals.
+27. **EFQM Model** — direction, execution, results as a cycle of excellence.
+28. **Hoshin Kanri** — strategy deployed level by level with catchball.
+29. **Business Model Canvas and Value Proposition Canvas (Osterwalder)** — customers, value, channels, revenue and costs on one page.
+30. **Jobs-to-be-done (Christensen, Ulwick)** — the customer's job and desired outcomes.
+31. **Playing to Win (Lafley & Martin)** — strategy as a cascade of choices.
+32. **Theory of Constraints (Goldratt)** — the bottleneck decides the throughput.
+
+**People, teams and organisation (Who?)**
+33. **Team Topologies (Skelton & Pais)** — team types and interaction modes.
+34. **RACI / DACI** — responsibility and decision roles on every item.
+35. **McKinsey 7S** — shared values, skills and style next to structure and systems.
+36. **Sociocracy / holacracy** — roles and circles as explicit, changeable structure.
+37. **Viable System Model (Stafford Beer)** — operations, coordination, control, intelligence and policy: the self-steering loop.
+
+**Governance, risk, control and compliance (Under which rules?)**
+38. **COSO Internal Control and ERM** — control environment, risk assessment, control activities, information, monitoring.
+39. **ISO 31000** — risk management principles and process.
+40. **The Three Lines model (IIA)** — who does, who oversees, who assures independently.
+41. **ISO 9001** — the process approach and plan-do-check-act.
+42. **ISO/IEC 27001 and NIST Cybersecurity Framework 2.0** — security as governed, evidenced controls.
+43. **GDPR and NIS2** — data protection and cyber obligations as rule packs read from the law itself.
+44. **Architecture Decision Records (Nygard)** — decisions with context, options and consequences.
+45. **Nexus (our own)** — requirements, controls, evidence that expires, exceptions with end dates, "what applies", plans as branches.
+
+**Change and delivery (What is changing?)**
+46. **SAFe** — operational vs development value streams, lean portfolio management, epics.
+47. **PMBOK and PRINCE2** — projects, stages, tolerances and governance of change.
+48. **Scrum** — short cycles, review and adapt.
+
+**Thinking tools**
+49. **Cynefin (Snowden)** — choosing how to decide by the kind of situation.
+50. **Systems thinking (Senge, Meadows)** — feedback loops, delays and leverage points behind the signals.
