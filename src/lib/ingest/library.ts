@@ -2,12 +2,13 @@
  * Library reads and edits for the /library pages and /api/library routes. Server-only.
  * Every read is filtered by the viewer (see access.ts); edits and deletes are the owner's.
  */
-import { and, asc, desc, eq, ilike, inArray, like, ne, or, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNull, like, ne, or, sql, type SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { db } from "@/db";
 import { chunks, edges, nodes, provenance, reminders, sources, users, type Locator } from "@/db/schema";
 import { audit, type Viewer } from "@/lib/auth";
-import { getChangeSet, readerT } from "@/lib/changes";
+import { abandonChangeSet, getChangeSet, readerT } from "@/lib/changes";
+import { afterVersionDeleted } from "./revisions-store";
 import type { TFn } from "@/lib/i18n/core";
 import { localizeSourceTitle } from "./titles";
 import * as gbrain from "@/lib/gbrain";
@@ -40,6 +41,12 @@ export type SourceSummary = {
   messages: number | null; imported: number | null;
   /** Its job in the reading queue, while one waits or runs (the real state behind "pending"/"processing"). */
   job: LiveJob | null;
+  /** Versions: which version this is (1 = the first), and whether a newer one has replaced it. */
+  revision: number; superseded: boolean;
+  /** Other names the same file was uploaded under (not stored again). */
+  otherNames: string[];
+  /** Set on an upload that turned out to be a file already in the library (it was not kept). */
+  duplicateOf: { id: string; title: string } | null;
 };
 
 /** What people filter by: the kind of file, or what the item is (mail, letter, scan, photo). */
@@ -96,6 +103,9 @@ function summarize(r: typeof sources.$inferSelect & { ownerName: string | null }
     messages: typeof m.messages === "number" ? m.messages : null,
     imported: typeof m.imported === "number" ? m.imported : null,
     job: null,
+    revision: r.revision ?? 1, superseded: !!r.supersededAt,
+    otherNames: Array.isArray(m.otherNames) ? (m.otherNames as unknown[]).filter((x): x is string => typeof x === "string") : [],
+    duplicateOf: typeof m.duplicateOf === "string" ? { id: m.duplicateOf, title: typeof m.duplicateOfTitle === "string" ? m.duplicateOfTitle : "" } : null,
   };
 }
 
@@ -106,14 +116,16 @@ async function withJobs<T extends SourceSummary>(items: T[]): Promise<T[]> {
   return items;
 }
 
-export async function listSources(v: Viewer, f: ListFilters = {}): Promise<{ items: SourceSummary[]; total: number }> {
-  if (!(await gbrain.accessContext(v)).active) return { items: [], total: 0 };
+export async function listSources(v: Viewer, f: ListFilters = {}): Promise<{ items: SourceSummary[]; total: number; dropped: SourceSummary[] }> {
+  if (!(await gbrain.accessContext(v)).active) return { items: [], total: 0, dropped: [] };
   const conds: SQL[] = [sourceVisibleTo(v), inArray(sources.kind, [...LIBRARY_KINDS])];
   if (f.category) conds.push(categoryCondition(f.category)!);
   if (f.thread) conds.push(eq(sources.threadKey, f.thread));
   // A mail import's messages show under Mail, in search and in their thread; "Everything" shows the import itself.
   if (!f.category && !f.q?.trim() && !f.thread) conds.push(sql`${sources.meta}->>'containerId' is null`);
   if (f.status) conds.push(eq(sources.status, f.status));
+  // Only the newest version of a document is listed; the earlier ones are on its page.
+  conds.push(isNull(sources.supersededAt));
   const q = f.q?.trim();
   if (q) {
     const pat = `%${escapeLike(q)}%`;
@@ -127,7 +139,8 @@ export async function listSources(v: Viewer, f: ListFilters = {}): Promise<{ ite
       meta: sources.meta, status: sources.status, error: sources.error, visibility: sources.visibility, sensitive: sources.sensitive,
       nodeId: sources.nodeId, documentDate: sources.documentDate, documentDatePrecision: sources.documentDatePrecision, threadKey: sources.threadKey,
       url: sources.url, externalId: sources.externalId, connectionId: sources.connectionId, fetchedAt: sources.fetchedAt,
-      createdAt: sources.createdAt, ownerName: users.name,
+      lineageId: sources.lineageId, revision: sources.revision, supersededAt: sources.supersededAt, docKey: sources.docKey,
+      nameKey: sources.nameKey, contentKey: sources.contentKey, createdAt: sources.createdAt, ownerName: users.name,
     })
     .from(sources)
     .leftJoin(users, eq(users.id, sources.ownerId))
@@ -145,7 +158,13 @@ export async function listSources(v: Viewer, f: ListFilters = {}): Promise<{ ite
     const byKey = new Map(counts.map((c) => [c.key, c.n]));
     for (const i of items) if (i.threadKey) i.threadCount = byKey.get(i.threadKey) ?? 1;
   }
-  return { items, total: count };
+  // My uploads of the last hour that turned out to be files I already had (for the upload screen's message).
+  const droppedRows = await db.select().from(sources).where(and(
+    eq(sources.graphId, v.graphId), eq(sources.ownerId, v.id), sql`${sources.meta}->>'duplicateOf' is not null`,
+    sql`${sources.createdAt} > now() - interval '1 hour'`,
+  )).orderBy(desc(sources.createdAt)).limit(50);
+  const dropped = droppedRows.map((r) => summarize({ ...r, ownerName: null }, v, t));
+  return { items, total: count, dropped };
 }
 
 /** Load a source the viewer may read, or null. */
@@ -181,6 +200,8 @@ export type SourceDetail = {
   parent: { id: string; title: string } | null;
   /** Mail imports: their messages, newest first (a page). */
   importedMessages: { id: string; title: string; at: string | null }[];
+  /** Every version of this document the viewer may read, newest first (one entry when there is only this one). */
+  versions: { id: string; title: string; revision: number; createdAt: string; current: boolean; size: number | null }[];
 };
 
 export async function getSourceDetail(v: Viewer, id: string): Promise<SourceDetail | null> {
@@ -261,6 +282,12 @@ export async function getSourceDetail(v: Viewer, id: string): Promise<SourceDeta
       .map((x) => ({ id: x.id, title: x.title, at: x.at?.toISOString() ?? null }))
     : [];
 
+  const lineage = src.lineageId ?? src.id;
+  const versions = (await db.select({ id: sources.id, title: sources.title, revision: sources.revision, createdAt: sources.createdAt, supersededAt: sources.supersededAt, size: sources.size })
+    .from(sources).where(and(sourceVisibleTo(v), sql`coalesce(${sources.lineageId}, ${sources.id}) = ${lineage}`))
+    .orderBy(desc(sources.revision), desc(sources.createdAt)).limit(100))
+    .map((x) => ({ id: x.id, title: x.title, revision: x.revision, createdAt: x.createdAt.toISOString(), current: !x.supersededAt, size: x.size }));
+
   let proposal: SourceDetail["proposal"] = null;
   const csId = typeof m.changeSetId === "string" ? m.changeSetId : null;
   const total = typeof m.proposedTotal === "number" ? m.proposedTotal : 0;
@@ -277,7 +304,7 @@ export async function getSourceDetail(v: Viewer, id: string): Promise<SourceDeta
     chunks: chunkRows.map((c) => ({ ...c, locator: c.locator ?? {} })),
     entities,
     facts: [...facts.values()],
-    thread, proposal, attachments, parent: parentRow[0] ?? null, importedMessages,
+    thread, proposal, attachments, parent: parentRow[0] ?? null, importedMessages, versions,
   };
 }
 
@@ -339,6 +366,13 @@ export async function deleteSource(v: Viewer, id: string): Promise<{ fileRemoved
       await deleteStored(src.storageKey);
       fileRemoved = true;
     }
+  }
+  // The newest version left becomes the current one; what this file proposed and nobody decided on goes with it.
+  if (src.lineageId || !src.supersededAt) await afterVersionDeleted(src.graphId, src.lineageId ?? null).catch(() => {});
+  const csId = typeof src.meta?.changeSetId === "string" ? src.meta.changeSetId : null;
+  if (csId) {
+    const cs = await getChangeSet(v, csId).catch(() => null);
+    if (cs?.status === "draft") await abandonChangeSet(v, csId).catch(() => false);
   }
   void audit(v, "library.delete", { type: "source", id }, { title: src.title, fileRemoved }).catch(() => {});
   return { fileRemoved };

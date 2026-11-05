@@ -13,7 +13,7 @@ import { useLx } from "./use-lx";
 import { UploadZone } from "./upload-zone";
 
 export type LibraryFilters = { type: LibraryType | ""; status: SourceStatus | ""; q: string };
-type List = { items: SourceSummary[]; total: number };
+type List = { items: SourceSummary[]; total: number; dropped?: SourceSummary[] };
 
 const KIND_FILTERS: { value: LibraryType | ""; key: string }[] = [
   { value: "", key: "all" },
@@ -124,7 +124,7 @@ export function LibraryView({ initial, initialFilters, family = false }: { initi
       if (!res.ok) throw new Error(body.error ?? t("library.list.moreFailed"));
       setData((d) => {
         const seen = new Set(d.items.map((s) => s.id));
-        return { items: [...d.items, ...(body.items as SourceSummary[]).filter((s) => !seen.has(s.id))], total: body.total };
+        return { ...d, items: [...d.items, ...(body.items as SourceSummary[]).filter((s) => !seen.has(s.id))], total: body.total };
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : t("library.list.moreFailed"));
@@ -161,7 +161,8 @@ export function LibraryView({ initial, initialFilters, family = false }: { initi
   const ownerActive = owner !== "" && owners.some((o) => o.id === owner);
   const items = ownerActive ? data.items.filter((s) => s.ownerId === owner) : data.items;
 
-  const byId = useMemo(() => new Map(data.items.map((s) => [s.id, s])), [data.items]);
+  // Uploads that turned out to be files already here are not listed, but the upload screen still asks about them.
+  const byId = useMemo(() => new Map([...(data.dropped ?? []), ...data.items].map((s) => [s.id, s])), [data.items, data.dropped]);
   const statusOf = useCallback((id: string) => byId.get(id), [byId]);
   const onUploaded = useCallback(() => { void load(filters, true, Math.max(PAGE, shown)); setQueueKey((k) => k + 1); }, [load, filters, shown]);
   const onQueueSettled = useCallback(() => void load(filters, true, Math.max(PAGE, shown)), [load, filters, shown]);

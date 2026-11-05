@@ -24,7 +24,7 @@ import * as mux from "@/lib/mux";
 import { getMeta, type Meta as MetaHelpers, type MetaNodeType } from "@/lib/meta";
 import { enqueueSourceRead } from "@/lib/jobs/queue";
 import type { JobProgress } from "@/lib/jobs/policy";
-import { putFile, readStored, sha256Hex } from "@/lib/storage";
+import { deleteStored, putFile, readStored, sha256Hex } from "@/lib/storage";
 import { chunkSegments, groupChunks, type TextSegment } from "./chunk";
 import { docKindOf, needsAnything, ocrCharsOf, rebuildNeeds } from "./classify";
 import { checkStatedDate, letterDate, ORIGIN_RANK, parsePdfDate, pickDocumentDate, type DateCandidate, type DateOrigin } from "./document-date";
@@ -35,6 +35,7 @@ import { participantsOf, resolveThreads, splitMbox, threadKeyFor, type Participa
 import { CONTAINER_KINDS, detectFileType, kindFromMime, MAX_UPLOAD_BYTES, MBOX_MIME } from "./mime";
 import { buildProposalOps, correspondentOps, describeCounts, edgeKey, type KnownNode } from "./proposals";
 import { readZip } from "./zip";
+import { rememberName, settleRevision } from "./revisions-store";
 import { photoCoords, photoPlaceOps, takenAtFallback } from "./formats/image-place";
 import { importerById, importerForArchive } from "@/lib/importers/registry";
 import type { ImportKnown, ImportPlan, Importer } from "@/lib/importers/types";
@@ -199,6 +200,28 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       textContent, threadKey, externalId, meta: { ...meta, warnings },
       ...(docDate ? { documentDate: docDate.at, documentDatePrecision: docDate.precision } : {}),
     }).where(eq(sources.id, sourceId));
+
+    // 1a. The same file again (renamed, saved again) is dropped; a new version of a file is recorded as one.
+    if (opts.fromFile && !meta.revisionSettled) {
+      step = "comparing with earlier versions";
+      const settled = await settleRevision({ ...src, documentDate: docDate?.at ?? src.documentDate }, textContent);
+      if (settled.outcome === "duplicate") {
+        await dropDuplicate(v, src, settled.of);
+        return;
+      }
+      meta.revisionSettled = true;
+      if (settled.outcome === "revision") {
+        meta.revisionOf = settled.of.id; meta.revision = settled.revision;
+        // What the older versions proposed and nobody decided on gives way to what this version proposes.
+        const older = await db.select({ meta: sources.meta }).from(sources)
+          .where(and(eq(sources.graphId, src.graphId), sql`coalesce(${sources.lineageId}, ${sources.id}) = ${settled.lineageId}`, sql`${sources.id} <> ${src.id}`));
+        for (const o of older) {
+          const csId = typeof o.meta?.changeSetId === "string" ? o.meta.changeSetId : null;
+          const cs = csId ? await getChangeSet(v, csId).catch(() => null) : null;
+          if (cs?.status === "draft") await abandonChangeSet(v, cs.id).catch(() => false);
+        }
+      }
+    }
 
     // 1b. Attachments of an email become their own sources, in the same conversation.
     if (raw && kind === "email" && !meta.attachmentsSaved) {
@@ -861,4 +884,23 @@ async function proposeImport(
   }).catch((e) => { console.warn("[ingest] proposing an import failed", errText(e)); return null; });
   if (!r) return { proposed: plan.counts, proposedTotal: total, proposals: "waiting: change sets are not available yet" };
   return { changeSetId: r.id, proposedAt: now, proposed: plan.counts, proposedTotal: total };
+}
+
+/**
+ * A file that turned out to be one we already have (same text, other name or saved again): its bytes and text are
+ * dropped and its name is remembered on the original. A small marker row stays (not listed, not searchable) so the
+ * upload screen can say which file it was the same as.
+ */
+async function dropDuplicate(v: Viewer, src: typeof sources.$inferSelect, keep: { id: string; title: string }): Promise<void> {
+  await rememberName(keep.id, src.title);
+  await db.delete(chunks).where(eq(chunks.sourceId, src.id));
+  await db.update(sources).set({
+    status: "ready", error: null, textContent: null, storageKey: null, contentKey: null, docKey: null, nameKey: null, supersededAt: new Date(),
+    meta: { originalName: src.title, duplicateOf: keep.id, duplicateOfTitle: keep.title, finishedAt: new Date().toISOString() },
+  }).where(eq(sources.id, src.id));
+  if (src.storageKey) {
+    const [other] = await db.select({ id: sources.id }).from(sources).where(eq(sources.storageKey, src.storageKey)).limit(1);
+    if (!other) await deleteStored(src.storageKey).catch(() => {});
+  }
+  console.info(`[ingest] ${src.id} is the same as ${keep.id}; not kept (viewer ${v.id})`);
 }

@@ -13,12 +13,14 @@ import { putFile, sha256Hex } from "@/lib/storage";
 import { scopeOf } from "@/lib/graphs/pure";
 import { IngestError } from "./errors";
 import { detectFileType, MAX_UPLOAD_BYTES } from "./mime";
+import { docKeyOf, nameKeyOf } from "./revisions";
+import { rememberName } from "./revisions-store";
 import { enqueueSourceRead, waitForJob } from "@/lib/jobs/queue";
 
 export { IngestError };
 
 /** Save an upload and queue processing. Returns the new source id immediately. */
-export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "private" | "parents" | "household"; sensitive?: boolean }): Promise<{ sourceId: string; duplicate: boolean }> {
+export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "private" | "parents" | "household"; sensitive?: boolean }): Promise<{ sourceId: string; duplicate: boolean; sameAs?: string }> {
   const name = (file.name || "Untitled").split(/[\\/]/).pop()!.slice(0, 250);
   if (file.size === 0) throw new IngestError(400, `"${name}" is empty.`);
   if (file.size > MAX_UPLOAD_BYTES) throw new IngestError(413, `"${name}" is ${(file.size / 1024 / 1024).toFixed(0)} MB. The limit is 50 MB per file.`);
@@ -33,9 +35,16 @@ export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "p
   }
 
   const sha256 = sha256Hex(bytes);
-  const [dup] = await db.select({ id: sources.id }).from(sources)
+  // The same bytes again, under any name: not stored twice. The other name is remembered on the file we have.
+  const [dup] = await db.select({ id: sources.id, title: sources.title }).from(sources)
     .where(and(eq(sources.graphId, v.graphId), eq(sources.ownerId, v.id), eq(sources.sha256, sha256))).limit(1);
-  if (dup) return { sourceId: dup.id, duplicate: true };
+  if (dup) {
+    if (dup.title !== name) await rememberName(dup.id, name);
+    return { sourceId: dup.id, duplicate: true, sameAs: dup.title };
+  }
+  // What tells a later upload that it is this document again, or a new version of it (see revisions.ts).
+  const docKey = await docKeyOf({ bytes, kind: type.kind, ext: type.ext });
+  const nameKey = nameKeyOf(name, type.kind);
 
   const stored = await putFile(bytes);
   const [row] = await db.insert(sources).values({
@@ -49,6 +58,8 @@ export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "p
     storageKey: stored.storageKey,
     sha256,
     size: stored.size,
+    docKey,
+    nameKey,
     meta: { originalName: name, kind: type.kind, declaredMime: file.type || null, ...(importer ? { importer: importer.id } : {}) },
     status: "pending",
     visibility: opts?.visibility ?? "private",

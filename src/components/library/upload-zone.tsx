@@ -381,6 +381,7 @@ function UploadRow({ L, item: i, live, onRemove }: { L: Lx; item: Item; live?: S
   else if (i.state === "error") { line = i.error; tone = "danger"; }
   else if (i.state === "duplicate") line = t(i.origin === "url" ? "library.paste.duplicatePage" : i.origin === "text" ? "library.paste.duplicateNote" : "library.upload.duplicate");
   else if (i.note) { line = i.note; tone = "warn"; }
+  else if (live?.duplicateOf) line = t("library.upload.sameAs", { title: live.duplicateOf.title });
   else if (!live) { line = t("library.upload.starts"); spinning = true; }
   else if (stuck) { line = t("library.upload.stuck"); tone = "warn"; }
   else if (live.job?.status === "running") { line = stepText(L, live.job.progress); tone = "accent"; spinning = true; }

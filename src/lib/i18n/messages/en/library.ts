@@ -2,6 +2,16 @@ import type { MessageTree } from "../../core";
 
 /** "library" namespace (en). Keys are used as t("library.<key>"). */
 const messages: MessageTree = {
+  versions: {
+    title: "Versions",
+    badge: "Version {n} of {count}",
+    n: "Version {n}",
+    newest: "Newest",
+    older: "This is version {n}, an older version of this document.",
+    openNewest: "Open the newest (version {n})",
+    how: "A new version is kept when you upload a changed copy of the same document: the same PDF or Office document, or the same name with much the same text. Every version stays.",
+    otherNames: "Also uploaded as {names}. The same file isn't stored twice.",
+  },
   title: "Library",
   metaTitle: "Library · My Graph",
   fileMetaTitle: "File · My Graph",
@@ -194,6 +204,7 @@ const messages: MessageTree = {
     saving: "Saving the original",
     progress: "Uploading, {pct}%",
     duplicate: "Already in the library. The name opens the copy you have.",
+    sameAs: "The same file as “{title}”, renamed or saved again. Not added twice.",
     starts: "Uploaded. Reading starts in a moment.",
     stuck: "Reading stopped partway and it isn't in the queue. Resume it from the reading queue.",
     waiting: "Uploaded, waiting its turn to be read",

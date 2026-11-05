@@ -243,8 +243,20 @@ export const sources = pgTable("sources", {
   externalId: text("external_id"),
   connectionId: uuid("connection_id"),
   fetchedAt: timestamp("fetched_at", { withTimezone: true }),
+  /**
+   * Revisions (src/lib/ingest/revisions.ts): every version of one document shares a lineage (the first version's id);
+   * `revision` counts from 1 and older versions get `supersededAt` when a newer one is kept. `docKey` is what survives
+   * re-saving (a PDF's document id, an Office file's creation stamp, a photo's capture time and camera), `nameKey` the
+   * file name without "(1)", "v2", "final" …, and `contentKey` a hash of the normalised text.
+   */
+  lineageId: uuid("lineage_id"),
+  revision: integer("revision").notNull().default(1),
+  supersededAt: timestamp("superseded_at", { withTimezone: true }),
+  docKey: text("doc_key"),
+  nameKey: text("name_key"),
+  contentKey: text("content_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("sources_thread_idx").on(t.graphId, t.threadKey), index("sources_docdate_idx").on(t.graphId, t.documentDate), index("sources_owner_idx").on(t.ownerId, t.createdAt), index("sources_graph_idx").on(t.graphId, t.createdAt), index("sources_node_idx").on(t.nodeId)]);
+}, (t) => [index("sources_thread_idx").on(t.graphId, t.threadKey), index("sources_lineage_idx").on(t.graphId, t.lineageId), index("sources_dockey_idx").on(t.graphId, t.docKey), index("sources_namekey_idx").on(t.graphId, t.nameKey), index("sources_contentkey_idx").on(t.graphId, t.contentKey), index("sources_docdate_idx").on(t.graphId, t.documentDate), index("sources_owner_idx").on(t.ownerId, t.createdAt), index("sources_graph_idx").on(t.graphId, t.createdAt), index("sources_node_idx").on(t.nodeId)]);
 
 /** Text chunks of a source for retrieval; locator points back into the source (page, offsets, bbox, time). */
 export const chunks = pgTable("chunks", {

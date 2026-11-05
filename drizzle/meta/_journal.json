@@ -176,6 +176,13 @@
       "when": 1793824807692,
       "tag": "0024_observability_errors",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793872624888,
+      "tag": "0025_library_revisions",
+      "breakpoints": true
     }
   ]
 }

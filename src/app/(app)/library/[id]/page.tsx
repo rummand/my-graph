@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Bell, CalendarDays, CircleCheck, ExternalLink, GitPullRequestArrow, LoaderCircle, Lock, MapPin, MessagesSquare, Paperclip, ShieldAlert, Users, UsersRound } from "lucide-react";
+import { notFound, redirect } from "next/navigation";
+import { AlertTriangle, ArrowLeft, Bell, CalendarDays, CircleCheck, ExternalLink, GitPullRequestArrow, History, LoaderCircle, Lock, MapPin, MessagesSquare, Paperclip, ShieldAlert, Users, UsersRound } from "lucide-react";
 import { NodeChip, PersonChip } from "@/components/ui";
 import { AudioTranscript } from "@/components/library/audio-transcript";
 import { RecordingSection } from "@/components/recording/recording-section";
@@ -51,6 +51,8 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
   const v = await requireUser();
   const d = await getSourceDetail(v, id);
   if (!d) notFound();
+  // An upload that was the same as a file already here wasn't kept: show the file it was the same as.
+  if (d.source.duplicateOf) redirect(`/library/${d.source.duplicateOf.id}`);
   const pendingId = d.proposal?.changeSetId && d.proposal.status !== "delivered" && d.proposal.status !== "abandoned" ? d.proposal.changeSetId : null;
   const [label, reminders, L, pendingSet] = await Promise.all([relationLabeller(v), remindersFrom(v, id), libraryLx(v),
     pendingId ? getChangeSet(v, pendingId).catch(() => null) : Promise.resolve(null)]);
@@ -92,11 +94,25 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
               <ShieldAlert aria-hidden className="size-3.5" />{t("library.detail.sensitive")}
             </span>
           )}
+          {d.versions.length > 1 && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-fg">
+              <History aria-hidden className="size-3.5 text-muted" />{t("library.versions.badge", { n: s.revision, count: d.versions.length })}
+            </span>
+          )}
           <StatusPill L={L} status={s.status} stuck={stuck} job={s.job} />
           {s.job?.status === "running" && <span className="text-accent">{stepText(L, s.job.progress)}</span>}
         </div>
       </header>
 
+      {s.superseded && (() => {
+        const newest = d.versions.find((x) => x.current);
+        return newest ? (
+          <p role="note" className="-mt-4 mb-8 rounded-md bg-warn-tint px-3 py-2 text-sm text-warn">
+            {t("library.versions.older", { n: s.revision })}{" "}
+            <Link href={`/library/${newest.id}`} className="font-medium underline">{t("library.versions.openNewest", { n: newest.revision })}</Link>
+          </p>
+        ) : null;
+      })()}
       <FoundSummary L={L} d={d} reminders={reminders.length} />
       <Proposed L={L} d={d} />
       {pendingSet?.status === "draft" && <div className="-mt-2 mb-8"><ChangeSetCard cs={pendingSet} t={t} locale={L.locale} compact actions /></div>}
@@ -110,6 +126,7 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
 
         <aside className="min-w-0 space-y-10" aria-label={t("library.detail.foundAside")}>
           <Conversation L={L} d={d} />
+          <Versions L={L} d={d} />
           {s.category !== "mailbox" && <Learned L={L} d={d} busy={busy} stuck={stuck} reminders={reminders} label={label} />}
 
           <section aria-labelledby="sharing-h">
@@ -162,6 +179,43 @@ function Proposed({ L, d }: { L: Lx; d: Detail }) {
       </span>
       <span aria-hidden className="shrink-0 font-medium">{decided ? t("library.detail.proposal.see") : t("library.detail.proposal.review")}</span>
     </Link>
+  );
+}
+
+/** Every version of this document, newest first, this one marked; and other names the same file came under. */
+function Versions({ L, d }: { L: Lx; d: Detail }) {
+  const { t } = L;
+  const s = d.source;
+  if (d.versions.length < 2 && !s.otherNames.length) return null;
+  return (
+    <section aria-labelledby="versions-h">
+      {d.versions.length > 1 && (
+        <>
+          <h2 id="versions-h" className="mb-3 text-lg font-semibold tracking-[-0.01em]">{t("library.versions.title")}</h2>
+          <ol className="space-y-0.5">
+            {d.versions.map((x) => {
+              const here = x.id === s.id;
+              return (
+                <li key={x.id}>
+                  <Link href={`/library/${x.id}`} aria-current={here ? "page" : undefined}
+                    className={`flex items-baseline gap-3 rounded-md px-2 py-1.5 text-sm ${here ? "bg-surface font-medium" : "hover:bg-surface-2"}`}>
+                    <span className="w-[4.5rem] shrink-0 tabular-nums text-muted">{t("library.versions.n", { n: x.revision })}</span>
+                    <span className="min-w-0 flex-1 truncate">{x.title}</span>
+                    <span className="shrink-0 text-muted">{x.current ? t("library.versions.newest") : formatDay(L, x.createdAt)}</span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ol>
+          <p className="mt-2 text-sm text-muted">{t("library.versions.how")}</p>
+        </>
+      )}
+      {s.otherNames.length > 0 && (
+        <p className={`text-sm text-muted ${d.versions.length > 1 ? "mt-4" : ""}`}>
+          {t("library.versions.otherNames", { names: listJoin(L, s.otherNames.map((n) => (L.locale === "da" ? `„${n}“` : `“${n}”`))) })}
+        </p>
+      )}
+    </section>
   );
 }
 

@@ -2,6 +2,16 @@ import type { MessageTree } from "../../core";
 
 /** "library" namespace (da). Keys are used as t("library.<key>"). */
 const messages: MessageTree = {
+  versions: {
+    title: "Versioner",
+    badge: "Version {n} af {count}",
+    n: "Version {n}",
+    newest: "Nyeste",
+    older: "Det her er version {n}, en ældre version af dokumentet.",
+    openNewest: "Åbn den nyeste (version {n})",
+    how: "Der gemmes en ny version, når du lægger en ændret kopi af det samme dokument op: den samme PDF eller det samme Office-dokument, eller det samme navn med stort set den samme tekst. Alle versioner bliver gemt.",
+    otherNames: "Også lagt op som {names}. Den samme fil bliver ikke gemt to gange.",
+  },
   title: "Bibliotek",
   metaTitle: "Bibliotek · My Graph",
   fileMetaTitle: "Fil · My Graph",
@@ -189,6 +199,7 @@ const messages: MessageTree = {
     saving: "Gemmer originalen",
     progress: "Uploader, {pct} %",
     duplicate: "Ligger allerede i biblioteket. Navnet åbner den kopi, du har.",
+    sameAs: "Den samme fil som „{title}“, omdøbt eller gemt igen. Ikke tilføjet to gange.",
     starts: "Uploadet. Læsningen starter om et øjeblik.",
     stuck: "Læsningen stoppede undervejs, og filen er ikke i køen. Genoptag den fra læsekøen.",
     waiting: "Uploadet, venter på at blive læst",
