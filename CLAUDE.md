@@ -154,6 +154,19 @@ nothing links two graphs. The family graph keeps the household rules; other grap
   `/api/admin/**` are a 404 for everyone else; every admin action is audited (`auditAdmin`, not best-effort); reset
   links are single-use, 24 h, only the hash is stored. Admins add accounts at `/admin/accounts/new` (own household + Family or Personal graph, no
   password: a one-time link or a temporary password to hand over; there is no public sign-up). Admin copy is server-only (`getAdminT`), never in the client dictionary.
+- **Commitments** (`src/lib/commitments`, `/commitments` "Aftaler og frister", contract `types.ts`, docs `docs/commitments.md`):
+  everything the household/company owes, is owed or was promised, as nodes of type `commitment` with edges
+  responsible_for / with / about / arises_from / clashes_with. `detect/` finds them in everything read (letters,
+  invoices, policies, school, email, chats, calendar, rules with time limits) and proposes them in the source's change
+  set; `watch/` proposes clashes, flags contradictions and proposes "done" from proof (never "missed"); the ledger,
+  Today line and person block read them; person actions (done, snooze, reassign …) are delivered as that person.
+- **You** (`src/lib/you`, `/you` "Dig"): private self-insights over years from the person's own data only (seasons,
+  things that go together, drift, lately vs usual) with statistical guardrails, fixed non-diagnostic wording, receipts
+  and feedback; owner-only, off for children, "Off" deletes everything; sensitive signals on local models only.
+- **Search** (`src/lib/search`, ⌘K palette, `/search`, `GET /api/search`): every section read through its owner's
+  access rules in the current graph.
+- **Operating model (proposal)**: `docs/proposals/operating-model.md` — capabilities, processes, goals, signals,
+  anchoring and lenses on top of the graph; not built yet.
 - **Living profiles** (`src/lib/profile`): every person/node page is a profile — sections by kind, facts as blocks
   with source chips, a TipTap notes doc with versions (`profile_docs`, `profile_doc_versions`), restore as a
   proposal, and private per-viewer insights (feature `insights`). Someone else's private node needs an edit share to

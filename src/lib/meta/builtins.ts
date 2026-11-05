@@ -87,6 +87,17 @@ export const BUILTIN_KINDS: BuiltinKind[] = [
   { nodeType: "document", key: "rule_set", label: "Rule set", pluralLabel: "Rule sets", icon: "scale", description: "A body of rules to follow: a law, an agreement, house rules, guidelines or our own rules." },
   { nodeType: "document", key: "rule", label: "Rule", pluralLabel: "Rules", icon: "scale", description: "One rule of a rule set, in plain words, with the exact words it comes from." },
   { nodeType: "document", key: "definition", label: "Definition", pluralLabel: "Definitions", icon: "book-open", description: "A term a rule set defines (\"I denne lov forstås ved …\")." },
+
+  // Commitments (src/lib/commitments): what the household owes, is owed or was promised. nodes.kind = props.kind.
+  { nodeType: "commitment", key: "reply", label: "Reply", pluralLabel: "Replies", icon: "reply", description: "Answer a letter, a form or a request (svarfrist, partshøring)." },
+  { nodeType: "commitment", key: "payment", label: "Payment", pluralLabel: "Payments", icon: "wallet", description: "Pay a bill, a fee or a fine, or be paid back." },
+  { nodeType: "commitment", key: "renewal", label: "Renewal or expiry", pluralLabel: "Renewals and expiries", icon: "refresh-cw", description: "Insurance, passport, lease or a subscription that renews or runs out." },
+  { nodeType: "commitment", key: "notice", label: "Notice or appeal deadline", pluralLabel: "Notice and appeal deadlines", icon: "flag", description: "The last day to give notice, cancel or object (opsigelse, klagefrist)." },
+  { nodeType: "commitment", key: "appointment", label: "Appointment", pluralLabel: "Appointments", icon: "calendar", description: "Be somewhere at a time (indkaldelse, doctor, parent meeting)." },
+  { nodeType: "commitment", key: "form", label: "Form to sign", pluralLabel: "Forms to sign", icon: "pen-line", description: "Sign, fill in, submit or register." },
+  { nodeType: "commitment", key: "deliver", label: "Hand in or bring", pluralLabel: "Things to hand in or bring", icon: "package", description: "Homework, documents, a packed lunch." },
+  { nodeType: "commitment", key: "return", label: "Give back", pluralLabel: "Things to give back", icon: "undo-2", description: "A borrowed thing or a deposit." },
+  { nodeType: "commitment", key: "other", label: "Other", pluralLabel: "Others", icon: "circle-dot" },
 ];
 
 const PP = ["person"];
@@ -115,7 +126,7 @@ export const BUILTIN_RELATIONS: BuiltinRelation[] = [
   { key: "involves", label: "involves", inverseLabel: "involved in", category: "time", fromTypes: ["event"], toTypes: ["person", "place", "topic"] },
   { key: "follows", label: "follows", inverseLabel: "followed by", category: "time", fromTypes: ["event"], toTypes: ["event"] },
   { key: "caused_by", label: "caused by", inverseLabel: "led to", category: "time", fromTypes: ANY, toTypes: ANY },
-  { key: "about", label: "about", inverseLabel: "subject of", category: "document", fromTypes: ["document", "event", "source"], toTypes: ANY },
+  { key: "about", label: "about", inverseLabel: "subject of", category: "document", fromTypes: ["document", "event", "source", "commitment"], toTypes: ANY },
   { key: "tagged_with", label: "tagged with", inverseLabel: "tag on", category: "document", fromTypes: ANY, toTypes: ["topic"] },
   { key: "mentions", label: "mentions", inverseLabel: "mentioned in", category: "document", fromTypes: ["document", "source"], toTypes: ANY },
   { key: "derived_from", label: "derived from", inverseLabel: "source of", category: "document", fromTypes: ANY, toTypes: ["document", "source"] },
@@ -126,6 +137,11 @@ export const BUILTIN_RELATIONS: BuiltinRelation[] = [
   { key: "rule_in", label: "is a rule in", inverseLabel: "has as a rule", category: "document", fromTypes: ["document"], toTypes: ["document"] },
   { key: "refers_to", label: "refers to", inverseLabel: "referred to by", category: "document", fromTypes: ["document"], toTypes: ["document"] },
   { key: "interprets", label: "interprets", inverseLabel: "interpreted by", category: "document", fromTypes: ["document", "source"], toTypes: ["document"] },
+  // Commitments (src/lib/commitments/types.ts COMMITMENT_RELATIONS): who has to do it, with whom, where it comes from.
+  { key: "responsible_for", label: "responsible for", inverseLabel: "responsibility of", category: "time", fromTypes: PP, toTypes: ["commitment"] },
+  { key: "with", label: "with", inverseLabel: "has a commitment", category: "time", fromTypes: ["commitment"], toTypes: ["person", "organization", "place"] },
+  { key: "arises_from", label: "arises from", inverseLabel: "gives rise to", category: "document", fromTypes: ["commitment"], toTypes: ANY },
+  { key: "clashes_with", label: "clashes with", inverseLabel: "clashes with", category: "time", fromTypes: ["commitment", "event"], toTypes: ["commitment", "event"], symmetric: true },
 ];
 
 export const BUILTIN_ATTRIBUTES: BuiltinAttribute[] = [

@@ -19,6 +19,7 @@ import { MemoryPanel } from "@/components/memory/memory-panel";
 import { AlsoInSection } from "@/components/links/also-in";
 import { WhoSaidField } from "@/components/history/live";
 import { LivingProfile } from "@/components/profile/living-profile";
+import { PersonCommitments } from "@/components/commitments/person-block";
 import type { ProfileView } from "@/lib/profile/types";
 import { usePersonAssistantActions } from "./assistant-actions";
 import { RolesLine } from "./roles-line";
@@ -53,6 +54,7 @@ export function PersonProfileView({ initial, living }: { initial: PersonProfile;
           }
           end={<><InteractionTimeline items={profile.interactions} /><ContactLog profile={profile} onSaved={reload} /><ActivityFeed items={profile.feed} family={family} /></>}
           aside={<>
+            {profile.viewer.role !== "guest" && <PersonCommitments personId={id} name={profile.person.label} canWrite={canWrite} />}
             <Details profile={profile} onSaved={setProfile} />
             <Relationships profile={profile} onSaved={reload} />
             <AlsoInSection nodeId={id} hrefBase="/people/" />

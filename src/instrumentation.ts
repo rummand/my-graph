@@ -32,6 +32,9 @@ export async function register() {
       // Nightly encrypted backups, export expiry and account deletions after their grace period (src/lib/backup).
       const { startDataSafetyScheduler } = await import("@/lib/backup");
       startDataSafetyScheduler();
+      // HOOK (commitments watch): once a day, clashes, proof of done and contradiction fixes as proposals.
+      const { startCommitmentWatch } = await import("@/lib/commitments/watch/scheduler");
+      startCommitmentWatch();
     }
   }
 }

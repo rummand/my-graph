@@ -19,6 +19,7 @@ import { memoryAllowed } from "@/lib/memory";
 import { AlsoInSection } from "@/components/links/also-in";
 import { RetiredNotice } from "@/components/changes";
 import { formatDate } from "@/components/provenance/labels";
+import { CommitmentPanel } from "@/components/commitments/panel";
 
 export const dynamic = "force-dynamic";
 
@@ -115,6 +116,8 @@ export default async function NodePage({ params }: Props) {
           )}
         </div>
       </header>
+
+      {node.type === "commitment" && <CommitmentPanel id={node.id} />}
 
       <LivingProfile initial={living} hide={["overview"]}
         afterOverview={null}

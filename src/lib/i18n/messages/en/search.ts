@@ -16,6 +16,7 @@ const messages: MessageTree = {
   sections: {
     top: "Top hit",
     nodes: "People and things",
+    commitments: "Commitments",
     made: "Pages, documents and decks",
     files: "Files in the library",
     rules: "Rules",
@@ -30,7 +31,7 @@ const messages: MessageTree = {
   },
   types: {
     person: "Person", place: "Place", organization: "Organization", event: "Event", topic: "Topic", project: "Project",
-    thing: "Thing", document: "Document", source: "Source",
+    thing: "Thing", commitment: "Commitment", document: "Document", source: "Source",
   },
   kinds: {
     page: "Page", document: "Document", deck: "Deck", ruleset: "Rule set", rule: "Rule", definition: "Definition",

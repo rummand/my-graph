@@ -59,14 +59,16 @@ function ascii(head: Uint8Array, from: number, to: number): string {
 /** Text files must not contain NUL bytes and must decode as UTF-8 (ignoring a multi-byte char cut at the end). */
 export function looksLikeText(head: Uint8Array): boolean {
   if (head.includes(0)) return false;
-  try {
-    // Drop up to 3 trailing bytes in case the sample cut a multi-byte character in half.
-    const sample = head.length > 3 ? head.slice(0, head.length - 3) : head;
-    new TextDecoder("utf-8", { fatal: true }).decode(sample);
-    return true;
-  } catch {
-    return false;
+  // The sample may have cut a multi-byte character in half at its end: accept the whole sample, or the sample
+  // without its last 1–3 bytes (never shorter), so a small file ending in "ø" still counts as text.
+  const dec = new TextDecoder("utf-8", { fatal: true });
+  for (let cut = 0; cut <= Math.min(3, head.length - 1); cut++) {
+    try {
+      dec.decode(cut ? head.slice(0, head.length - cut) : head);
+      return true;
+    } catch { /* try a shorter sample */ }
   }
+  return head.length === 0;
 }
 
 /**

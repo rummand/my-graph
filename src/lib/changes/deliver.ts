@@ -35,7 +35,7 @@ export type DeliverResult = {
   connected?: number; evidence?: number;
 };
 
-const NODE_TYPES = new Set(["person", "place", "event", "topic", "document", "source", "organization", "project", "thing"]);
+const NODE_TYPES = new Set(["person", "place", "event", "topic", "document", "source", "organization", "project", "thing", "commitment"]);
 const EDGE_STATUSES = new Set(["confirmed", "unconfirmed", "inferred"]);
 const HUMAN_ORIGINS = new Set(["person", "chat", "restore"]);
 
@@ -351,6 +351,12 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
     nodeIds: todo.filter((c) => c.op === "addNode" && c.nodeId).map((c) => c.nodeId!),
     edgeIds: todo.filter((c) => c.op === "addEdge" && c.edgeId).map((c) => c.edgeId!),
   })).catch((e) => console.error("[interactions] could not derive after delivery", e));
+  // HOOK (commitments watch, src/lib/commitments/watch): commitments or events added/changed → look for clashes, proof
+  // that arrived earlier and contradiction fixes. Only proposes (debounced, after commit); never blocks the delivery.
+  void import("@/lib/commitments/watch/run").then((m) => m.afterDelivery(v.graphId, {
+    nodeIds: todo.filter((c) => (c.op === "addNode" || c.op === "updateNode") && c.nodeId).map((c) => c.nodeId!),
+    edgeIds: todo.filter((c) => c.op === "addEdge" && c.edgeId).map((c) => c.edgeId!),
+  })).catch((e) => console.error("[commitments/watch] after delivery", e));
   return { ok: true, applied, conflicts: [], skipped, restId, connected: plan.remapped.length, evidence: evidenceAdded };
 }
 

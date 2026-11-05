@@ -215,11 +215,11 @@ const messages: MessageTree = {
   },
   type: {
     person: "the person", place: "the place", event: "the event", topic: "the topic", document: "the document", source: "the source",
-    organization: "the organisation", project: "the project", thing: "",
+    organization: "the organisation", project: "the project", thing: "", commitment: "the commitment",
   },
   typePlain: {
     person: "person", place: "place", event: "event", topic: "topic", document: "document", source: "source",
-    organization: "organisation", project: "project", thing: "thing",
+    organization: "organisation", project: "project", thing: "thing", commitment: "commitment",
   },
   before: "Now",
   after: "After",

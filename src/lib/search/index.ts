@@ -49,11 +49,11 @@ export type SearchInput = {
   sort?: SortOrder;
 };
 
-const QUICK_CAPS: Record<Section, number> = { nodes: 6, made: 4, files: 5, rules: 4, chats: 3, changes: 3, events: 3 };
+const QUICK_CAPS: Record<Section, number> = { nodes: 6, commitments: 4, made: 4, files: 5, rules: 4, chats: 3, changes: 3, events: 3 };
 /** Cosine similarity (bge-m3) a meaning-only result needs; below it results read as noise. At most 3 per section. */
 const MEANING_MIN = 0.62;
 const LIBRARY_KINDS = ["upload", "manual", "sync", "email", "web", "connector"] as const;
-const NODE_SECTION_EXCLUDE = ["event", "document", "source"] as const;
+const NODE_SECTION_EXCLUDE = ["event", "document", "source", "commitment"] as const;
 
 type Ctx = {
   v: Viewer; ctx: AccessCtx; p: ParsedQuery; terms: string[]; needles: string[]; t: TFn; locale: string;
@@ -485,6 +485,28 @@ async function changesSection(c: Ctx): Promise<{ items: Hit[]; more: boolean }> 
   return finish(hits, c);
 }
 
+/** Commitments: found by their sentence (and summary), open ones first, with when they are due and which way they point. */
+async function commitmentsSection(c: Ctx): Promise<{ items: Hit[]; more: boolean }> {
+  const rows = await nodeRows(c, eq(nodes.type, "commitment"));
+  if (!rows.length) return { items: [], more: false };
+  const props = await db.select({ id: nodes.id, props: nodes.props }).from(nodes).where(inArray(nodes.id, rows.map((r) => r.id)));
+  const byId = new Map(props.map((p) => [p.id, (p.props ?? {}) as Record<string, unknown>]));
+  const hits = rows.map((r) => {
+    const h = nodeHit(c, r, "commitments");
+    const p = byId.get(r.id) ?? {};
+    const status = typeof p.status === "string" ? p.status : "open";
+    const dir = p.direction === "owed" || p.direction === "promise" ? p.direction : "owe";
+    const due = r.startAt ? c.t("commitments.search.due", { date: new Intl.DateTimeFormat(c.locale === "da" ? "da-DK" : "en-GB", { day: "numeric", month: "short", timeZone: "Europe/Copenhagen" }).format(r.startAt) }) : null;
+    return {
+      ...h, kind: "commitment" as const, href: `/node/${r.id}`, sub: typeof p.kind === "string" ? p.kind : r.kind, date: iso(r.startAt),
+      context: [status === "open" ? c.t(`commitments.direction.${dir}`) : c.t(`commitments.status.${status === "done" || status === "cancelled" || status === "missed" ? status : "open"}`), due ?? ""].filter(Boolean),
+      // Done and dropped ones sink below the open ones.
+      score: h.score - (status === "open" ? 0 : 8),
+    } satisfies Hit;
+  });
+  return finish(hits, c);
+}
+
 /* ── Entry point ─────────────────────────────────────────────────────────────────────────────────────── */
 
 const EMPTY = (q: string, ms = 0): SearchResponse => ({ q, filter: null, top: null, sections: [], semantic: false, ms });
@@ -527,6 +549,7 @@ export async function search(v: Viewer, input: SearchInput): Promise<SearchRespo
     const c: Ctx = { ...base, cap: capFor(s), offset: wanted.length === 1 ? base.offset : 0 };
     try {
       const r = s === "nodes" || s === "events" ? await nodesSection(c, s, vec)
+        : s === "commitments" ? await commitmentsSection(c)
         : s === "files" ? await filesSection(c, vec)
         : s === "made" ? await madeSection(c)
         : s === "rules" ? await rulesSection(c)

@@ -113,8 +113,10 @@ export async function loadTimeline(v: Viewer, q: TimelineQuery = {}): Promise<Ti
   }
 
   const eventIds = new Set(events.map((e) => e.id));
+  // A commitment is drawn once, as itself: its reminder (src/lib/commitments) isn't drawn a second time.
+  const commitmentIds = new Set(events.filter((e) => e.type === "commitment").map((e) => e.id));
   for (const r of reminderRows) {
-    if (r.done) continue;
+    if (r.done || (r.nodeId && commitmentIds.has(r.nodeId))) continue;
     const due = new Date(r.dueAt);
     if ((from && due < from) || (to && due > to)) continue;
     const about = r.aboutNodeId && readable.has(r.aboutNodeId) ? [r.aboutNodeId] : [];

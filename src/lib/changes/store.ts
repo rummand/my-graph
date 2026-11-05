@@ -145,9 +145,9 @@ export async function nowFor(v: Viewer, list: ChangeRow[], withMeta: boolean): P
 
   // The graph index an "Add" is matched against: live, readable nodes of the types the sets add.
   if (types.size && v.graphId) {
-    const rows = await db.select({ id: nodes.id, type: nodes.type, kind: nodes.kind, label: nodes.label, aliases: nodes.aliases }).from(nodes)
+    const rows = await db.select({ id: nodes.id, type: nodes.type, kind: nodes.kind, label: nodes.label, aliases: nodes.aliases, startAt: nodes.startAt }).from(nodes)
       .where(and(eq(nodes.graphId, v.graphId), isNull(nodes.mergedInto), inArray(nodes.type, [...types] as never[]), nodeReadSql(ctx, "nodes"), liveNodeSql("nodes"))).limit(20_000);
-    now.index = rows.filter((r) => !minted.has(r.id)).map((r) => ({ id: r.id, type: r.type, kind: r.kind ?? null, label: r.label, aliases: r.aliases ?? [] }));
+    now.index = rows.filter((r) => !minted.has(r.id)).map((r) => ({ id: r.id, type: r.type, kind: r.kind ?? null, label: r.label, aliases: r.aliases ?? [], ...(r.type === "commitment" ? { startAt: r.startAt } : {}) }));
   }
   // What the adds match, and what merged nodes became, as full snapshots (their names show in the review).
   const matched = new Set<string>();

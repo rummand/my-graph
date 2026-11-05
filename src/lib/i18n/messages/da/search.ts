@@ -16,6 +16,7 @@ const messages: MessageTree = {
   sections: {
     top: "Bedste match",
     nodes: "Personer og ting",
+    commitments: "Aftaler og frister",
     made: "Sider, dokumenter og præsentationer",
     files: "Filer i biblioteket",
     rules: "Regler",
@@ -30,7 +31,7 @@ const messages: MessageTree = {
   },
   types: {
     person: "Person", place: "Sted", organization: "Organisation", event: "Begivenhed", topic: "Emne", project: "Projekt",
-    thing: "Ting", document: "Dokument", source: "Kilde",
+    thing: "Ting", commitment: "Aftale", document: "Dokument", source: "Kilde",
   },
   kinds: {
     page: "Side", document: "Dokument", deck: "Præsentation", ruleset: "Regelsæt", rule: "Regel", definition: "Definition",

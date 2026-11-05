@@ -211,11 +211,11 @@ const messages: MessageTree = {
   },
   type: {
     person: "personen", place: "stedet", event: "begivenheden", topic: "emnet", document: "dokumentet", source: "kilden",
-    organization: "organisationen", project: "projektet", thing: "",
+    organization: "organisationen", project: "projektet", thing: "", commitment: "aftalen",
   },
   typePlain: {
     person: "person", place: "sted", event: "begivenhed", topic: "emne", document: "dokument", source: "kilde",
-    organization: "organisation", project: "projekt", thing: "ting",
+    organization: "organisation", project: "projekt", thing: "ting", commitment: "aftale",
   },
   before: "Nu",
   after: "Bagefter",

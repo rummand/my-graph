@@ -4,7 +4,7 @@
  */
 
 /** Sections the server searches, in the order they are shown. */
-export const SECTIONS = ["nodes", "made", "files", "rules", "chats", "changes", "events"] as const;
+export const SECTIONS = ["nodes", "commitments", "made", "files", "rules", "chats", "changes", "events"] as const;
 export type Section = (typeof SECTIONS)[number];
 
 export function isSection(x: unknown): x is Section {
@@ -17,6 +17,7 @@ export type Range = [number, number];
 /** What kind of thing a hit is: drives its icon and its context line. */
 export type HitKind =
   | "person" | "place" | "organization" | "event" | "topic" | "project" | "thing"
+  | "commitment"
   | "page" | "document" | "deck"
   | "file"
   | "rule" | "definition" | "ruleset"

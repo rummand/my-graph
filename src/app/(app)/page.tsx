@@ -29,6 +29,7 @@ import { RecentlyAdded } from "@/components/today/recent";
 import { hrefs } from "@/components/today/section";
 import { ComingUp } from "@/components/today/upcoming";
 import { KeepInTouch } from "@/components/today/keep-in-touch";
+import { CommitmentsToday } from "@/components/commitments/today";
 import type { Lane } from "@/components/today/week";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -127,6 +128,8 @@ export default async function TodayPage() {
       </header>
 
       <GraphWelcome viewer={viewer} full />
+
+      {viewer.role !== "guest" && <CommitmentsToday viewer={viewer} tz={tz} now={now} />}
 
       {firstRun && (
         <FirstRun

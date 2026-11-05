@@ -48,6 +48,9 @@ export function sectionsFor(type: string, kind?: string | null): SectionDef[] {
       return d([["overview", true], ["people", true], ["places", false, ["place"]], ["documents", false], ["connections", false, ["relation"]], ["notes", true]]);
     case "thing":
       return d([["overview", true], ["people", true], ["places", false, ["place"]], ["events", false], ["documents", false], ["connections", false, ["relation"]], ["notes", true]]);
+    case "commitment":
+      // The commitment panel above the profile says what, when and whose; these are the facts around it.
+      return d([["overview", true], ["people", false], ["organisations", false], ["documents", false], ["events", false], ["connections", false, ["relation"]], ["notes", true]]);
     default:
       return d([["overview", true], ["people", false], ["events", false], ["documents", false], ["connections", true, ["relation"]], ["notes", true]]);
   }
@@ -67,6 +70,7 @@ function isHomeThing(kind: string | null | undefined, kindLabel?: string | null)
 /** The preferred section for a fact before checking which sections this profile has. */
 function preferredForPerson(relation: string, rel: RelationLike, other: EndLike): SectionKey[] {
   const cat = rel?.category ?? "";
+  if (other.type === "commitment") return ["dates"];
   if (other.type === "thing" && isPetKind(other.kind, other.kindLabel)) return ["pets", "home"];
   if (other.type === "thing" && (OWN_RELATIONS.has(relation) || isHomeThing(other.kind, other.kindLabel))) return ["home"];
   if (other.type === "place" && (LIVE_RELATIONS.has(relation) && (!other.kind || HOME_PLACE_KINDS.has(other.kind)) || (other.kind && HOME_PLACE_KINDS.has(other.kind)))) return ["home"];

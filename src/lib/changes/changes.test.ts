@@ -148,6 +148,7 @@ describe("who may deliver", () => {
     "lib/profile/facts.ts", // a person adds a fact on a profile and presses Save
     "lib/clinical/items.ts", // a clinician presses Sign or Confirm on a drafted item
     "lib/corpus/graph.ts", // a person presses Approve on a rule set's rules (decideRules)
+    "lib/commitments/actions.ts", // a person presses Done / Snooze / Reassign / Edit / Drop on a commitment
   ]);
   const files: string[] = [];
   const walk = (dir: string) => {
@@ -165,7 +166,7 @@ describe("who may deliver", () => {
     expect(callers.filter((f) => !ALLOWED.has(f))).toEqual([]);
   });
   it("is never reachable from the code that reads outside content", () => {
-    for (const dir of ["lib/web", "lib/connectors", "lib/ingest", "lib/keeper", "lib/links", "lib/artifacts", "lib/design-sets", "lib/assistant", "lib/corpus/crawl", "lib/corpus/read"]) {
+    for (const dir of ["lib/web", "lib/connectors", "lib/ingest", "lib/keeper", "lib/links", "lib/artifacts", "lib/design-sets", "lib/assistant", "lib/corpus/crawl", "lib/corpus/read", "lib/commitments/detect", "lib/commitments/watch"]) {
       for (const f of files.filter((x) => x.startsWith(path.join(ROOT, dir) + path.sep))) {
         expect(fs.readFileSync(f, "utf8"), path.relative(ROOT, f)).not.toMatch(/deliverChangeSet|changes\/deliver/);
       }

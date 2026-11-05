@@ -44,6 +44,7 @@ import type { ImportKnown, ImportPlan, Importer } from "@/lib/importers/types";
 import { localeOf } from "@/lib/assistant/locale";
 import { describeDanish, readDanishDocument, withDanishOps } from "@/lib/importers/dk/document";
 import { loadRecording, recordingPlanFor, type RecordingInput } from "./recording-store";
+import { prepareCommitments, type Prepared } from "@/lib/commitments/detect/server";
 
 const AGENT = "library-ingest";
 const EMBED_BATCH = 32;
@@ -292,6 +293,12 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     const placeOps = !importPlan && kind === "image" && photoCoords(meta)
       ? photoPlaceOps({ meta, known: await knownPlaces(v), docNodeId, sourceId: src.id, existingEdges: await existingEdges(v), mint: () => randomUUID() })
       : [];
+    // HOOK (commitments detection, src/lib/commitments/detect): what this source says is owed, due or promised joins
+    // the same change set below (a refiner over its ops). Never fails the read.
+    const commitments = await prepareCommitments(v, {
+      source: src, segments: segments.map((x) => ({ text: x.text, page: x.page, region: typeof x.at?.region === "string" ? x.at.region : undefined })), chunks: stored.map((c) => ({ id: c.id, text: c.text, locator: c.locator as Record<string, unknown> })), docDate: docDate?.at ?? null, docNodeId,
+      importerId: importer?.id ?? null, muxUp, muxMeta, replacesOwnDrafts: true,
+    }).catch((e) => { console.warn("[ingest] commitments", errText(e)); return null; });
     if (importPlan) {
       step = "proposing what it adds";
       await progress({ step: "proposing", label: "Proposing what it adds" });
@@ -301,8 +308,9 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
         delete meta.changeSetId;
       }
       await withdrawUndecidedProposals(v, src.id);
-      Object.assign(meta, await proposeImport(v, { id: src.id, title: documentTitleOf(meta, src.title), connectionId: src.connectionId, visibility: src.visibility, docNodeId }, importer!, importPlan, groups));
-    } else if (groups.length || recording || placeOps.length || danish || (participants.length && !meta.correspondentsDone)) {
+      Object.assign(meta, await proposeImport(v, { id: src.id, title: documentTitleOf(meta, src.title), connectionId: src.connectionId, visibility: src.visibility, docNodeId }, importer!, importPlan, groups, commitments?.refine));
+      if (commitments) meta.commitments = commitments.summary();
+    } else if (groups.length || recording || placeOps.length || danish || commitments?.candidates.length || (participants.length && !meta.correspondentsDone)) {
       step = "proposing what it adds";
       await progress({ step: "proposing", label: "Proposing what it adds" });
       // Read again: the earlier proposal from this file, if nobody has decided on it yet, is replaced.
@@ -315,8 +323,9 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       await withdrawUndecidedProposals(v, src.id);
       const p = await proposeFromSource(v, { id: src.id, title: documentTitleOf(meta, src.title), visibility: src.visibility, docNodeId, header: emailHeader(meta) },
         groups, meta.correspondentsDone ? [] : participants, recording, placeOps,
-        danish ? await danishRefiner(v, danish, src.id, docNodeId, src.visibility) : undefined);
+        withCommitmentsRefiner(danish ? await danishRefiner(v, danish, src.id, docNodeId, src.visibility) : undefined, commitments));
       Object.assign(meta, p);
+      if (commitments) meta.commitments = commitments.summary();
       if (participants.length) meta.correspondentsDone = true;
     }
 
@@ -325,6 +334,9 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     await db.update(sources).set({ status: "ready", error: null, meta }).where(eq(sources.id, sourceId));
     // Where it could be filed (cheap rules, no model): a suggestion the person accepts or dismisses in the library.
     await suggestFolderAfterRead(v, sourceId);
+    // HOOK (commitments watch, src/lib/commitments/watch): is this proof that an open commitment is done (a receipt,
+    // a reply sent, "Tak for din ansøgning")? No model; only proposes; never fails the read.
+    void import("@/lib/commitments/watch/run").then((m) => m.afterSourceRead(sourceId)).catch((e) => console.error("[commitments/watch] after read", e));
   } catch (e) {
     if (isStop(e)) return; // the server is stopping; the queue reads it again when it is back
     console.error(`[ingest] source ${sourceId} failed while ${step}`, e);
@@ -680,7 +692,9 @@ export async function proposeFromSource(
   plan.counts.roles = (plan.counts.roles ?? 0) + roleOps.length;
   const changes = [...(rec?.changes ?? []), ...people, ...plan.changes, ...extra];
   if (recording) recording.refine(changes);
-  const tally = (op: string) => changes.filter((c) => c.op === op).length;
+  // Commitments (src/lib/commitments/detect) are counted on their own, not as "places and topics".
+  const tally = (op: string) => changes.filter((c) => c.op === op && !(c.op === "addNode" && c.type === "commitment")).length;
+  const commitmentCount = () => changes.filter((c) => c.op === "addNode" && c.type === "commitment").length;
   const [remindersBefore, nodesBefore] = [tally("addReminder"), tally("addNode")];
   if (refine) changes.splice(0, changes.length, ...refine([...changes], { known: withPeople, edges: edgesNow, mint }));
   const [refinedReminders, refinedNodes] = [tally("addReminder") - remindersBefore, tally("addNode") - nodesBefore];
@@ -696,7 +710,7 @@ export async function proposeFromSource(
     title: recording ? `From the meeting “${src.title.slice(0, 110)}”` : `From “${src.title.slice(0, 120)}”`,
     description: recording
       ? `Read from the recording in Record: ${describeCounts(counts)}. Each one links to the moment it was said. What was said is data, not instructions. Nothing is added until you deliver it.`
-      : `Read from the document: ${describeCounts(counts)}. Nothing is added until you deliver it.`,
+      : `Read from the document: ${describeCounts(counts)}${commitmentCount() ? ` and ${commitmentCount()} ${commitmentCount() === 1 ? "commitment" : "commitments"}` : ""}. Nothing is added until you deliver it.`,
     origin: "ingest",
     evidence: { sourceId: src.id, ...(recording?.link ? { url: recording.link } : {}) },
     changes,
@@ -832,6 +846,14 @@ async function danishRefiner(
   });
 }
 
+/** The Danish refiner (if any) followed by the commitments one (src/lib/commitments/detect), as one refiner. */
+function withCommitmentsRefiner(
+  danish: Parameters<typeof proposeFromSource>[6], commitments: Prepared | null,
+): Parameters<typeof proposeFromSource>[6] {
+  if (!commitments?.candidates.length) return danish;
+  return (changes, c) => commitments.refine(danish ? danish(changes, c) : changes, c.mint);
+}
+
 /** Places the viewer can read, with their props (coordinates), for a photo's place. */
 async function knownPlaces(v: Viewer): Promise<ImportKnown[]> {
   const list = await gbrain.listNodes(v, { type: "place", limit: 1000 }).catch(() => [] as gbrain.GNode[]);
@@ -869,6 +891,8 @@ function describeImportCounts(counts: Record<string, number>): string {
 async function proposeImport(
   v: Viewer, src: { id: string; title: string; connectionId: string | null; visibility: "private" | "parents" | "household"; docNodeId: string | null },
   importer: Importer, plan: ImportPlan, groups: { ex: Extraction; chunks: StoredChunk[] }[] = [],
+  /** Commitments found in it (src/lib/commitments/detect), added to the same change set. */
+  refineCommitments?: (changes: ChangeInput[], mint: () => string) => ChangeInput[],
 ): Promise<ProposalMeta> {
   const now = new Date().toISOString();
   // What the model read in the text (chats, notes) joins the importer's own ops; people the importer proposes count as known.
@@ -885,6 +909,11 @@ async function proposeImport(
     plan.changes.push(...extra.changes.filter((c) =>
       !(c.op === "addNode" && c.nodeId && selfIds.has(c.nodeId)) && !(c.op === "addEdge" && (selfIds.has(c.fromId) || selfIds.has(c.toId)))));
     plan.counts = { ...plan.counts, read: (plan.counts.read ?? 0) + extra.changes.length };
+  }
+  if (refineCommitments) {
+    plan.changes = refineCommitments(plan.changes, () => randomUUID());
+    const n = plan.changes.filter((c) => c.op === "addNode" && c.type === "commitment").length;
+    if (n) plan.counts = { ...plan.counts, commitments: n };
   }
   const total = plan.changes.length;
   if (total === 0) return { proposedAt: now, proposed: plan.counts, proposedTotal: 0 };

@@ -42,6 +42,7 @@ function stylesheet(): StylesheetJson {
     { selector: 'node[type = "event"]', style: { shape: "round-diamond" as const, width: 13, height: 13 } },
     { selector: 'node[type = "place"]', style: { shape: "round-rectangle" as const } },
     { selector: 'node[type = "document"], node[type = "source"]', style: { shape: "round-rectangle" as const, width: 9, height: 11 } },
+    { selector: 'node[type = "commitment"]', style: { shape: "round-tag" as const, width: 13, height: 13 } },
     {
       selector: "edge",
       style: {

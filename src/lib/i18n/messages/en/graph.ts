@@ -11,11 +11,11 @@ const messages: MessageTree = {
 
   type: {
     person: "Person", place: "Place", event: "Event", topic: "Topic", document: "Document", source: "Source",
-    organization: "Organisation", project: "Project", thing: "Thing",
+    organization: "Organisation", project: "Project", thing: "Thing", commitment: "Commitment",
   },
   typePlural: {
     person: "People", place: "Places", event: "Events", topic: "Topics", document: "Documents", source: "Sources",
-    organization: "Organisations", project: "Projects", thing: "Things",
+    organization: "Organisations", project: "Projects", thing: "Things", commitment: "Commitments",
   },
 
   explorer: {

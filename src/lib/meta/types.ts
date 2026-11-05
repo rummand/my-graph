@@ -1,7 +1,7 @@
 /** Meta-model types shared by server code, API routes and client components (no server imports here). */
 
-export type MetaNodeType = "person" | "place" | "event" | "topic" | "document" | "source" | "organization" | "project" | "thing";
-export const META_NODE_TYPES: MetaNodeType[] = ["person", "place", "event", "topic", "document", "source", "organization", "project", "thing"];
+export type MetaNodeType = "person" | "place" | "event" | "topic" | "document" | "source" | "organization" | "project" | "thing" | "commitment";
+export const META_NODE_TYPES: MetaNodeType[] = ["person", "place", "event", "topic", "document", "source", "organization", "project", "thing", "commitment"];
 
 /** Node types a person picks between (documents and sources are made by the library). */
 export const PICKABLE_NODE_TYPES: MetaNodeType[] = ["person", "organization", "project", "place", "event", "topic", "thing"];
@@ -10,6 +10,7 @@ export const NODE_TYPE_LABELS: Record<MetaNodeType, { one: string; many: string 
   person: { one: "Person", many: "People" }, place: { one: "Place", many: "Places" }, event: { one: "Event", many: "Events" },
   topic: { one: "Topic", many: "Topics" }, document: { one: "Document", many: "Documents" }, source: { one: "Source", many: "Sources" },
   organization: { one: "Organisation", many: "Organisations" }, project: { one: "Project", many: "Projects" }, thing: { one: "Thing", many: "Things" },
+  commitment: { one: "Commitment", many: "Commitments" },
 };
 
 export type AttrType = "text" | "longtext" | "date" | "number" | "boolean" | "enum" | "email" | "phone" | "url";

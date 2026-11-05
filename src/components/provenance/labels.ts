@@ -79,7 +79,7 @@ export function visibilityLabel(v: string, family: boolean, t: TFn = EN): string
 /** English family-graph labels (kept for older call sites). */
 export const VISIBILITY_LABEL: Record<string, string> = Object.fromEntries(VISIBILITIES.map((v) => [v, visibilityLabel(v, true)]));
 
-const NODE_TYPES_KNOWN = ["person", "place", "event", "topic", "document", "source", "organization", "project", "thing"];
+const NODE_TYPES_KNOWN = ["person", "place", "event", "topic", "document", "source", "organization", "project", "thing", "commitment"];
 export function typeLabel(type: string, t: TFn = EN): string {
   return NODE_TYPES_KNOWN.includes(type) ? t(`graph.type.${type}`) : type;
 }

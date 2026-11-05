@@ -7,14 +7,14 @@ import { AnimatePresence, motion } from "motion/react";
 import { useT } from "@/lib/i18n/client";
 import { recordingsAvailable } from "./nav-recordings";
 import {
-  BookOpen, Brain, Mic, Scale, CalendarRange, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, Shapes, ShieldCheck, Stethoscope, Users, Workflow, X, type LucideIcon,
+  BookOpen, Brain, ListChecks, Mic, Scale, CalendarRange, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, Shapes, ShieldCheck, Stethoscope, UserRound, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 
 /**
  * `key` is the label under shell.nav.* (or `label`, a full message key, for items whose copy lives in their own
  * namespace). `text` is copy already translated on the server (the admin item, kept out of the client dictionary).
  */
-type NavItem = { href: string; key: string; icon: LucideIcon; hideFor?: string[]; label?: string; text?: string };
+type NavItem = { href: string; key: string; icon: LucideIcon; hideFor?: string[]; label?: string; text?: string; desktopOnly?: boolean };
 
 /**
  * The platform admin console, for platform admins only. The shell passes `adminLabel` (translated on the server with
@@ -61,8 +61,12 @@ function useRecordings(given?: boolean): boolean {
 
 const PRIMARY: NavItem[] = [
   { href: "/", key: "today", icon: House },
+  // Near Today: what is due. On phones it sits at the top of More (the bar keeps four destinations).
+  { href: "/commitments", key: "commitments", icon: ListChecks, hideFor: ["guest"], label: "commitments.nav", desktopOnly: true },
   { href: "/chat", key: "ask", icon: MessageCircle },
   { href: "/people", key: "people", icon: Users },
+  // Near People: the person themself ("You" / "Dig"), private to them. On phones it is in More.
+  { href: "/you", key: "you", icon: UserRound, hideFor: ["guest"], label: "you.nav", desktopOnly: true },
   { href: "/timeline", key: "timeline", icon: CalendarRange },
 ];
 const SECONDARY: NavItem[] = [
@@ -114,12 +118,12 @@ export function MobileNav({ role, adminLabel, practice, recordings }: { role: st
   const [open, setOpen] = useState(false);
   const t = useT();
   const rec = useRecordings(recordings);
-  const more = withAdmin(withPractice(withRecordings(SECONDARY.filter(visible(role)), rec), practice), adminLabel);
+  const more = withAdmin(withPractice(withRecordings([...PRIMARY.filter((l) => l.desktopOnly), ...SECONDARY].filter(visible(role)), rec), practice), adminLabel);
   const moreActive = more.some((l) => isActive(path, l.href));
   return (
     <>
       <nav aria-label={t("shell.nav.main")} className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 bg-surface/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-1px_0_var(--line)] backdrop-blur lg:hidden">
-        {PRIMARY.map((l) => {
+        {PRIMARY.filter((l) => !l.desktopOnly).map((l) => {
           const active = isActive(path, l.href);
           const Icon = l.icon;
           return (

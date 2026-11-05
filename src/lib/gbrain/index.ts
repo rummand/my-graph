@@ -25,7 +25,7 @@ import { afterCommit, ambientTx } from "@/lib/history/context";
 import { recordEvent, recordRows, recordSnapshots, snapshotScope, stampFor, type Stamp } from "@/lib/history/record";
 import { edgeSnap, nodeSnap } from "@/lib/history/pure";
 
-export type NodeType = "person" | "place" | "event" | "topic" | "document" | "source" | "organization" | "project" | "thing";
+export type NodeType = "person" | "place" | "event" | "topic" | "document" | "source" | "organization" | "project" | "thing" | "commitment";
 export type Visibility = "private" | "parents" | "household";
 export type EdgeStatus = "confirmed" | "unconfirmed" | "inferred" | "rejected" | "superseded";
 

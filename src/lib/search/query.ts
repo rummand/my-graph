@@ -37,6 +37,7 @@ export const PREFIXES: Record<string, Omit<TypeFilter, "label">> = {
   file: F(["files"]), files: F(["files"]), fil: F(["files"]), filer: F(["files"]), library: F(["files"]), bibliotek: F(["files"]),
   rule: F(["rules"]), rules: F(["rules"]), regel: F(["rules"]), regler: F(["rules"]), law: F(["rules"]), lov: F(["rules"]),
   chat: F(["chats"]), ask: F(["chats"]), samtale: F(["chats"]),
+  commitment: F(["commitments"]), commitments: F(["commitments"]), due: F(["commitments"]), aftale: F(["commitments"]), aftaler: F(["commitments"]), frist: F(["commitments"]), frister: F(["commitments"]),
   change: F(["changes"]), changes: F(["changes"]), ændring: F(["changes"]), ændringer: F(["changes"]),
 };
 

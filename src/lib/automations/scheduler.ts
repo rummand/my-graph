@@ -82,6 +82,8 @@ export function start(): void {
   // iPhone push (src/lib/push): due reminders, waiting suggestions and change sets, connections that need you and
   // clinical risk flags, every minute. Without APNS_* it logs once that push is off and stays idle.
   void import("@/lib/push").then((p) => p.startPushTicker()).catch((e) => console.error("[scheduler] push failed to start:", e instanceof Error ? e.message : e));
+  // "You" (src/lib/you): each person's own patterns, worked out again once a week (checked hourly).
+  void import("@/lib/you").then((y) => y.startYouTicker()).catch((e) => console.error("[scheduler] you failed to start:", e instanceof Error ? e.message : e));
   console.log("[scheduler] started (every 60s; Brain Keeper every 15 min)");
 }
 

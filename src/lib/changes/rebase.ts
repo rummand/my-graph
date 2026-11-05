@@ -73,7 +73,9 @@ export type OpVerdict = { verdict: Verdict; code: ReasonCode; details?: ReasonDe
 /* ── The graph now, as verdicts need it ──────────────────────────────────────────────────────────────── */
 
 /** A node that an "Add" might mean: same type, any name. */
-export type NodeCand = { id: string; type: string; kind: string | null; label: string; aliases: string[]; retired?: boolean; mergedInto?: string | null };
+export type NodeCand = { id: string; type: string; kind: string | null; label: string; aliases: string[]; retired?: boolean; mergedInto?: string | null;
+  /** When it is due/starts (ISO). Commitments with the same words on another day are different commitments. */
+  startAt?: string | Date | null };
 export type NodeEvent = { kind: string; field: string | null; at: string; by: string | null; changeSetId: string | null };
 
 export type Now = {
@@ -149,13 +151,16 @@ export type Match =
  * agree (a missing kind on either side is not a disagreement). Only one match is safe: several are ambiguous, and
  * the same name as another kind is a kind mismatch. A match on the label beats a match on an alias.
  */
-export function matchExisting(op: { type?: unknown; label?: unknown; kind?: unknown; aliases?: unknown }, graphIndex: NodeCand[]): Match {
+export function matchExisting(op: { type?: unknown; label?: unknown; kind?: unknown; aliases?: unknown; startAt?: unknown }, graphIndex: NodeCand[]): Match {
   const type = typeof op.type === "string" ? op.type : "thing";
   const label = typeof op.label === "string" ? norm(op.label) : "";
   if (!label) return { kind: "none" };
   const kind = typeof op.kind === "string" && op.kind ? op.kind : null;
   const wanted = new Set([label, ...(Array.isArray(op.aliases) ? op.aliases.filter((a): a is string => typeof a === "string").map(norm).filter(Boolean) : [])]);
-  const live = graphIndex.filter((n) => n.type === type && !n.retired && !n.mergedInto);
+  // A commitment is the same one only on the same day ("Pay the SFO fee" in November and in December are two).
+  const dayOf = (x: unknown) => (typeof x === "string" || x instanceof Date) && !Number.isNaN(new Date(x).getTime()) ? new Date(x).toISOString().slice(0, 10) : null;
+  const sameDay = (n: NodeCand) => type !== "commitment" || n.startAt === undefined || dayOf(n.startAt) === dayOf((op as { startAt?: unknown }).startAt);
+  const live = graphIndex.filter((n) => n.type === type && !n.retired && !n.mergedInto && sameDay(n));
   const byLabel = live.filter((n) => wanted.has(norm(n.label)));
   const byAlias = live.filter((n) => !byLabel.includes(n) && (n.aliases ?? []).some((a) => wanted.has(norm(a))));
   const fits = (n: NodeCand) => !kind || !n.kind || n.kind === kind;

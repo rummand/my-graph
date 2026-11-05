@@ -5,7 +5,7 @@
 import { clsx } from "clsx";
 import {
   BookMarked, Box, Building2, CalendarDays, FileAudio, FileImage, FileSpreadsheet, FileText, FolderKanban, GitPullRequestArrow, Globe,
-  Hash, Mail, MapPin, MessageCircle, NotebookText, Presentation, Scale, ScrollText, type LucideIcon,
+  Hash, ListChecks, Mail, MapPin, MessageCircle, NotebookText, Presentation, Scale, ScrollText, type LucideIcon,
 } from "lucide-react";
 import { Avatar } from "@/components/ui";
 import { splitByRanges } from "@/lib/search/highlight";
@@ -14,7 +14,7 @@ import type { Range } from "@/lib/search/types";
 const KIND_ICON: Record<string, LucideIcon> = {
   place: MapPin, organization: Building2, event: CalendarDays, topic: Hash, project: FolderKanban, thing: Box,
   page: NotebookText, document: ScrollText, deck: Presentation, rule: Scale, definition: BookMarked, ruleset: Scale,
-  chat: MessageCircle, change: GitPullRequestArrow,
+  chat: MessageCircle, change: GitPullRequestArrow, commitment: ListChecks,
 };
 
 export function fileIcon(mime: string | null | undefined): LucideIcon {

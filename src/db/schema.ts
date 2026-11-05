@@ -20,7 +20,7 @@ const tsvector = customType<{ data: string }>({ dataType: () => "tsvector" });
 
 export const roleEnum = pgEnum("role", ["owner", "parent", "child", "guest"]);
 export const visibilityEnum = pgEnum("visibility", ["private", "parents", "household"]);
-export const nodeTypeEnum = pgEnum("node_type", ["person", "place", "event", "topic", "document", "source", "organization", "project", "thing"]);
+export const nodeTypeEnum = pgEnum("node_type", ["person", "place", "event", "topic", "document", "source", "organization", "project", "thing", "commitment"]);
 export const timePrecisionEnum = pgEnum("time_precision", ["minute", "day", "month", "year"]);
 export const edgeStatusEnum = pgEnum("edge_status", ["confirmed", "unconfirmed", "inferred", "rejected", "superseded"]);
 export const sourceKindEnum = pgEnum("source_kind", ["upload", "wiki", "chat", "manual", "sync", "web", "email", "connector", "recording"]);
@@ -1945,3 +1945,49 @@ export const routeTimings = pgTable("route_timings", {
   maxMs: integer("max_ms").notNull().default(0),
   hist: integer("hist").array().notNull(),
 }, (t) => [uniqueIndex("route_timings_bucket_route_uq").on(t.bucket, t.route, t.method), index("route_timings_bucket_idx").on(t.bucket)]);
+
+/* ── You: what the graph shows a person about themself (src/lib/you) ─────────────────────────────────── */
+
+/**
+ * One person's "You" settings in one graph. Owner-only: every read and write is keyed by (graph, the signed-in user);
+ * nobody else (parents, partners, admins, the assistant for others, MCP) ever reads it. `enabled` off deletes every
+ * computed insight. `mood` (opt-in) lets the person's own words be read for a simple tone score, on local models only.
+ * `combine` (opt-in) adds the person's OWN rows from their other graphs (only rows they own). `snapshot` keeps the
+ * weekly series the page draws; `moodCache` the per-week tone scores already computed.
+ */
+export const youSettings = pgTable("you_settings", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(false),
+  mood: boolean("mood").notNull().default(false),
+  combine: boolean("combine").notNull().default(false),
+  snapshot: jsonb("snapshot").$type<Record<string, unknown> | null>(),
+  moodCache: jsonb("mood_cache").$type<Record<string, number>>().notNull().default({}),
+  computedAt: timestamp("computed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("you_settings_graph_user_uq").on(t.graphId, t.userId), index("you_settings_due_idx").on(t.enabled, t.computedAt)]);
+
+/**
+ * A pattern found in one person's own data (src/lib/you/patterns.ts), owner-only. `key` is stable across refreshes
+ * ("season:contact:<personId>:autumn") so feedback sticks: `feedback` yes / no tunes future ones, `hidden` keeps it
+ * away for good. `payload` holds the numbers, the small chart and the receipts; the sentence is written at read time
+ * in the reader's language.
+ */
+export const youInsights = pgTable("you_insights", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  key: text("key").notNull(),
+  kind: text("kind").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  score: real("score").notNull().default(0),
+  /** "yes" | "no" | null */
+  feedback: text("feedback"),
+  hidden: boolean("hidden").notNull().default(false),
+  /** Whether the latest refresh still found it (kept rows with feedback stay, marked stale). */
+  current: boolean("current").notNull().default(true),
+  computedAt: timestamp("computed_at", { withTimezone: true }).notNull().defaultNow(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("you_insights_key_uq").on(t.graphId, t.userId, t.key), index("you_insights_owner_idx").on(t.graphId, t.userId)]);

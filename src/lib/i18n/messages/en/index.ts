@@ -40,7 +40,9 @@ import security from "./security";
 import roles from "./roles";
 import closeness from "./closeness";
 import search from "./search";
+import commitments from "./commitments";
+import you from "./you";
 
-const en: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, pages, graph, changes, history, memory, automations, connections, aula, mac, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance, profile, clinical, mcp, apps, mcpServer, recordings, providers, push, stored, security, roles, closeness, search };
+const en: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, pages, graph, changes, history, memory, automations, connections, aula, mac, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance, profile, clinical, mcp, apps, mcpServer, recordings, providers, push, stored, security, roles, closeness, search, you, commitments };
 
 export default en;

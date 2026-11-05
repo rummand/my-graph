@@ -6,6 +6,14 @@ import type { MessageTree } from "../../core";
  */
 const messages: MessageTree = {
   titles: {
+    commitmentDone: "Klaret: {label}",
+    commitmentReopen: "Genåbnet: {label}",
+    commitmentSnooze: "Udsat: {label}",
+    commitmentProgress: "I gang: {label}",
+    commitmentReassign: "Givet videre: {label}",
+    commitmentEdit: "Rettet: {label}",
+    commitmentCancel: "Droppet: {label}",
+    commitmentNext: "Næste gang: {label}",
     rolesFromKinds: "Typer, der i virkeligheden er roller",
     fromSource: "Fra „{title}“",
     fromMeeting: "Fra mødet „{title}“",

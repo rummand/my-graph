@@ -377,6 +377,8 @@ const messages: MessageTree = {
     "Rule set": "Regelsæt",
     Rule: "Regel",
     Definition: "Definition",
+    Reply: "Svar", Payment: "Betaling", "Renewal or expiry": "Fornyelse eller udløb", "Notice or appeal deadline": "Opsigelses- eller klagefrist",
+    "Form to sign": "Blanket at underskrive", "Hand in or bring": "Aflevere eller tage med", "Give back": "Levere tilbage",
   },
   kindHelp: {
     partner: "Ægtefælle, kæreste eller medforælder.",
@@ -423,6 +425,8 @@ const messages: MessageTree = {
     "wished for by": "ønskes af", likes: "kan lide", "liked by": "værdsættes af", plans: "planlægger", "planned by": "planlægges af",
     delivers: "leverer", "delivered by": "leveres af",
     governs: "gælder for", "governed by": "omfattet af",
+    "responsible for": "ansvarlig for", "responsibility of": "ansvar for", with: "med", "has a commitment": "har en aftale",
+    "arises from": "udspringer af", "gives rise to": "giver anledning til", "clashes with": "kolliderer med",
   },
   attr: {
     Birthday: "Fødselsdag", Phone: "Telefon", Email: "E-mail", Address: "Adresse", "How we know them": "Hvordan vi kender dem",

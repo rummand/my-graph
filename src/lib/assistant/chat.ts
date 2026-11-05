@@ -28,7 +28,7 @@ import { webHints } from "@/lib/web/hints";
 import { annotateProposal, decideProposal, memoryAllowedFor, ProposalError } from "./apply";
 import { ambiguousNames, clarifyFromAmbiguity, parseClarify, type Clarify } from "./clarify";
 import { turnsAfter } from "./compact";
-import { citationsAnyOutside, citationsOnlyOutside, dropUnknownCitations, extractCitations, numberContext, selectItems } from "./context";
+import { citationsAnyOutside, citationsOnlyOutside, dropUnknownCitations, extractCitations, numberContext, selectItems, type ContextItem } from "./context";
 import { degradedAnswer, type DegradedReason } from "./fallback";
 export { degradedAnswer, type DegradedReason };
 import { longDay, timeZone } from "./dates";
@@ -53,6 +53,7 @@ import { awaitClientAction, WAIT_MS } from "./client-actions";
 import type { ActionRecords } from "./state";
 import { randomUUID } from "node:crypto";
 import { autoCompact } from "./inbox";
+import { youContextItems } from "@/lib/you";
 import { addMessage, addState, conversationRows, createConversation, ownConversation, raiseConversationSensitivity, renameConversation, touchConversation } from "./store";
 
 export class ChatInputError extends Error {
@@ -262,7 +263,11 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         }
         const webFirst = need.why === "url" || need.why === "asked" || need.why === "current";
         const webItems = web?.items ?? [];
-        const items = selectItems(webFirst ? [...webItems, ...found.items] : [...found.items, ...webItems]);
+        // The person asking about themself ("why am I so tired lately?"): their OWN patterns from You, if they have it
+        // on. Only ever the viewer's own (src/lib/you), sensitive and private, first so they survive the trim.
+        const youItems = await safe(youContextItems(v, plain, voice.locale), [] as ContextItem[], "you");
+        if (youItems.length) step({ kind: "memory", label: "Read your own patterns (only you see them)", count: youItems.length });
+        const items = selectItems(webFirst ? [...youItems, ...webItems, ...found.items] : [...youItems, ...found.items, ...webItems]);
         const ctx = numberContext(items);
         const tools = await toolsPromise;
         for (const s of itemSteps(items, flags)) step(s);

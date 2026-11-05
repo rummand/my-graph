@@ -8,6 +8,7 @@ import { db } from "@/db";
 import { sources } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import * as gbrain from "@/lib/gbrain";
+import { commitmentContext } from "@/lib/commitments/ledger";
 import { listReminders } from "@/lib/briefs";
 import { getMeta } from "@/lib/meta";
 import { peopleContext } from "@/lib/people";
@@ -33,6 +34,10 @@ export function plainQuestion(question: string): string {
 export const TIME_WORDS = /(?<![\p{L}\p{N}])(when|next|upcoming|coming|soon|today|tonight|tomorrow|week|weekend|month|plans?|schedule|calendar|agenda|due|deadline|new|latest|happening|hvorn[åa]r|n[æa]ste|kommende|snart|i dag|i aften|i morgen|uge\p{L}*|weekend\p{L}*|m[åa]ned\p{L}*|plan\p{L}*|kalender\p{L}*|frist\p{L}*|nyt|nye|seneste|sker)(?![\p{L}\p{N}])/iu;
 
 export const isTimeQuestion = (q: string) => TIME_WORDS.test(q);
+
+/** "What do we need to do", "what do we owe", "har vi noget vi skal nå": open commitments go into the context. */
+const TODO_WORDS = /(?<![\p{L}\p{N}])(need to|have to|must|todo|to do|owe|owed|pay|bill|reply|renew|cancel|notice|forget|remember|deadline|due|commitments?|promised?|skal vi|skal jeg|nå|huske|glemme|betale|regning\p{L}*|svare|forny\p{L}*|opsig\p{L}*|frist\p{L}*|aftale\p{L}*|skylde\p{L}*|lovet)(?![\p{L}\p{N}])/iu;
+export const isTodoQuestion = (q: string) => TODO_WORDS.test(q) || TIME_WORDS.test(q);
 
 const NEIGHBOUR_HITS = 3;
 const MAX_FACTS = 24;
@@ -98,12 +103,13 @@ export async function retrieve(v: Viewer, rawQuestion: string, opts: { tz: strin
   const noEvents = { events: [] as gbrain.GNode[], involves: [] as { eventId: string; personId: string }[] };
   const mentionIds = [...new Set(opts.mentionIds ?? [])].slice(0, 8);
   const upcomingLimit = isTimeQuestion(question) ? 12 : 4;
-  const [searchHits, meta, upcoming, reminders, mentionedRaw] = await Promise.all([
+  const [searchHits, meta, upcoming, reminders, mentionedRaw, commitments] = await Promise.all([
     safe(gbrain.search(v, question, { limit: 12, relevant: true }), [], "search"),
     safe(getMeta(v), null, "meta"),
     flags.timeline ? safe(gbrain.timeline(v, { from: now, to: new Date(now.getTime() + 14 * 86_400_000), limit: upcomingLimit }), noEvents, "timeline") : Promise.resolve(noEvents),
     flags.reminders ? safe(listReminders(v, { upcoming: true, days: 21, limit: upcomingLimit, now }), [], "reminders") : Promise.resolve([]),
     Promise.all(mentionIds.map((id) => safe(gbrain.getNode(v, id), null, "mentioned node"))),
+    flags.reminders && isTodoQuestion(question) ? safe(commitmentContext(v, { now, tz, days: 14, max: 10 }), [], "commitments") : Promise.resolve([]),
   ]);
   const mentioned = mentionedRaw.filter((n): n is gbrain.GNode => !!n);
   const rawHits: gbrain.SearchHit[] = [
@@ -193,7 +199,10 @@ export async function retrieve(v: Viewer, rawQuestion: string, opts: { tz: strin
       level: maxLevel([itemLevel(e, v.id), itemLevel(from, v.id), itemLevel(to, v.id)]),
     });
   }
-  // 3. What's coming up.
+  // 3. What's coming up: open commitments due in the next two weeks first (one compact line each), then events.
+  for (const c of commitments) {
+    items.push({ kind: "node", nodeId: c.id, nodeType: "commitment", title: c.line.split(" (")[0], text: c.line, when: null, sensitive: c.sensitive, level: itemLevel(c, v.id) });
+  }
   for (const ev of upcoming.events) items.push(nodeItem(ev, tz, v.id));
   for (const r of reminders) {
     items.push({

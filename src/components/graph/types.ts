@@ -8,4 +8,4 @@ export type GraphEdgeData = {
 export type GraphData = { nodes: GraphNodeData[]; edges: GraphEdgeData[] };
 
 /** Filter and list order on the graph view. */
-export const NODE_TYPES = ["person", "organization", "project", "place", "event", "topic", "thing", "document", "source"] as const;
+export const NODE_TYPES = ["person", "organization", "project", "place", "event", "topic", "thing", "commitment", "document", "source"] as const;

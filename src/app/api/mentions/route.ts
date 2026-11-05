@@ -2,7 +2,7 @@ import { z } from "zod";
 import { searchMentionables } from "@/lib/mentions";
 import { ApiError, handle } from "@/lib/meta/http";
 
-const TYPES = ["person", "place", "event", "topic", "document", "source", "organization", "project", "thing"] as const;
+const TYPES = ["person", "place", "event", "topic", "document", "source", "organization", "project", "thing", "commitment"] as const;
 const query = z.object({ q: z.string().max(60).default(""), types: z.string().max(200).optional(), limit: z.coerce.number().int().min(1).max(20).optional() });
 
 /** GET /api/mentions?q=&types=person,project — the @ typeahead over everything in the current graph the viewer can see. */

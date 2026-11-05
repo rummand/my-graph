@@ -76,7 +76,7 @@ const text = (max: number) => z.string().transform((s) => s.replace(/[\u0000-\u0
 const REF = /^[A-Za-z][A-Za-z0-9_-]{0,39}$/;
 const nodeRef = z.string().trim().min(1).max(60);
 const propValue = z.union([z.string().max(2000), z.number(), z.boolean(), z.null()]);
-const NODE_TYPES = ["person", "place", "event", "topic", "organization", "project", "thing"] as const;
+const NODE_TYPES = ["person", "place", "event", "topic", "organization", "project", "thing", "commitment"] as const;
 
 const addNode = z.object({
   op: z.literal("addNode"), ref: z.string().regex(REF, "ref is a short name of letters, digits, - and _").optional(),
