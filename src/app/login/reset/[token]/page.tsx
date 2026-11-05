@@ -25,8 +25,11 @@ export default async function ResetPage({ params }: { params: Promise<{ token: s
       </AuthFrame>
     );
   }
+  // An account made in the admin console has no password yet: this link is how they get in the first time.
+  const first = !peek.user.hasPassword;
   return (
-    <AuthFrame title={t("settings.resetLink.title")} lead={t("settings.resetLink.lead", { name: peek.user.name, email: peek.user.email })}>
+    <AuthFrame title={t(first ? "settings.resetLink.welcomeTitle" : "settings.resetLink.title", { name: peek.user.name })}
+      lead={t(first ? "settings.resetLink.welcomeLead" : "settings.resetLink.lead", { name: peek.user.name, email: peek.user.email })}>
       <ResetForm token={token} minLength={MIN_PASSWORD} />
     </AuthFrame>
   );

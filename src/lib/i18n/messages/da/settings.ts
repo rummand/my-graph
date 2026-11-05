@@ -296,6 +296,8 @@ const messages: MessageTree = {
     meta: "Vælg en ny adgangskode",
     title: "Vælg en ny adgangskode",
     lead: "Til {name} ({email}). Linket virker én gang.",
+    welcomeTitle: "Velkommen til My Graph, {name}",
+    welcomeLead: "Vælg en adgangskode til {email} for at gøre din konto klar. Linket virker én gang.",
     brokenTitle: "Linket virker ikke",
     newPassword: "Ny adgangskode",
     hint: "Mindst {min} tegn. En kort sætning er god.",

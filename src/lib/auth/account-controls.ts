@@ -77,14 +77,14 @@ export async function issueResetToken(userId: string, by: string, now = new Date
 }
 
 /** Look at a reset link without using it (for the reset page). */
-export async function peekResetToken(token: string, now = new Date()): Promise<{ state: ResetTokenState; user: { id: string; name: string; email: string; householdId: string } | null }> {
+export async function peekResetToken(token: string, now = new Date()): Promise<{ state: ResetTokenState; user: { id: string; name: string; email: string; householdId: string; hasPassword: boolean } | null }> {
   const [row] = await db.select({
     expiresAt: passwordResets.expiresAt, usedAt: passwordResets.usedAt,
-    id: users.id, name: users.name, email: users.email, householdId: users.householdId,
+    id: users.id, name: users.name, email: users.email, householdId: users.householdId, passwordHash: users.passwordHash,
   }).from(passwordResets).innerJoin(users, eq(users.id, passwordResets.userId))
     .where(eq(passwordResets.tokenHash, hashToken(token))).limit(1);
   const state = resetTokenState(row, now);
-  return { state, user: state === "ok" && row ? { id: row.id, name: row.name, email: row.email, householdId: row.householdId } : null };
+  return { state, user: state === "ok" && row ? { id: row.id, name: row.name, email: row.email, householdId: row.householdId, hasPassword: row.passwordHash != null } : null };
 }
 
 /**

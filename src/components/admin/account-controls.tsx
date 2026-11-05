@@ -192,7 +192,7 @@ function Toggle({ on, onChange, label, disabled, onLabel, offLabel }: {
   );
 }
 
-function Secret({ value, text, copy, copied, mono }: { value: string; text: string; copy: string; copied: string; mono: boolean }) {
+export function Secret({ value, text, copy, copied, mono }: { value: string; text: string; copy: string; copied: string; mono: boolean }) {
   const [done, setDone] = useState(false);
   return (
     <div className="mt-4 rounded-md bg-accent-tint p-3">

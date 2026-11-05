@@ -128,7 +128,8 @@ nothing links two graphs. The family graph keeps the household rules; other grap
   unless `PLANS_ENFORCE=1`; always enforced in production). Platform admins = `PLATFORM_ADMIN_EMAILS` (default the
   founder's address; those addresses are reserved, nobody can take one by changing an email). `/admin` and
   `/api/admin/**` are a 404 for everyone else; every admin action is audited (`auditAdmin`, not best-effort); reset
-  links are single-use, 24 h, only the hash is stored. Admin copy is server-only (`getAdminT`), never in the client dictionary.
+  links are single-use, 24 h, only the hash is stored. Admins add accounts at `/admin/accounts/new` (own household + Family or Personal graph, no
+  password: a one-time link or a temporary password to hand over; there is no public sign-up). Admin copy is server-only (`getAdminT`), never in the client dictionary.
 - **Living profiles** (`src/lib/profile`): every person/node page is a profile — sections by kind, facts as blocks
   with source chips, a TipTap notes doc with versions (`profile_docs`, `profile_doc_versions`), restore as a
   proposal, and private per-viewer insights (feature `insights`). Someone else's private node needs an edit share to

@@ -60,3 +60,11 @@ export async function adminHandle(fn: () => Promise<Response>): Promise<Response
     return NextResponse.json({ error: "Something went wrong on our side. Please try again." }, { status: 500 });
   }
 }
+
+/** The public base URL for links the admin copies (APP_URL, else the address this request came in on). */
+export function publicBaseUrl(req: Request): string {
+  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, "");
+  const host = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || req.headers.get("host");
+  const proto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || new URL(req.url).protocol.replace(":", "");
+  return host ? `${proto}://${host}` : new URL(req.url).origin;
+}

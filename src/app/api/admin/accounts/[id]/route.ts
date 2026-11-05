@@ -2,7 +2,7 @@ import { z } from "zod";
 import { AuthError, parseBody, parseParams } from "@/lib/auth/http";
 import { issueResetToken, setLocked, setTemporaryPassword, signOutEverywhere } from "@/lib/auth/account-controls";
 import { findUserById } from "@/lib/auth/signin";
-import { adminHandle, auditAdmin, requirePlatformAdminApi } from "@/lib/plans/admin";
+import { adminHandle, auditAdmin, publicBaseUrl, requirePlatformAdminApi } from "@/lib/plans/admin";
 import { accountDetail } from "@/lib/plans/admin-data";
 import { ADDON_KEYS, emailIsAdmin } from "@/lib/plans/catalog";
 import { adminEmails, setAccountAddon, setAccountPlan } from "@/lib/plans/store";
@@ -19,14 +19,6 @@ const body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("reset_link") }),
   z.object({ action: z.literal("temp_password") }),
 ]);
-
-/** The public base URL for links the admin copies (APP_URL, else the address this request came in on). */
-function baseUrl(req: Request): string {
-  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/+$/, "");
-  const host = req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() || req.headers.get("host");
-  const proto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() || new URL(req.url).protocol.replace(":", "");
-  return host ? `${proto}://${host}` : new URL(req.url).origin;
-}
 
 /** GET: one account's metadata, plan, add-ons, controls and the admin actions taken on it. */
 export async function GET(req: Request, ctx: Ctx) {
@@ -89,7 +81,7 @@ export async function POST(req: Request, ctx: Ctx) {
       case "reset_link": {
         const { token, expiresAt } = await issueResetToken(target.id, admin.id);
         await auditAdmin(admin, "admin.reset_link", ref, { ...who, expiresAt: expiresAt.toISOString() });
-        return Response.json({ ok: true, url: `${baseUrl(req)}/login/reset/${token}`, expiresAt: expiresAt.toISOString() },
+        return Response.json({ ok: true, url: `${publicBaseUrl(req)}/login/reset/${token}`, expiresAt: expiresAt.toISOString() },
           { headers: { "Cache-Control": "no-store" } });
       }
       case "temp_password": {

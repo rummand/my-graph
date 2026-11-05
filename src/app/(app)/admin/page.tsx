@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Avatar, Badge, EmptyState } from "@/components/ui";
+import { UserPlus } from "lucide-react";
+import { Avatar, Badge, EmptyState, buttonClass } from "@/components/ui";
 import { SearchForm } from "@/components/admin/search-form";
 import { formatBytes } from "@/components/admin/format";
 import { requirePlatformAdmin } from "@/lib/plans/admin";
@@ -24,8 +25,15 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
 
   return (
     <>
-      <SearchForm action="/admin" q={q} label={t("admin.search.label")} placeholder={t("admin.search.accounts")}
-        submit={t("admin.search.submit")} clear={t("admin.search.clear")} />
+      <div className="flex flex-wrap items-start justify-between gap-x-4">
+        <div className="min-w-0 flex-1">
+          <SearchForm action="/admin" q={q} label={t("admin.search.label")} placeholder={t("admin.search.accounts")}
+            submit={t("admin.search.submit")} clear={t("admin.search.clear")} />
+        </div>
+        <Link href="/admin/accounts/new" className={`${buttonClass("primary")} mb-5 gap-1.5`}>
+          <UserPlus size={16} aria-hidden />{t("admin.newAccount.open")}
+        </Link>
+      </div>
       {rows.length === 0 ? (
         <EmptyState title={q ? t("admin.accounts.emptySearch", { q }) : t("admin.accounts.empty")} />
       ) : (

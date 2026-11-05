@@ -297,6 +297,8 @@ const messages: MessageTree = {
     meta: "Choose a new password",
     title: "Choose a new password",
     lead: "For {name} ({email}). The link works once.",
+    welcomeTitle: "Welcome to My Graph, {name}",
+    welcomeLead: "Choose a password for {email} to finish setting up your account. The link works once.",
     brokenTitle: "This link doesn't work",
     newPassword: "New password",
     hint: "At least {min} characters. A short sentence works well.",
