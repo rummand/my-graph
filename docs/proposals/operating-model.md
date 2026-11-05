@@ -145,15 +145,15 @@ The kernel is the smallest set of object types and relations that lets any of th
 
 | # | Question | Kernel objects | Inspired by |
 | --- | --- | --- | --- |
-| 1 | **Why?** | Purpose · Value (principle) · Driver · Goal · Outcome | ArchiMate motivation, OKR, 7S |
+| 1 | **Why?** | Purpose · Value (principle) · Driver · Goal · Outcome · **Choice** (where to play, how to win) | ArchiMate motivation, OKR, BSC, Hoshin, Playing to Win, 7S |
 | 2 | **For whom?** | Stakeholder · Customer segment · Offering (product/service) · Job to be done | BMC, JTBD, ITIL services, BIZBOK stakeholders |
-| 3 | **What can we do?** | Capability (with level and evolution) | BIZBOK, Wardley, COBIT capability levels |
-| 4 | **How does work flow?** | Value stream · Process · Activity · **Case** (one instance: an order, a complaint, a hire) | APQC, IT4IT, SAFe, Lean, CMMN |
-| 5 | **Who?** | Person · Role · Team (type) · Unit · Partner · **Agent** (AI) | RACI, Team Topologies, three lines |
-| 6 | **With what?** | Information object · System · Asset · Budget / money flow | ArchiMate application/technology, Porter support activities |
-| 7 | **Under which rules?** | Rule (law, policy, standard, contract term) · Control · Risk · **Decision** · **Commitment** · **Evidence** | COSO, ISO 31000, COBIT, ADRs, Nexus |
-| 8 | **How well?** | Signal · Target · Observation | BSC, DORA, flow metrics, EFQM |
-| 9 | **What is changing?** | Initiative · Change (branch of the model) · Plan · Release | SAFe/PMBOK, our change sets |
+| 3 | **What can we do?** | Capability (with **maturity level**, **evolution stage** and **sourcing**: build / buy / rent) | BIZBOK, capability-based planning, Wardley, COBIT capability levels, Zachman *what* |
+| 4 | **How does work flow?** | Value stream · Process · Activity · **Case** (one instance: an order, a complaint, a hire, with milestones) · **Constraint** (bottleneck, WIP limit) · **Cadence** (sprint, PI, month-end, school year) | APQC, IT4IT, SCOR, eTOM, Porter, Lean/VSM, Kanban, BPMN, CMMN, process mining, ToC, Scrum, SAFe, Zachman *how/when* |
+| 5 | **Who?** | Person · Role (with **line**: do / oversee / assure) · Team (type and interaction mode) · Unit / **Circle** · Partner · **Agent** (AI) · **Skill** | RACI/DACI, Team Topologies, Three Lines, sociocracy, 7S, Zachman *who* |
+| 6 | **With what?** | Information object · System · Asset · **Place** · Budget / money flow | ArchiMate application/technology, IT4IT data objects, DDD contexts, Porter support activities, Zachman *what/where* |
+| 7 | **Under which rules?** | Rule (law, policy, standard, contract term) · Control · Risk · Exception (with an end date) · **Decision** (with its context: clear / complicated / complex / chaotic) · **Commitment** · **Evidence** (that expires) | COSO, ISO 31000, Three Lines, ISO 9001/27001, NIST CSF, GDPR/NIS2, COBIT, ADRs, Cynefin, Nexus |
+| 8 | **How well?** | Signal · Target · Observation · **Assessment** (maturity, excellence, audit) | OKR key results, BSC, EFQM, DORA, SPACE, flow metrics, COBIT capability levels |
+| 9 | **What is changing?** | Initiative · Change (branch of the model) · Plan · Stage · Release · **Improvement loop** (plan-do-check-act) | SAFe, PMBOK, PRINCE2, Scrum, Hoshin, ISO 9001 PDCA, our change sets |
 
 Plus two dimensions that run through all nine: **time** (every object and edge has history; the model can be read *as of* any date) and **evidence** (every object can be anchored to the facts that show it is real).
 
@@ -183,6 +183,13 @@ A small, fixed vocabulary of typed relations — the same in every graph, labell
 | `changes` | Initiative → any | "will alter" (a branch of the model) |
 | `depends_on` | any → any | dependency |
 | `anchored_in` | any model object → fact (message, document, meeting, event) | "we know this because" |
+| `cascades_to` | Goal → Goal (lower level) | strategy deployed level by level (Hoshin, strategy maps) |
+| `causes` | Goal / Outcome → Goal / Outcome | cause and effect between goals (strategy maps) — always a hypothesis with evidence |
+| `limits` | Constraint → Process / Value stream | the bottleneck or WIP limit that sets throughput (ToC, Kanban) |
+| `interacts_with` | Team → Team (mode: collaboration / X-as-a-service / facilitating) | Team Topologies |
+| `located_at` | any → Place | Zachman *where* |
+| `excepts` | Exception → Rule (for a case or object, until a date) | Nexus exceptions |
+| `assesses` | Assessment → Capability / Control / Process | maturity, audits, excellence reviews |
 
 ### 5.4 The kernel's laws
 
@@ -271,6 +278,10 @@ The kernel is fractal: the nine questions apply to a family as much as to a comp
 - **Family to enterprise:** the same nine questions, the same machinery, different templates.
 - **Federated:** two organisations can share a lens on their kernels without sharing their graphs.
 - **Licence-safe:** the kernel and the SME edition are ours; third-party frameworks are packs that ship only where their terms allow.
+
+### 5.10 One framework
+
+The kernel is built to **contain all fifty sources in Appendix A**, not to sit beside them. Every core concept of every source has a home in it — as an object type, an attribute, a relation, a law, a signal or a lens — and Appendix B lists the mapping source by source. Where a source's core idea did not fit, the kernel was extended (choice, constraint, cadence, place, skill, line, circle, assessment, improvement loop, exception, decision context). The test we hold ourselves to: *any model drawn in any of these frameworks can be expressed in the kernel without loss of meaning, and read back out through its pack.*
 
 ---
 
@@ -651,3 +662,64 @@ Grouped by the kernel question they mostly inform. Each line: the source, and wh
 **Thinking tools**
 49. **Cynefin (Snowden)** — choosing how to decide by the kind of situation.
 50. **Systems thinking (Senge, Meadows)** — feedback loops, delays and leverage points behind the signals.
+
+---
+
+## Appendix B: How all fifty fold into one framework
+
+Each source → where its core ideas live in the Enterprise Kernel. **Q** = kernel question (1 Why · 2 For whom · 3 What · 4 How · 5 Who · 6 With what · 7 Rules · 8 How well · 9 Change). **Built in** = part of the kernel or SME edition; **Pack** = optional, mapped, licence-aware.
+
+| # | Source | Q | Becomes in the kernel | Built in / Pack |
+| --- | --- | --- | --- | --- |
+| 1 | APQC PCF | 4 | Process and activity tree under `realises` → capabilities; PCF ids kept for interop and benchmarks | Pack (SME edition maps to it) |
+| 2 | IT4IT | 4, 6 | Four IT value streams; their data objects as information objects with `produces`/`consumes` | Pack |
+| 3 | SCOR | 4 | Supply-chain value stream (plan, source, make, deliver, return, enable) | Pack |
+| 4 | eTOM | 4 | Industry process tree (pattern for industry packs) | Pack |
+| 5 | Lean / VSM | 4, 8 | Value streams, cases `flows_through` steps with times; lead time, wait time, waste as signals | Built in |
+| 6 | Kanban | 4, 8 | WIP limits as constraints; throughput, cycle time, ageing as signals | Built in |
+| 7 | BPMN 2.0 | 4 | Process steps, handovers and gateways as a flow view (export/import) | Built in (view) |
+| 8 | CMMN | 4 | Case with milestones and discretionary steps | Built in |
+| 9 | Process mining | 4, 8 | Discovered process from `graph_events` + anchored facts; conformance vs designed | Built in |
+| 10 | Porter value chain | 3 | Primary vs support domains in the SME edition | Built in |
+| 11 | BIZBOK | 3, 2, 6 | Capabilities, value streams, stakeholders, information concepts; capability × value-stream matrix lens | Pack (customer-licensed import) |
+| 12 | TOGAF | 9 | Architecture work as initiatives and changes; content metamodel ↔ kernel types | Pack |
+| 13 | ArchiMate | 1–9 | Layers and motivation elements map 1:1 to kernel types; ArchiMate views as lenses (export/import) | Pack |
+| 14 | ISO/IEC/IEEE 42010 | — | Lenses: stakeholder, concerns, viewpoint, view | Built in |
+| 15 | Zachman | 1–6 | The six interrogatives = Why (1), How (4), What (3, 6), Who (5), Where (Place), When (Cadence, time) | Built in |
+| 16 | Capability-based planning | 3, 9 | Initiatives `changes` capabilities with a gap (current vs target maturity) | Built in |
+| 17 | Wardley maps | 3 | Capability evolution stage and sourcing; a Wardley lens | Built in |
+| 18 | Domain-Driven Design | — | Bounded contexts = lens vocabularies; one glossary per function | Built in |
+| 19 | ITIL 4 | 2, 4 | Offerings as services; value-chain activities as value streams; practices as capabilities | Pack |
+| 20 | COBIT 2019 | 7, 8 | Governance vs management objectives → goals + rules + controls; capability levels → assessments; design factors → pack configuration | Pack (structure-level) |
+| 21 | ISO/IEC 20000 | 7 | Service-management requirements as a rule pack | Pack (customer's copy) |
+| 22 | VeriSM | 2, 4 | Service management for every function (services offered by any unit) | Built in (concept) |
+| 23 | DORA / Accelerate | 8 | Delivery signals: lead time, deployment frequency, change failure rate, recovery time | Pack (software) |
+| 24 | SPACE | 8 | Developer satisfaction, performance, activity, collaboration, efficiency signals — about the work, person-level only for the person | Pack (software) |
+| 25 | OKR | 1, 8 | Goals with key results as signals with targets | Built in |
+| 26 | Balanced Scorecard / strategy maps | 1, 8 | Four perspectives as lens groups; `causes` between goals | Built in |
+| 27 | EFQM | 8 | Excellence assessment over direction, execution, results | Pack |
+| 28 | Hoshin Kanri | 1, 9 | `cascades_to` between goals; catchball as proposals between levels | Built in |
+| 29 | Business Model Canvas / VPC | 1, 2, 6 | Segments, offerings, channels, revenue and cost flows, key partners | Built in |
+| 30 | Jobs-to-be-done | 2 | Jobs and desired outcomes on stakeholders and offerings | Built in |
+| 31 | Playing to Win | 1 | Strategy as choices (where to play, how to win) — decisions at the top | Built in |
+| 32 | Theory of Constraints | 4, 8 | The bottleneck as a constraint that `limits` a value stream; throughput signal | Built in |
+| 33 | Team Topologies | 5 | Team types and `interacts_with` modes; cognitive-load signal | Built in |
+| 34 | RACI / DACI | 5, 7 | `owns`, `performs`, consulted/informed edges; the decider on decisions | Built in |
+| 35 | McKinsey 7S | 1, 5 | Shared values, skills, style as objects; the 7S lens | Built in |
+| 36 | Sociocracy / holacracy | 5 | Circles with domains; roles as explicit, changeable objects with history | Built in |
+| 37 | Viable System Model | — | The self-steering loop (5.5): operations, coordination, control, audit, intelligence, policy | Built in |
+| 38 | COSO | 7, 8 | Control environment, risk assessment, control activities, information, monitoring → rules, risks, controls, evidence, signals | Built in |
+| 39 | ISO 31000 | 7 | Risks with likelihood, impact and treatment; `threatens`, `controls` | Built in |
+| 40 | Three Lines | 5, 7 | Role line attribute (do / oversee / assure); auditor mode | Built in |
+| 41 | ISO 9001 | 7, 9 | Process approach; PDCA as improvement loops; quality rule pack | Pack (customer's copy) |
+| 42 | ISO 27001 / NIST CSF | 7 | Security controls with evidence; NIST functions (govern, identify, protect, detect, respond, recover) as lens groups | Pack (NIST built in, ISO customer's copy) |
+| 43 | GDPR / NIS2 | 7 | Rule packs read from the law; processing records and incidents as evidence | Built in (from official sources) |
+| 44 | Architecture Decision Records | 7 | Decision objects with context, options, rationale, consequences, `supersedes` | Built in |
+| 45 | Nexus | 7 | Requirements, controls, expiring evidence, exceptions with end dates, "what applies", plans as branches | Built in |
+| 46 | SAFe | 4, 9 | Operational vs development value streams; epics as initiatives; lean budgets on value streams | Pack (concepts) |
+| 47 | PMBOK / PRINCE2 | 9 | Initiatives with stages, tolerances and governance | Built in |
+| 48 | Scrum | 4, 9 | Cadence (sprints), review and adapt as improvement loops | Built in |
+| 49 | Cynefin | 7 | Decision context attribute guiding how decisions are made and reviewed | Built in |
+| 50 | Systems thinking | 8 | Feedback loops and delays between signals; the "what drives the numbers" lens | Built in |
+
+**Result:** 34 of 50 sources are fully absorbed into the kernel itself (built in); 16 arrive as packs that map onto it — mostly because their content is licensed, or industry-specific. None needs a parallel model.
