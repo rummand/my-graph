@@ -3,7 +3,7 @@
 import { useId, useState } from "react";
 import { Button, Field, Input, Select, Textarea } from "@/components/ui";
 import { useT } from "@/lib/i18n/client";
-import { BINDINGS, CORPUS_KINDS, CORPUS_STATUSES, type CorpusScope, type TargetType } from "@/lib/corpus/pure";
+import { BINDINGS, RULE_SET_KINDS, CORPUS_STATUSES, type CorpusScope, type TargetType } from "@/lib/corpus/pure";
 
 export type CorpusFormValue = {
   name: string; description: string; kind: string; authority: string; binding: string; version: string;
@@ -11,7 +11,7 @@ export type CorpusFormValue = {
 };
 
 export const EMPTY_CORPUS: CorpusFormValue = {
-  name: "", description: "", kind: "legislation", authority: "", binding: "mandatory", version: "", effectiveFrom: "", effectiveTo: "", status: "draft", checkByDefault: true, scope: { all: true },
+  name: "", description: "", kind: "own_rules", authority: "", binding: "mandatory", version: "", effectiveFrom: "", effectiveTo: "", status: "draft", checkByDefault: true, scope: { all: true },
 };
 
 const TYPES: TargetType[] = ["wiki", "artifact", "message", "change_set"];
@@ -51,7 +51,7 @@ export function CorpusForm({ initial, submitLabel, onSubmit, onCancel, showStatu
         <Field label={t("corpus.form.name")}><Input required value={v.name} maxLength={160} placeholder={t("corpus.form.namePlaceholder")} onChange={(e) => set("name", e.target.value)} /></Field>
         <Field label={t("corpus.form.kind")}>
           <Select value={v.kind} onChange={(e) => set("kind", e.target.value)}>
-            {CORPUS_KINDS.map((k) => <option key={k} value={k}>{t(`corpus.kind.${k}`)}</option>)}
+            {RULE_SET_KINDS.map((k) => <option key={k} value={k}>{t(`corpus.kind.${k}`)}</option>)}
           </Select>
         </Field>
       </div>

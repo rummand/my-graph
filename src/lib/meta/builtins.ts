@@ -80,10 +80,13 @@ export const BUILTIN_KINDS: BuiltinKind[] = [
   { nodeType: "topic", key: "household", label: "Household", icon: "home" },
   { nodeType: "topic", key: "legal", label: "Legal", icon: "scale" },
 
-  // Documents. A corpus is a body of rules the graph follows: legislation, an authority's guide, internal governance,
-  // guardrails (src/lib/corpus). It is a document, not a topic: it is written, issued by someone, versioned and in
-  // force from a date, its rules are cited from its text, and document kinds stay in every graph template.
-  { nodeType: "document", key: "corpus", label: "Corpus", pluralLabel: "Corpora", icon: "scale", description: "A body of rules to follow: legislation, an authority's guide, internal governance or guardrails." },
+  // Documents. A rule set is a body of rules the graph follows: a law, an agreement, house rules, a school's rules,
+  // guidelines, our own rules (src/lib/corpus). It is a document, not a topic: it is written, issued by someone,
+  // versioned and in force from a date, its rules are cited from its text, and document kinds stay in every graph
+  // template. Each approved rule is a node of its own (part of the rule set), and so is each term the text defines.
+  { nodeType: "document", key: "rule_set", label: "Rule set", pluralLabel: "Rule sets", icon: "scale", description: "A body of rules to follow: a law, an agreement, house rules, guidelines or our own rules." },
+  { nodeType: "document", key: "rule", label: "Rule", pluralLabel: "Rules", icon: "scale", description: "One rule of a rule set, in plain words, with the exact words it comes from." },
+  { nodeType: "document", key: "definition", label: "Definition", pluralLabel: "Definitions", icon: "book-open", description: "A term a rule set defines (\"I denne lov forstås ved …\")." },
 ];
 
 const PP = ["person"];
@@ -119,6 +122,10 @@ export const BUILTIN_RELATIONS: BuiltinRelation[] = [
   { key: "version_of", label: "version of", inverseLabel: "has version", category: "document", fromTypes: ["document"], toTypes: ["document"] },
   { key: "supports", label: "supports", inverseLabel: "supported by", category: "document", fromTypes: ["document", "source"], toTypes: ANY },
   { key: "governs", label: "governs", inverseLabel: "governed by", category: "document", fromTypes: ["document"], toTypes: ANY },
+  // Rule sets (src/lib/corpus): a rule is a rule in its rule set (rule_in), refers to other rules, and guidance interprets it.
+  { key: "rule_in", label: "is a rule in", inverseLabel: "has as a rule", category: "document", fromTypes: ["document"], toTypes: ["document"] },
+  { key: "refers_to", label: "refers to", inverseLabel: "referred to by", category: "document", fromTypes: ["document"], toTypes: ["document"] },
+  { key: "interprets", label: "interprets", inverseLabel: "interpreted by", category: "document", fromTypes: ["document", "source"], toTypes: ["document"] },
 ];
 
 export const BUILTIN_ATTRIBUTES: BuiltinAttribute[] = [
@@ -146,11 +153,17 @@ export const BUILTIN_ATTRIBUTES: BuiltinAttribute[] = [
   // Teacher
   { nodeType: P, kindKey: "teacher", key: "subject", label: "Subject", dataType: "text" },
   { nodeType: P, kindKey: "teacher", key: "class", label: "Class", dataType: "text" },
-  // Corpus (a body of rules)
-  { nodeType: "document", kindKey: "corpus", key: "authority", label: "Issued by", dataType: "text" },
-  { nodeType: "document", kindKey: "corpus", key: "binding", label: "Binding", dataType: "enum", options: ["mandatory", "advisory"] },
-  { nodeType: "document", kindKey: "corpus", key: "version", label: "Version", dataType: "text" },
-  { nodeType: "document", kindKey: "corpus", key: "effective_from", label: "In force from", dataType: "date" },
+  // Rule set (a body of rules) and its rules
+  { nodeType: "document", kindKey: "rule_set", key: "authority", label: "Issued by", dataType: "text" },
+  { nodeType: "document", kindKey: "rule_set", key: "binding", label: "Binding", dataType: "enum", options: ["mandatory", "advisory"] },
+  { nodeType: "document", kindKey: "rule_set", key: "version", label: "Version", dataType: "text" },
+  { nodeType: "document", kindKey: "rule_set", key: "effective_from", label: "In force from", dataType: "date" },
+  { nodeType: "document", kindKey: "rule_set", key: "url", label: "Official text", dataType: "url" },
+  { nodeType: "document", kindKey: "rule", key: "ref", label: "Reference", dataType: "text" },
+  { nodeType: "document", kindKey: "rule", key: "says", label: "It says", dataType: "enum", options: ["must", "must_not", "should", "should_not", "may"] },
+  { nodeType: "document", kindKey: "rule", key: "quote", label: "The exact words", dataType: "longtext" },
+  { nodeType: "document", kindKey: "definition", key: "term", label: "Term", dataType: "text" },
+  { nodeType: "document", kindKey: "definition", key: "ref", label: "Reference", dataType: "text" },
   // Babysitter
   { nodeType: P, kindKey: "babysitter", key: "rate", label: "Rate per hour (kr.)", dataType: "number" },
   { nodeType: P, kindKey: "babysitter", key: "availability", label: "Availability", dataType: "text" },

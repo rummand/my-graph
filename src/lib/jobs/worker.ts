@@ -71,7 +71,7 @@ async function tick(s: State): Promise<void> {
       const heavyRunning = [...s.running.values()].filter((r) => r.heavy).length;
       const filter = claimFilter({ total: s.running.size, heavy: heavyRunning }, CAP);
       if (filter === "none") break;
-      const job = await claimNext(filter === "light");
+      const job = await claimNext(filter === "light", Object.keys(HANDLERS));
       if (!job) break;
       const promise = run(s, job).finally(() => {
         s.running.delete(job.id);

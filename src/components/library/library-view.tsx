@@ -17,6 +17,7 @@ import { DeleteFolderDialog, FolderSharingDialog, MoveFolderDialog, NameDialog, 
 import { MoveToMenu } from "./folder-menu";
 import { FolderBar, FolderSidebar, type FolderActions } from "./library-folders";
 import { FolderSuggestions } from "./folder-suggestions";
+import { useLibraryListActions } from "./assistant-actions";
 
 /** folder: "" all files, "root" not in a folder, else a folder id. */
 export type LibraryFilters = { type: LibraryType | ""; status: SourceStatus | ""; q: string; folder: FolderKey };
@@ -305,6 +306,11 @@ export function LibraryView({ initial, initialFilters, initialFolders, family = 
     saveTemplate: () => setDialog({ kind: "saveTemplate" }),
     suggest: () => void runSuggestions(),
   }), [openFolder, moveFiles, runSuggestions]);
+  // The Ask window: what this list shows, and what the assistant may do here (changes ask the person first).
+  useLibraryListActions({
+    L, filters, setFilters: (f) => { setSelected(new Set()); setOwner(""); setFilters(f); }, openFolder,
+    items, total: data.total, tree, groups, refresh: refreshAll,
+  });
   const closeDialog = useCallback(() => setDialog(null), []);
   const afterDialog = useCallback((message?: string) => {
     setDialog(null);

@@ -266,6 +266,9 @@ const messages: MessageTree = {
     notRetired: "This item isn't retired.",
     notAllowed: "You can't propose changes in this graph.",
   },
+  assistantActions: {
+    deliver: { one: "Deliver {count} change from “{title}”?", other: "Deliver {count} changes from “{title}”?" },
+  },
 };
 
 export default messages;

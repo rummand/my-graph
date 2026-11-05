@@ -374,7 +374,9 @@ const messages: MessageTree = {
     "Client contact": "Kundekontakt", "Partner contact": "Partnerkontakt", Meeting: "Møde", Deadline: "Deadline", System: "System",
     Goal: "Mål", Belonging: "Ejendel", Interest: "Interesse", Anniversary: "Årsdag", Date: "Kæresteaften", "Favourite place": "Yndlingssted",
     Wish: "Ønske", Plan: "Plan", Workstream: "Arbejdsspor", Deliverable: "Leverance", Risk: "Risiko",
-    Corpus: "Regelsæt",
+    "Rule set": "Regelsæt",
+    Rule: "Regel",
+    Definition: "Definition",
   },
   kindHelp: {
     partner: "Ægtefælle, kæreste eller medforælder.",
@@ -398,7 +400,9 @@ const messages: MessageTree = {
     psychologist: "Også PPR (pædagogisk psykologisk rådgivning).",
     babysitter: "Barnepige eller fast babysitter.",
     manager: "Din chef eller leder.",
-    corpus: "Regler, I skal følge: lovgivning, en myndigheds vejledning, intern governance eller guardrails.",
+    rule_set: "Regler, I skal følge: en lov, en aftale, en husorden, en vejledning eller jeres egne regler.",
+    rule: "Én regel i et regelsæt, i almindelige ord, med de præcise ord, den kommer fra.",
+    definition: "Et begreb, et regelsæt definerer (\"I denne lov forstås ved …\").",
   },
   rel: {
     "parent of": "forælder til", "child of": "barn af", "partner of": "partner til", "sibling of": "søskende til",
@@ -458,6 +462,10 @@ const messages: MessageTree = {
     "treated by": "Behandles af {name}", treats: "Behandler {name}", coaches: "Træner {name}", "coached by": "Trænes af {name}",
     "taught by": "Undervises af {name}", "mentored by": "Har {name} som mentor", "works for": "Arbejder for {name}",
     manages: "Leder {name}", leads: "Leder {name}", likes: "Kan lide {name}",
+  },
+  assistantActions: {
+    addFact: "Tilføj til {name}s profil: {phrase} {other}?",
+    someone: "en, der allerede er i grafen",
   },
 };
 

@@ -430,6 +430,12 @@ const messages: MessageTree = {
   errors: {
     generic: "Det gik ikke igennem. Prøv igen.",
   },
+  assistantActions: {
+    list: "Se forbindelserne",
+    listed: { one: "{count} af dine forbindelser", other: "{count} af dine forbindelser" },
+    openSetup: "Åbn opsætningen af en forbindelse",
+    opened: "Åbnede {name}",
+  },
 };
 
 export default messages;

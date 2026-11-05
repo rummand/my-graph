@@ -6,7 +6,10 @@
  *   step        { step }                                  — "Searched the library", "Read 3 documents" …
  *   sources     { sources, route }                        — every numbered item the answer may cite
  *   sensitivity { level, badge }                          — the conversation now includes parents-only/private items
- *   delta       { text }                                  — visible answer text (proposals / clarify blocks held back)
+ *   delta       { text }                                  — visible answer text (proposals / clarify / page_action blocks held back)
+ *   client_action { callId, name, title, danger, input }  — run a page action in the browser, then POST the outcome to
+ *                                                           /api/chat/[id]/action; the answer waits (see ./page-actions)
+ *   ping        {}                                        — keeps the stream open while a page action waits for the person
  *   done        { messageId, citations, proposals, clarify, steps, thoughtMs, stopped, model, route, requestId, degraded, title, mcpApprovals }
  *   error       { message }                               — only for failures before anything was saved
  */
@@ -45,6 +48,10 @@ import type { McpApproval } from "@/lib/mcp-client";
 import { runMcpTools, type McpUse } from "./mcp";
 import { stripToolMarks } from "./mcp-plan";
 import { pageHint, type ResolvedPage } from "./page-context";
+import { ACTION_CLOSE, ACTION_OPEN, actionResultMessage, actionsPrompt, findActionCall, matchCall, MAX_ACTION_ROUNDS, stripActionBlocks, viewHints, type ActionManifest, type ClientActionOutcome, type PageSelection, type PageView } from "./page-actions";
+import { awaitClientAction, WAIT_MS } from "./client-actions";
+import type { ActionRecords } from "./state";
+import { randomUUID } from "node:crypto";
 import { addMessage, addState, conversationRows, createConversation, ownConversation, raiseConversationSensitivity, renameConversation, touchConversation } from "./store";
 
 export class ChatInputError extends Error {
@@ -116,10 +123,15 @@ export async function prepareTurn(v: Viewer, input: { conversationId?: string | 
     level = isSensitivity(c.sensitivity) ? c.sensitivity : "normal";
     summary = c.summary ?? null;
     const rows = await conversationRows(c.id);
-    sensitiveSoFar = foldState(rows.filter((r) => r.role === "system").map((r) => r.content)).sensitive;
+    const state = foldState(rows.filter((r) => r.role === "system").map((r) => r.content));
+    sensitiveSoFar = state.sensitive;
     const visible = rows.filter((r) => r.role !== "system");
-    // After "Compact this conversation", the summary stands in for the turns it covers.
-    history = turnsAfter(visible, summary ? c.summaryUpToMessageId : null).map((r) => ({ role: r.role as "user" | "assistant", content: r.content }));
+    // After "Compact this conversation", the summary stands in for the turns it covers. Answers that ran page actions
+    // say which (the saved text has no trace of the calls, and the model must not learn to claim without calling).
+    history = turnsAfter(visible, summary ? c.summaryUpToMessageId : null).map((r) => ({
+      role: r.role as "user" | "assistant",
+      content: r.role === "assistant" && state.actions.has(r.id) ? `${r.content}\n\n${actionsNote(state.actions.get(r.id)!)}` : r.content,
+    }));
     userText = [...visible.filter((r) => r.role === "user").map((r) => r.content), input.question].join("\n");
   } else {
     conversationId = (await createConversation(v, title)).id;
@@ -138,9 +150,18 @@ const memoryCounts = (items: Memory[]) => ({
   notes: items.filter((m) => m.kind === "note" || m.kind === "fact").length,
 });
 
-/** `page`: what was open when the question was asked (Ask panel), already re-read as the viewer. */
-export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal: AbortSignal, opts: { page?: ResolvedPage | null } = {}): ReadableStream<Uint8Array> {
+export type TurnPage = {
+  /** What was open when the question was asked (Ask window), already re-read as the viewer. */
+  page?: ResolvedPage | null;
+  /** What the open page lets the assistant do there (run in the browser, as the person). */
+  actions?: ActionManifest[];
+  view?: PageView | null;
+  selection?: PageSelection | null;
+};
+
+export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal: AbortSignal, opts: TurnPage = {}): ReadableStream<Uint8Array> {
   const page = opts.page ?? null;
+  const pageActions = opts.actions ?? [];
   const enc = new TextEncoder();
   const stopper = new AbortController();
   const key = stopKey(v.id, turn.conversationId);
@@ -248,6 +269,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
         const hints = amb.map((a) => `"${a.name}" matches ${a.options.length} people ${voice.family ? "the family knows" : "in this graph"}: ${a.options.map((o) => o.label).join(", ")}. If it matters for the answer and the conversation doesn't say which, ask.`);
         if (mentioned.length) hints.push(`The person pointed at ${mentioned.map((m) => `"${m.label}"`).join(", ")} in the graph with @mentions: the question is about ${mentioned.length === 1 ? "that" : "those"}, not someone else with the same name.`);
         if (page) hints.push(pageHint(page));
+        hints.push(...viewHints(opts.view, opts.selection));
         const ch = consentHint(consent.excluded);
         if (ch) hints.push(ch);
         hints.push(...tools.hints);
@@ -262,27 +284,85 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
           viewerName: v.name, today: longDay(now, tz), timeZone: tz, context: ctx.text + tools.context, history: turn.history, question,
           graphKind: v.graphKind, graphName: v.graphName, locale: voice.locale,
           tone: (settings.tone as Tone) ?? "warm", memory: mem.text, off, hints, summary: turn.summary, canRemember: memOk && canWrite,
+          pageActions: actionsPrompt(pageActions),
         });
-        const filter = new ProposalStreamFilter();
         let raw = "";
+        const actionCalls: { name: string; status: string; note: string | null }[] = [];
+        /** The round being written now (added to `raw` when it ends, or when the stream breaks off). */
+        let liveRound = "";
         let meta: Omit<mux.MuxResult, "text"> = { model: null, route: null, requestId: null };
         let degraded: DoneEvent["degraded"] = null;
         let stopped = false;
         try {
-          const gen = mux.stream({
-            route, messages, maxTokens: 1500, temperature: 0.3, signal: both,
-            meta: { userId: v.id, agent: "my-graph:assistant", traceId: turn.conversationId, sensitive, graphId: v.graphId },
-          });
-          for (;;) {
-            const r = await gen.next();
-            if (r.done) { meta = r.value; break; }
-            raw += r.value;
-            const out = filter.push(r.value);
-            if (out) send("delta", { text: out });
+          // One round per page action: the model writes until it calls one, the browser runs it (after the person
+          // approved a change), and the model reads the result and carries on.
+          let convo = messages;
+          actionCalls.length = 0;
+          for (let round = 0; ; round++) {
+            const filter = new ProposalStreamFilter();
+            const roundStop = new AbortController();
+            const gen = mux.stream({
+              route, messages: convo, maxTokens: 1500, temperature: 0.3, signal: AbortSignal.any([both, roundStop.signal]),
+              meta: { userId: v.id, agent: "my-graph:assistant", traceId: turn.conversationId, sensitive, graphId: v.graphId },
+            });
+            let roundRaw = "";
+            let lead = raw.trim() ? "\n\n" : "";
+            const emit = (text: string) => { if (!text) return; send("delta", { text: lead + text }); lead = ""; };
+            let called = false;
+            for (;;) {
+              const r = await gen.next();
+              if (r.done) { meta = r.value; break; }
+              roundRaw += r.value;
+              liveRound = roundRaw;
+              emit(filter.push(r.value));
+              if (pageActions.length && round < MAX_ACTION_ROUNDS && roundRaw.includes(ACTION_CLOSE)) {
+                called = true;
+                roundStop.abort();
+                await gen.return(meta).catch(() => {});
+                break;
+              }
+            }
+            liveRound = "";
+            // A call the model opened but didn't close before it stopped: still a call.
+            if (!called && pageActions.length && round < MAX_ACTION_ROUNDS && roundRaw.includes(ACTION_OPEN) && !roundRaw.includes(ACTION_CLOSE)) {
+              roundRaw += ACTION_CLOSE;
+              called = true;
+            }
+            if (process.env.MG_DEBUG_ACTIONS) console.log("[assistant] round", round, JSON.stringify(roundRaw.slice(-600)));
+            if (!called) {
+              emit(filter.flush());
+              raw += (raw.trim() && roundRaw.trim() ? "\n\n" : "") + stripActionBlocks(roundRaw);
+              break;
+            }
+            const found = findActionCall(roundRaw);
+            raw += (raw.trim() && found.before.trim() ? "\n\n" : "") + found.before;
+            const blockEnd = roundRaw.indexOf(ACTION_CLOSE) + ACTION_CLOSE.length;
+            const manifest = found.call ? matchCall(pageActions, found.call) : null;
+            let outcome: ClientActionOutcome;
+            if (!found.call || !manifest) {
+              outcome = { status: "unavailable", error: found.call ? `There is no page action called ${found.call.name}.` : "The action block wasn't valid JSON." };
+            } else {
+              const callId = randomUUID();
+              step({ kind: manifest.danger === "change" ? "write" : "other", label: `${manifest.danger === "change" ? "Asked to" : "On the page:"} ${manifest.title}` });
+              send("client_action", { callId, name: manifest.name, title: manifest.title, danger: manifest.danger, input: found.call.input });
+              outcome = await awaitClientAction(
+                { callId, userId: v.id, conversationId: turn.conversationId },
+                { timeoutMs: WAIT_MS[manifest.danger], signal: both, onTick: () => send("ping", {}) },
+              );
+              step({ kind: "other", label: actionStepLabel(manifest.title, outcome) });
+            }
+            actionCalls.push({
+              name: found.call?.name.slice(0, 80) ?? "unknown", status: outcome.status,
+              note: (outcome.status === "done" ? outcome.summary : outcome.status === "declined" ? null : outcome.error)?.slice(0, 400) ?? null,
+            });
+            convo = [
+              ...convo,
+              { role: "assistant", content: roundRaw.slice(0, blockEnd) },
+              { role: "user", content: actionResultMessage(found.call ?? { name: "unknown" }, outcome, { last: round + 1 >= MAX_ACTION_ROUNDS }) },
+            ];
           }
-          const tail = filter.flush();
-          if (tail) send("delta", { text: tail });
         } catch (e) {
+          if (liveRound.trim()) { raw += (raw.trim() ? "\n\n" : "") + stripActionBlocks(liveRound); liveRound = ""; }
           if (both.aborted) {
             stopped = true;
           } else if (!raw.trim()) {
@@ -325,6 +405,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
           steps, thoughtMs, clarify,
         });
         await touchConversation(turn.conversationId);
+        if (actionCalls.length) await addState(turn.conversationId, { type: "actions", messageId: saved.id, calls: actionCalls.slice(0, 10) });
         const mcpApprovals = stopped ? [] : tools.approvals;
         if (mcpApprovals.length) await addState(turn.conversationId, { type: "mcp", messageId: saved.id, approvals: mcpApprovals });
 
@@ -400,6 +481,22 @@ export function wikiTitleKey(title: string): string {
 }
 
 const stoppedEarly = (s: AbortSignal) => s.aborted;
+
+/** How an earlier answer's page actions read in the history the model gets. */
+export function actionsNote(calls: NonNullable<ReturnType<ActionRecords["get"]>>): string {
+  const list = calls.map((c) => `${c.name} → ${c.status}${c.note ? ` (${c.note.replace(/[\r\n]+/g, " ")})` : ""}`).join("; ");
+  return `[Page actions this answer ran, with their results: ${list}. Anything not listed here was not done.]`;
+}
+
+/** The step saved with the answer: what happened to a page action. */
+export function actionStepLabel(title: string, o: ClientActionOutcome): string {
+  switch (o.status) {
+    case "done": return o.summary ? `${title}: ${o.summary}` : `${title}: done`;
+    case "declined": return `${title}: you said not now`;
+    case "failed": return `${title}: didn't work (${o.error})`;
+    case "unavailable": return `${title}: not available on this page any more`;
+  }
+}
 
 /**
  * The graph nodes a web page might say something about: the ones the person @mentioned and the people, places,

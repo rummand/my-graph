@@ -16,7 +16,7 @@ export function NewCorpus({ startOpen = false, label }: { startOpen?: boolean; l
   const [open, setOpen] = useState(startOpen);
   return (
     <div>
-      {!open && <Button onClick={() => setOpen(true)}><Plus aria-hidden className="size-4" />{label ?? t("corpus.new")}</Button>}
+      {!open && <Button variant="secondary" onClick={() => setOpen(true)}><Plus aria-hidden className="size-4" />{label ?? t("corpus.new")}</Button>}
       <AnimatePresence initial={false}>
         {open && (
           <motion.div key="form" initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18, ease: EASE }}
@@ -29,7 +29,7 @@ export function NewCorpus({ startOpen = false, label }: { startOpen?: boolean; l
                   const res = await fetch("/api/corpora", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(corpusBodyOf(v)) });
                   const data = await res.json().catch(() => ({}));
                   if (!res.ok) return data.error ?? t("compliance.errors.failed");
-                  router.push(`/corpora/${data.corpus.id}`);
+                  router.push(`/rules/${data.corpus.id}`);
                   return null;
                 } catch {
                   return t("compliance.errors.offline");

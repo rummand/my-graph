@@ -284,7 +284,7 @@ const messages: MessageTree = {
       web_reading: "Læsning af websider",
       family_members: "Konti til hele husstanden",
       shared_graphs: "Grafer delt med folk uden for husstanden",
-      corpora: "Korpusser og tjek mod regler",
+      corpora: "Regler og tjek mod dem",
       priority_support: "Hurtigere hjælp",
     },
   },

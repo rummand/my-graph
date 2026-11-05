@@ -68,7 +68,7 @@ const PRIMARY: NavItem[] = [
 const SECONDARY: NavItem[] = [
   { href: "/library", key: "library", icon: FolderOpen },
   { href: "/artifacts", key: "artifacts", icon: Shapes, hideFor: ["guest"], label: "artifacts.nav" },
-  { href: "/corpora", key: "corpora", icon: Scale, hideFor: ["guest", "child"], label: "corpus.nav" },
+  { href: "/rules", key: "corpora", icon: Scale, hideFor: ["guest", "child"], label: "corpus.nav" },
   { href: "/graph", key: "connections", icon: Network },
   { href: "/changes", key: "changes", icon: GitPullRequestArrow, hideFor: ["guest"], label: "changes.nav" },
   { href: "/history", key: "history", icon: History, hideFor: ["guest"], label: "history.nav" },

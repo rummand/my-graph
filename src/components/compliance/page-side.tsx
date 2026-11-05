@@ -76,7 +76,7 @@ export function CheckAgainst({ pageId, canEdit, targetType = "wiki" }: { pageId:
       ) : (
         <p className="text-muted">{mode === "none" ? t("compliance.checkAgainst.none") : names(choice.effective) || t("compliance.checkAgainst.noCorpora")}</p>
       )}
-      <Link href="/corpora" className="text-xs text-accent hover:underline">{t("compliance.checkAgainst.manage")}</Link>
+      <Link href="/rules" className="text-xs text-accent hover:underline">{t("compliance.checkAgainst.manage")}</Link>
     </section>
   );
 }

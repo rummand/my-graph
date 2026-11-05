@@ -17,8 +17,8 @@ const messages: MessageTree = {
     advisory: "Et råd, ikke en spærring: du bestemmer.",
   },
   finding: {
-    nonCompliant: "Overholder ikke {ref}",
-    unclear: "Overholder måske ikke {ref}",
+    nonCompliant: "Går imod {ref}",
+    unclear: "Ikke sikkert, at den følger {ref}",
     missing: "Mangler: {ref}",
     rule: "Reglen",
     quote: "Det står der",

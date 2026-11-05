@@ -32,6 +32,8 @@ export type PromptOptions = {
   canRemember?: boolean;
   /** Nobody is watching (automation / heartbeat): only read and propose. */
   unattended?: boolean;
+  /** The open page's actions, already written as a prompt section (./page-actions actionsPrompt). Never for unattended runs. */
+  pageActions?: string;
 };
 
 /** The words and examples the prompt uses: family ones only in a family graph. */
@@ -132,7 +134,7 @@ ${opts.hints.map((h) => `- ${h}`).join("\n")}
 ` : ""}${opts.summary ? `
 Summary of the earlier conversation (the full turns are no longer included)
 ${opts.summary}
-` : ""}
+` : ""}${opts.pageActions && !opts.unattended ? opts.pageActions : ""}
 Clarifying questions (optional)
 If the question is genuinely ambiguous in a way the context can't settle (${f.clarifyCases}), and a wrong guess would mislead, ask instead of guessing: write one short sentence saying what you need to know, then end with
 <clarify>${f.clarify}</clarify>

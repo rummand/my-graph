@@ -6,15 +6,20 @@ import { ArrowLeft, FolderInput } from "lucide-react";
 import { useLx } from "./use-lx";
 import { folderApi, type FolderView } from "./folder-client";
 import { MoveToMenu } from "./folder-menu";
+import { useFileActions } from "./assistant-actions";
+import type { Visibility } from "./i18n";
 
 /**
  * A file page's way back: the library and the folder the file is in (as the viewer sees it), with "Move to…" for
  * the person who may move it. Moving takes every version of the document along.
  */
-export function FileFolder({ family, sourceId, path, folders, canMove }: {
+export function FileFolder({ family, sourceId, path, folders, canMove, file }: {
   family: boolean; sourceId: string; path: { id: string; name: string }[] | null; folders: FolderView[]; canMove: boolean;
+  /** For the Ask window's page actions on this file (rename, sharing, read again: the owner only). */
+  file?: { title: string; visibility: Visibility; isOwner: boolean; busy: boolean };
 }) {
   const L = useLx(family);
+  useFileActions({ L, id: sourceId, title: file?.title ?? "", visibility: file?.visibility ?? "private", folders, canMove, isOwner: !!file?.isOwner, busy: !!file?.busy });
   const { t } = L;
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);

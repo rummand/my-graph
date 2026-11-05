@@ -12,6 +12,7 @@ import { Badge, Button } from "@/components/ui";
 import { describeChange, type DescribeCtx } from "./describe";
 import { changedFields, groupText, originText, reasonText, type ExplainCtx } from "./explain";
 import { ReceiptLine } from "./receipt";
+import { useChangeSetAssistantActions } from "./assistant-actions";
 
 type Notice = { tone: "ok" | "warn" | "danger"; text: string } | null;
 type Patch = { changeIds: string[]; included?: boolean; resolution?: Resolution | null; resolutions?: Record<string, Resolution | null> };
@@ -93,8 +94,9 @@ export function ChangeSetReview({ initial, context: initialContext }: { initial:
     if (r.ok) { setCs(r.data.changeSet); setContext(r.data.context); }
   };
 
-  const deliver = async () => {
-    if (!deliverIds.length) { setNotice({ tone: "warn", text: t("changes.noneTicked") }); return; }
+  /** Deliver what is ticked. Returns what happened (the Ask window's "Deliver" action reads it). */
+  const deliver = async (): Promise<{ ok: boolean; text: string }> => {
+    if (!deliverIds.length) { const text = t("changes.noneTicked"); setNotice({ tone: "warn", text }); return { ok: false, text }; }
     setBusy("deliver"); setNotice(null);
     const nothingNew = !!summary?.nothingNew;
     const r = await call<{ applied: number; skipped?: number; connected?: number; restId?: string | null; changeSet: ChangeSetView }>(`/api/changes/${cs.id}/deliver`, {
@@ -110,13 +112,22 @@ export function ChangeSetReview({ initial, context: initialContext }: { initial:
       if (r.data.restId && waiting > 0) parts.push(t("changes.rest.delivered", { count: waiting }));
       setNotice({ tone: "ok", text: parts.join(" ") });
       router.refresh();
-      return;
+      return { ok: true, text: parts.join(" ") };
     }
     await reload();
-    if (r.data.stale) { setNotice({ tone: "warn", text: t("changes.stale") }); return; }
-    if (r.data.conflicts?.length) { setNotice({ tone: "warn", text: t("changes.conflictNotice", { count: r.data.conflicts.length }) }); return; }
-    setNotice({ tone: "danger", text: r.data.error ?? t("changes.failed") });
+    if (r.data.stale) { setNotice({ tone: "warn", text: t("changes.stale") }); return { ok: false, text: t("changes.stale") }; }
+    if (r.data.conflicts?.length) { const text = t("changes.conflictNotice", { count: r.data.conflicts.length }); setNotice({ tone: "warn", text }); return { ok: false, text }; }
+    const text = r.data.error ?? t("changes.failed");
+    setNotice({ tone: "danger", text });
+    return { ok: false, text };
   };
+
+  useChangeSetAssistantActions({
+    id: cs.id, title: cs.title, status: cs.status, draft, canDeliver: !!context.canDeliver,
+    changes: cs.changes.map((c) => ({ id: c.id, sentence: describeChange(c, ctx, t).sentence, included: c.included, verdict: reasons[c.id]?.verdict ?? null })),
+    deliverCount: deliverIds.length, total: cs.changes.length,
+    deliver,
+  });
 
   const drop = async () => {
     if (!window.confirm(t("changes.dropConfirm"))) return;

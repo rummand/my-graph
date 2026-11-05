@@ -73,7 +73,8 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
     <ProvenanceProvider>
       <StatusWatcher active={busy} />
       <FileFolder family={L.family} sourceId={s.id} path={d.folder} folders={folderTree?.folders ?? []}
-        canMove={s.canEdit && !s.superseded && !!folderTree?.canCreate} />
+        canMove={s.canEdit && !s.superseded && !!folderTree?.canCreate}
+        file={{ title: s.title, visibility: s.visibility, isOwner: s.isOwner, busy }} />
 
       <header className="mb-8">
         <h1 className="break-words text-[28px]/[1.15] font-semibold tracking-[-0.02em]">{s.title}</h1>

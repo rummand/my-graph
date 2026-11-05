@@ -293,6 +293,16 @@ const messages: MessageTree = {
     use: "Adjust and save",
     viaMux: "Read through mux.",
   },
+  assistantActions: {
+    insert: "Write this into the page at the cursor?",
+    replace: "Replace the selected text with this?",
+    addSection: "Add the section “{heading}” to the page?",
+    replaceSection: "Rewrite the section “{section}” with this?",
+    appendSection: "Add this to the end of “{section}”?",
+    newSection: "Add a new section “{section}”?",
+    changeStyle: "Switch this document to the style “{style}”?",
+    styleFailed: "Couldn't change the style. Try again.",
+  },
 };
 
 export default messages;

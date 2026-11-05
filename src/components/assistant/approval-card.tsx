@@ -14,7 +14,7 @@ export type Decision = "approve" | "always" | "deny";
  * of what would be saved, where it came from, and Approve / Always allow / Deny. Shared by chat, Today and Automations.
  */
 export function ApprovalCard({
-  title, why, preview, citations = [], kindLabel, alwaysLabel, origin, onDecide, className, compact = false,
+  title, why, preview, citations = [], kindLabel, alwaysLabel, origin, onDecide, className, compact = false, labels,
 }: {
   title: string;
   /** One plain sentence: why the assistant suggests this. */
@@ -30,6 +30,8 @@ export function ApprovalCard({
   onDecide: (d: Decision) => Promise<{ ok: boolean; label?: string; href?: string } | void>;
   className?: string;
   compact?: boolean;
+  /** Other words for the buttons and outcomes (page actions: "Approve" / "Not now"). */
+  labels?: { approve?: string; deny?: string; busy?: string; dismissed?: string; saved?: string };
 }) {
   const t = useT();
   const [busy, setBusy] = useState<Decision | null>(null);
@@ -55,9 +57,9 @@ export function ApprovalCard({
         {done ? (
           <motion.p key="done" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 text-sm text-muted">
             {done.d === "deny" ? <X className="size-4" aria-hidden /> : <Check className="size-4 text-accent" aria-hidden />}
-            {done.d === "deny" ? t("common.approval.dismissed") : (
+            {done.d === "deny" ? (labels?.dismissed ?? t("common.approval.dismissed")) : (
               <span>
-                {done.label ?? t("common.approval.saved")}{done.d === "always" && t("common.approval.alwaysAfter")}
+                {done.label ?? labels?.saved ?? t("common.approval.saved")}{done.d === "always" && t("common.approval.alwaysAfter")}
                 {done.href && <> <a href={done.href} className="text-accent hover:underline">{t("common.approval.open")}</a></>}
               </span>
             )}
@@ -83,9 +85,9 @@ export function ApprovalCard({
               </div>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button size="sm" onClick={() => decide("approve")} disabled={!!busy}>{busy === "approve" ? t("common.approval.saving") : t("common.approval.approve")}</Button>
+              <Button size="sm" onClick={() => decide("approve")} disabled={!!busy}>{busy === "approve" ? (labels?.busy ?? t("common.approval.saving")) : (labels?.approve ?? t("common.approval.approve"))}</Button>
               {alwaysLabel && <Button size="sm" variant="secondary" onClick={() => decide("always")} disabled={!!busy}>{busy === "always" ? t("common.approval.saving") : alwaysLabel}</Button>}
-              <Button size="sm" variant="ghost" onClick={() => decide("deny")} disabled={!!busy}>{t("common.approval.deny")}</Button>
+              <Button size="sm" variant="ghost" onClick={() => decide("deny")} disabled={!!busy}>{labels?.deny ?? t("common.approval.deny")}</Button>
               {error && <span role="alert" className="text-sm text-danger">{error}</span>}
             </div>
           </motion.div>

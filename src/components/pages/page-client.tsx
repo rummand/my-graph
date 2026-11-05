@@ -4,6 +4,7 @@
  * typing stops, with an optimistic version check — if someone else saved first, the writer chooses between their
  * version and overwriting it.
  */
+import { usePageAssistantActions } from "./assistant-actions";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -243,6 +244,14 @@ export function PageClient({ initial, startEditing, startAsking = false, mention
   };
 
   const beginEditing = () => { setTitle(page.title); titleRef.current = page.title; doc.current = page.content; setEditing(true); };
+  // Read through a ref: an action waiting for the editor to open must see `editing` change.
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+  usePageAssistantActions({
+    pageId: page.id, title: () => titleRef.current, canEdit: page.can.edit,
+    editor: () => (editingRef.current ? editorRef.current : null),
+    startEditing: () => { if (!editingRef.current) beginEditing(); },
+  });
   const beginAsking = () => { beginEditing(); setAskSignal((n) => n + 1); };
   const historyHref = `/artifacts/pages/${encodeURIComponent(page.slug)}/history`;
   const VisIcon = page.visibility === "private" ? Lock : Users;

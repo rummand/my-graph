@@ -285,7 +285,7 @@ const messages: MessageTree = {
       web_reading: "Reading web pages",
       family_members: "Accounts for the whole household",
       shared_graphs: "Graphs shared with people outside the household",
-      corpora: "Corpora and compliance checks",
+      corpora: "Rules and checks against them",
       priority_support: "Priority support",
     },
   },

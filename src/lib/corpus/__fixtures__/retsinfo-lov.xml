@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Dokument id="idtest" SchemaLocation="http://www.retsinformation.dk/offentlig/xml/schemas/2022/05/17/LOVH.Retsinfo.LexDania_2.1.xsd">
+  <Meta id="m1">
+    <DocumentType>LOV H</DocumentType>
+    <AccessionNumber>A20240001</AccessionNumber>
+    <DocumentId>AA000001</DocumentId>
+    <UniqueDocumentId>900001</UniqueDocumentId>
+    <DocumentTitle>Lov om ordensregler i boligforeninger (boligordensloven)</DocumentTitle>
+    <Year>2024</Year>
+    <DiesSigni>2024-05-23</DiesSigni>
+    <StartDate REFid="s1">2024-07-01</StartDate>
+    <Status>Valid</Status>
+    <Number>512</Number>
+    <Ministry>Social-, Bolig- og Ældreministeriet</Ministry>
+  </Meta>
+  <TitelGruppe id="t1"><Titel id="t2"><Linea><Char>Lov om ordensregler i boligforeninger (boligordensloven)</Char></Linea></Titel></TitelGruppe>
+  <DokumentIndhold id="d1">
+    <Kapitel id="k1" localId="1">
+      <Explicatus>Kapitel 1</Explicatus>
+      <Rubrica id="r1"><Linea><Char>Anvendelsesområde og definitioner</Char></Linea></Rubrica>
+      <ParagrafGruppe>
+        <Paragraf id="p1" localId="1">
+          <Explicatus>§ 1.</Explicatus>
+          <Stk id="s11"><Exitus><Linea><Char>Loven gælder for almene boligforeninger.</Char></Linea></Exitus></Stk>
+          <Stk id="s12"><Explicatus>Stk. 2.</Explicatus><Exitus><Linea><Char>Loven gælder dog ikke for kollegier, jf. § 4.</Char></Linea></Exitus></Stk>
+        </Paragraf>
+        <Paragraf id="p2" localId="2">
+          <Explicatus>§ 2.</Explicatus>
+          <Stk id="s21">
+            <Exitus><Linea><Char>I denne lov forstås ved:</Char></Linea></Exitus>
+            <Exitus id="e21">
+              <Index>
+                <Indentatio id="n1" formaInd="Nummer"><Explicatus>1)</Explicatus><Exitus><Linea><Char>Beboer: En person, der lejer en bolig i foreningen.</Char></Linea></Exitus></Indentatio>
+                <Indentatio id="n2" formaInd="Nummer"><Explicatus>2)</Explicatus><Exitus><Linea><Char>Fællesareal: Gård, trappe og vaskeri, som alle beboere må bruge.</Char></Linea></Exitus></Indentatio>
+              </Index>
+            </Exitus>
+          </Stk>
+        </Paragraf>
+      </ParagrafGruppe>
+    </Kapitel>
+    <Kapitel id="k2" localId="2">
+      <Explicatus>Kapitel 2</Explicatus>
+      <Rubrica id="r2"><Linea><Char>Pligter</Char></Linea></Rubrica>
+      <ParagrafGruppe>
+        <Paragraf id="p3" localId="3">
+          <Explicatus>§ 3.</Explicatus>
+          <Stk id="s31"><Exitus><Linea><Char>En beboer skal holde fællesarealer ryddelige og må ikke stille cykler på trappen.</Char></Linea></Exitus></Stk>
+          <Stk id="s32"><Explicatus>Stk. 2.</Explicatus><Exitus><Linea><Char>Klager over støj skal indgives skriftligt inden for 14 dage. Klagen skal indeholde:</Char></Linea></Exitus>
+            <Exitus id="e32"><Index>
+              <Indentatio id="n31" formaInd="Nummer"><Explicatus>1)</Explicatus><Exitus><Linea><Char>tidspunktet for støjen og</Char></Linea></Exitus>
+                <Index>
+                  <Indentatio id="l1" formaInd="Litra"><Explicatus>a)</Explicatus><Exitus><Linea><Char>dag og klokkeslæt,</Char></Linea></Exitus></Indentatio>
+                  <Indentatio id="l2" formaInd="Litra"><Explicatus>b)</Explicatus><Exitus><Linea><Char>varighed,</Char></Linea></Exitus></Indentatio>
+                </Index>
+              </Indentatio>
+              <Indentatio id="n32" formaInd="Nummer"><Explicatus>2)</Explicatus><Exitus><Linea><Char>klagerens navn.</Char></Linea></Exitus></Indentatio>
+            </Index></Exitus>
+          </Stk>
+        </Paragraf>
+        <Paragraf id="p4" localId="4">
+          <Explicatus>§ 4.</Explicatus>
+          <Stk id="s41"><Exitus><Linea><Char>Overtrædelse af § 3, stk. 1, straffes med bøde.</Char></Linea></Exitus></Stk>
+        </Paragraf>
+        <Paragraf id="p5" localId="5">
+          <Explicatus>§ 5.</Explicatus>
+          <Stk id="s51"><Exitus><Linea><Char>Loven træder i kraft den 1. juli 2024.</Char></Linea></Exitus></Stk>
+          <Stk id="s52"><Explicatus>Stk. 2.</Explicatus><Exitus><Linea><Char>Lov nr. 100 af 1. februar 2010 om husorden ophæves.</Char></Linea></Exitus></Stk>
+        </Paragraf>
+      </ParagrafGruppe>
+    </Kapitel>
+  </DokumentIndhold>
+  <UnderskriftGruppe id="u1"><UnderskriftStedDato /><Underskriver /></UnderskriftGruppe>
+</Dokument>

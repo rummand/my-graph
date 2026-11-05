@@ -20,8 +20,9 @@ export function GET(req: Request) {
 }
 
 /**
- * POST /api/chat { conversationId?, question, page? } — ask (page: what's open, from the Ask panel); answers as a Server-Sent Events stream
- * (events: start, step, sources, sensitivity, delta, done, error — see src/lib/assistant/chat.ts).
+ * POST /api/chat { conversationId?, question, page?, actions?, view?, selection? } — ask (page: what's open, from the Ask
+ * window; actions: what the page lets the assistant do there); answers as a Server-Sent Events stream
+ * (events: start, step, sources, sensitivity, delta, client_action, done, error — see src/lib/assistant/chat.ts).
  */
 export function POST(req: Request) {
   return handle(async () => {
@@ -42,7 +43,14 @@ export function POST(req: Request) {
       parsed.data.page ? resolvePage(v, parsed.data.page) : Promise.resolve(null),
       setActiveSession(v, turn.conversationId).catch((e) => console.error("[chat] active session", e)),
     ]);
-    const stream = runTurn(v, turn, parsed.data.question, req.signal, { page });
+    // A selection or view sent with a page the viewer can't read is dropped with it.
+    const pageDropped = !!parsed.data.page && !page;
+    const stream = runTurn(v, turn, parsed.data.question, req.signal, {
+      page,
+      actions: parsed.data.actions ?? [],
+      view: pageDropped ? null : parsed.data.view ?? null,
+      selection: pageDropped ? null : parsed.data.selection ?? null,
+    });
     return new Response(stream, {
       headers: {
         "content-type": "text/event-stream; charset=utf-8",

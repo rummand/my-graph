@@ -8,6 +8,7 @@ import { scopeOf } from "@/lib/graphs/pure";
 import { getLocale, getT } from "@/lib/i18n";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { ChangeSetCard, DeliverReady, originLabel } from "@/components/changes";
+import { ChangesAssistantActions } from "@/components/changes/assistant-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,7 @@ export default async function ChangesPage({ searchParams }: { searchParams: Prom
   })) : [];
   return (
     <div className="mx-auto max-w-3xl">
+      <ChangesAssistantActions />
       <PageHeader title={t("changes.title")} lead={scopeOf(v).family ? t("changes.leadFamily") : t("changes.lead", { graph: v.graphName })} />
       <nav aria-label={t("changes.title")} className="mb-3 flex flex-wrap gap-1">
         {FILTERS.map((f) => (

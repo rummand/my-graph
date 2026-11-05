@@ -64,7 +64,7 @@ export default async function ArtifactsHub({ searchParams }: Props) {
             <Link key={k.id} href={href({ kind: k.id })} aria-current={kind === k.id ? "true" : undefined} className={chip(kind === k.id)}>{t(k.plural)}</Link>
           ))}
           <span className="mx-1 h-5 w-px bg-line" aria-hidden />
-          <Link href={href({ mine: !mine })} aria-pressed={mine} className={chip(mine)}>{t("artifacts.hub.onlyMine")}</Link>
+          <Link href={href({ mine: !mine })} aria-current={mine ? "true" : undefined} className={chip(mine)}>{t("artifacts.hub.onlyMine")}</Link>
         </div>
       </div>
 

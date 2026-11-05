@@ -262,6 +262,9 @@ const messages: MessageTree = {
     notRetired: "Det her er ikke trukket tilbage.",
     notAllowed: "Du har ikke lov til at foreslå ændringer i denne graf.",
   },
+  assistantActions: {
+    deliver: { one: "Lever {count} ændring fra “{title}”?", other: "Lever {count} ændringer fra “{title}”?" },
+  },
 };
 
 export default messages;

@@ -11,6 +11,7 @@ import { processSource, refreshSource } from "@/lib/ingest/pipeline";
 import * as mux from "@/lib/mux";
 import { clinicalDraftJob, clinicalTranscribeJob } from "@/lib/clinical/jobs";
 import { exportBuildJob } from "@/lib/export/jobs";
+import { corpusWorkJob } from "@/lib/corpus/work";
 import { PermanentJobError, type JobProgress } from "./policy";
 import type { JobRow } from "./queue";
 
@@ -64,4 +65,6 @@ export const HANDLERS: Record<string, Handler> = {
   "clinical.transcribe": clinicalTranscribeJob, "clinical.draft": clinicalDraftJob,
   // Data exports (Settings > Your data): the handler re-checks that the export is the job person's own.
   "export.build": exportBuildJob,
+  // Rule sets from a link (src/lib/corpus/work.ts): crawl, then the four reading passes; resumes at its stage.
+  "corpus.work": corpusWorkJob,
 };

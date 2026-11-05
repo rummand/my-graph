@@ -190,6 +190,13 @@
       "when": 1793873424371,
       "tag": "0026_library_folders",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793877297758,
+      "tag": "0027_rules_graph",
+      "breakpoints": true
     }
   ]
 }

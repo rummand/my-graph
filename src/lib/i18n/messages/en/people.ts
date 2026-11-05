@@ -382,6 +382,10 @@ const messages: MessageTree = {
   theirNoun: table(nouns.map((n) => [n, `{whose} ${n}`])),
   verbYou: table(verbs.map((v) => [v, `${cap(v)} you`])),
   verbThem: table(verbs.map((v) => [v, `${cap(v)} {name}`])),
+  assistantActions: {
+    addFact: "Add to {name}'s profile: {phrase} {other}?",
+    someone: "someone already in the graph",
+  },
 };
 
 export default messages;

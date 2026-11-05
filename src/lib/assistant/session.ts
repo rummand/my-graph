@@ -14,6 +14,7 @@ import { getArtifact } from "@/lib/artifacts";
 import { getChangeSet } from "@/lib/changes";
 import { getCorpus } from "@/lib/corpus";
 import { allowed, loadClient, loadSession } from "@/lib/clinical";
+import { getConnection } from "@/lib/connectors";
 import { pickActive, type StoredSession } from "./active";
 import { listConversations, ownConversation, type ConversationSummary } from "./store";
 import type { PageContext, ResolvedPage } from "./page-context";
@@ -77,6 +78,11 @@ export async function resolvePage(v: Viewer, p: PageContext): Promise<ResolvedPa
       case "corpus": {
         const c = await getCorpus(v, p.id);
         return { ...base, title: c.name, nodeId: c.nodeId };
+      }
+      case "connection": {
+        if (!gbrain.isUuid(p.id)) return null;
+        const c = await getConnection(v, p.id);
+        return { ...base, title: c.connection.label, nodeId: null };
       }
       // Clinical records lead only for someone with clinical access, and only while the client's consent covers
       // analysis; otherwise the open record never reaches the model as context.

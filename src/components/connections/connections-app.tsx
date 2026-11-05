@@ -14,6 +14,7 @@ import { isOAuthConnector, OAuthConnectForm } from "./oauth-connect";
 
 const MCP = new Set(["mcp", "record"]);
 import { DisconnectDialog } from "./disconnect-dialog";
+import { useConnectionsActions } from "./assistant-actions";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -35,10 +36,21 @@ export function ConnectionsApp({ initial, connectors, people, family, graphName,
     { key: "all", title: danish.length ? t("connections.regions.everywhere") : null, items: connectors.filter((c) => c.region !== "dk") },
   ];
 
-  // Back from a server's sign-in page with a problem: say it.
+  // Open a connector's setup in the gallery (the assistant, or ?setup=<connector> from another page).
+  const openSetup = useCallback((id: string) => {
+    setOpen(id);
+    window.setTimeout(() => document.getElementById(`connector-${id}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }, []);
+  useConnectionsActions({ connectors, connections: list, openSetup });
+
+  // Back from a server's sign-in page with a problem: say it. ?setup=<connector>: open that setup.
   useEffect(() => {
-    const msg = new URLSearchParams(window.location.search).get("signin");
+    const qs = new URLSearchParams(window.location.search);
+    const msg = qs.get("signin");
     if (msg && msg !== "ok") setNotice(msg);
+    const setup = qs.get("setup");
+    if (setup && connectors.some((c) => c.id === setup && c.status !== "coming_soon")) openSetup(setup);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const reload = useCallback(async () => {
@@ -86,7 +98,7 @@ export function ConnectionsApp({ initial, connectors, people, family, graphName,
               {g.title && <h3 className="mb-2 text-sm font-semibold">{g.title}</h3>}
               <ul className="divide-y divide-line rounded-lg bg-surface">
                 {g.items.map((info) => (
-                  <li key={info.id} className="px-4 py-4">
+                  <li key={info.id} id={`connector-${info.id}`} className="scroll-mt-6 px-4 py-4">
                     <GalleryItem info={info} open={open === info.id} onToggle={() => setOpen(open === info.id ? null : info.id)}>
                       {isOAuthConnector(info.id) ? (
                         <OAuthConnectForm info={info} people={people} family={family} onCancel={() => setOpen(null)} />

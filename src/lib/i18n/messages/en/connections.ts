@@ -430,6 +430,12 @@ const messages: MessageTree = {
     failed: "Google Photos couldn't be opened. Try again.",
     pending: { one: "{count} picking session is waiting to be read.", other: "{count} picking sessions are waiting to be read." },
   },
+  assistantActions: {
+    list: "Look at the connections",
+    listed: { one: "{count} connection of yours", other: "{count} connections of yours" },
+    openSetup: "Open a connection's setup",
+    opened: "Opened {name}",
+  },
 };
 
 export default messages;

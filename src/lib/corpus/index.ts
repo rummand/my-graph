@@ -15,7 +15,7 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { chunks, corpora, corpusRules, corpusSources, sources } from "@/db/schema";
+import { chunks, corpora, corpusRules, corpusSources, corpusUnits, sources } from "@/db/schema";
 import { isParent, type Viewer } from "@/lib/auth";
 import { scopeOf } from "@/lib/graphs/pure";
 import * as gbrain from "@/lib/gbrain";
@@ -32,6 +32,9 @@ import {
 
 export * from "./pure";
 
+export type { WorkState, UnderstandingState } from "./work";
+import type { WorkState, UnderstandingState } from "./work";
+
 export class CorpusError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
@@ -44,6 +47,8 @@ export type CorpusSummary = {
   id: string; nodeId: string | null; name: string; description: string | null; kind: CorpusKind; authority: string | null; binding: Binding;
   version: string | null; effectiveFrom: string | null; effectiveTo: string | null; status: CorpusStatus; scope: CorpusScope; checkByDefault: boolean;
   rulesVersion: number; readState: ReadState | null; counts: { active: number; proposed: number; retired: number }; sources: number;
+  /** "Add from a link": where it started, and the crawl and reading passes (null for rule sets built by hand). */
+  startUrl: string | null; work: WorkState | null;
   updatedAt: string; createdAt: string;
 };
 
@@ -52,12 +57,27 @@ export type RuleView = {
   checkHint: string | null; appliesTo: CorpusScope; status: string; change: string | null; supersedesId: string | null; corpusVersion: string | null;
   /** Hidden when the viewer can't open the source. */
   quote: string | null; sourceId: string | null; sourceTitle: string | null; chunkId: string | null; locator: Record<string, unknown>; sourceHidden: boolean;
+  /** rule | definition */
+  kind: string; unitKey: string | null; chapter: string | null; confidence: number | null; pass: number | null;
+  refs: { ref: string; unitKey?: string; external?: boolean }[];
+  interpretation: { sourceId: string; chunkId: string; quote: string; title: string | null; url: string | null }[];
+  /** The source's own address (the official page), and the official PDF page when the text was found there. */
+  sourceUrl: string | null; pdf: { sourceId: string; page: number } | null;
+  nodeId: string | null;
   createdAt: string; decidedAt: string | null;
 };
 
-export type CorpusSourceView = { id: string; sourceId: string; title: string; kind: string; url: string | null; status: string; role: SourceRole | string; readAt: string | null; corpusVersion: string | null };
+export type CorpusSourceView = {
+  id: string; sourceId: string; title: string; kind: string; url: string | null; status: string; role: SourceRole | string; readAt: string | null; corpusVersion: string | null;
+  mime: string | null; fetchedAt: string | null; revision: number;
+  /** From the crawl: why it was read, and whether it is the official PDF kept as the reference of record. */
+  reason: string | null; reference: boolean; amendment: boolean; pages: number | null;
+};
 
-export type CorpusDetail = CorpusSummary & { sources_: CorpusSourceView[]; rules: RuleView[]; canManage: boolean };
+/** The coverage map, live: units of the text by state, and the units still without a rule. */
+export type CoverageView = { total: number; byStatus: Record<string, number>; open: string[]; chapters: { chapter: string; units: number; ruled: number }[] };
+
+export type CorpusDetail = CorpusSummary & { sources_: CorpusSourceView[]; rules: RuleView[]; canManage: boolean; coverage: CoverageView; understanding: UnderstandingState | null };
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
@@ -78,6 +98,7 @@ function summary(r: CorpusRow, counts: CorpusSummary["counts"], nSources: number
     id: r.id, nodeId: r.nodeId, name: r.name, description: r.description, kind: r.kind as CorpusKind, authority: r.authority, binding: r.binding as Binding,
     version: r.version, effectiveFrom: iso(r.effectiveFrom), effectiveTo: iso(r.effectiveTo), status: r.status as CorpusStatus, scope: readScope(r.scope),
     checkByDefault: r.checkByDefault, rulesVersion: r.rulesVersion, readState: (r.readState as ReadState | null) ?? null, counts, sources: nSources,
+    startUrl: r.startUrl ?? null, work: (r.work as WorkState | null) ?? null,
     updatedAt: r.updatedAt.toISOString(), createdAt: r.createdAt.toISOString(),
   };
 }
@@ -97,7 +118,7 @@ export async function listCorpora(v: Viewer): Promise<CorpusSummary[]> {
   const ids = rows.map((r) => r.id);
   const [ruleRows, srcRows] = await Promise.all([
     db.select({ corpusId: corpusRules.corpusId, status: corpusRules.status, n: sql<number>`count(*)::int` }).from(corpusRules)
-      .where(and(inArray(corpusRules.corpusId, ids), eq(corpusRules.graphId, v.graphId))).groupBy(corpusRules.corpusId, corpusRules.status),
+      .where(and(inArray(corpusRules.corpusId, ids), eq(corpusRules.graphId, v.graphId), eq(corpusRules.kind, "rule"))).groupBy(corpusRules.corpusId, corpusRules.status),
     db.select({ corpusId: corpusSources.corpusId, n: sql<number>`count(*)::int` }).from(corpusSources)
       .where(and(inArray(corpusSources.corpusId, ids), eq(corpusSources.graphId, v.graphId))).groupBy(corpusSources.corpusId),
   ]);
@@ -117,37 +138,78 @@ async function readableSourceIds(v: Viewer, ids: string[]): Promise<Set<string>>
 
 type RuleRow = typeof corpusRules.$inferSelect;
 
-function ruleView(r: RuleRow, titles: Map<string, string>, readable: Set<string>): RuleView {
+function ruleView(r: RuleRow, titles: Map<string, string>, readable: Set<string>, urls: Map<string, string | null> = new Map()): RuleView {
   const hidden = !!r.sourceId && !readable.has(r.sourceId);
+  const loc = (r.locator as Record<string, unknown>) ?? {};
+  const pdf = loc.pdf && typeof loc.pdf === "object" ? (loc.pdf as { sourceId?: unknown; page?: unknown }) : null;
   return {
     id: r.id, corpusId: r.corpusId, ref: r.ref, section: r.section ?? sectionOf(r.ref), title: r.title, text: r.text, modality: r.modality as Modality,
     severity: r.severity as Severity, checkHint: r.checkHint, appliesTo: readScope(r.appliesTo), status: r.status, change: r.change, supersedesId: r.supersedesId,
     corpusVersion: r.corpusVersion,
     quote: hidden ? null : r.quote, sourceId: hidden ? null : r.sourceId, sourceTitle: hidden ? null : (r.sourceId ? titles.get(r.sourceId) ?? null : null),
-    chunkId: hidden ? null : r.chunkId, locator: hidden ? {} : (r.locator as Record<string, unknown>) ?? {}, sourceHidden: hidden,
+    chunkId: hidden ? null : r.chunkId, locator: hidden ? {} : loc, sourceHidden: hidden,
+    kind: r.kind, unitKey: r.unitKey, chapter: r.chapter, confidence: r.confidence, pass: r.pass,
+    refs: (r.refs ?? []) as RuleView["refs"],
+    interpretation: hidden ? [] : ((r.interpretation ?? []) as RuleView["interpretation"]).filter((i) => readable.has(i.sourceId)),
+    sourceUrl: hidden || !r.sourceId ? null : urls.get(r.sourceId) ?? null,
+    pdf: !hidden && pdf && typeof pdf.sourceId === "string" && typeof pdf.page === "number" && readable.has(pdf.sourceId) ? { sourceId: pdf.sourceId, page: pdf.page } : null,
+    nodeId: r.nodeId,
     createdAt: r.createdAt.toISOString(), decidedAt: iso(r.decidedAt),
   };
 }
 
 export async function getCorpus(v: Viewer, id: string): Promise<CorpusDetail> {
   const r = await own(v, id);
-  const [srcs, rules] = await Promise.all([
+  const [srcs, rules, unitRows] = await Promise.all([
     db.select({ id: corpusSources.id, sourceId: corpusSources.sourceId, role: corpusSources.role, readAt: corpusSources.readAt, corpusVersion: corpusSources.corpusVersion,
-      title: sources.title, kind: sources.kind, url: sources.url, status: sources.status })
+      title: sources.title, kind: sources.kind, url: sources.url, status: sources.status, mime: sources.mime, fetchedAt: sources.fetchedAt, revision: sources.revision, meta: sources.meta })
       .from(corpusSources).innerJoin(sources, eq(sources.id, corpusSources.sourceId))
       .where(and(eq(corpusSources.corpusId, id), eq(corpusSources.graphId, v.graphId))).orderBy(asc(corpusSources.createdAt)),
     db.select().from(corpusRules).where(and(eq(corpusRules.corpusId, id), eq(corpusRules.graphId, v.graphId), ne(corpusRules.status, "dropped"))),
+    db.select({ key: corpusUnits.key, kind: corpusUnits.kind, status: corpusUnits.status, chapter: corpusUnits.chapter, sourceId: corpusUnits.sourceId }).from(corpusUnits)
+      .where(and(eq(corpusUnits.corpusId, id), eq(corpusUnits.graphId, v.graphId))).orderBy(asc(corpusUnits.idx)),
   ]);
-  const readable = await readableSourceIds(v, [...srcs.map((s) => s.sourceId), ...rules.map((x) => x.sourceId ?? "")]);
+  const readable = await readableSourceIds(v, [...srcs.map((s) => s.sourceId), ...rules.map((x) => x.sourceId ?? ""), ...rules.flatMap((x) => ((x.interpretation ?? []) as { sourceId?: string }[]).map((i) => i.sourceId ?? ""))]);
   const titles = new Map(srcs.map((s) => [s.sourceId, s.title]));
+  const urls = new Map(srcs.map((s) => [s.sourceId, s.url]));
+  // Rules cite the version they were read from; earlier versions are no longer linked but keep their address.
+  const missing = [...new Set(rules.map((x) => x.sourceId).filter((x): x is string => !!x && !urls.has(x)))];
+  if (missing.length) for (const m of await db.select({ id: sources.id, url: sources.url, title: sources.title }).from(sources).where(and(inArray(sources.id, missing), eq(sources.graphId, v.graphId)))) { urls.set(m.id, m.url); titles.set(m.id, m.title); }
   const visibleSources = srcs.filter((s) => readable.has(s.sourceId));
-  rules.sort((a, b) => compareSections(a.section ?? sectionOf(a.ref), b.section ?? sectionOf(b.ref)) || a.ref.localeCompare(b.ref, "da", { numeric: true }) || a.createdAt.getTime() - b.createdAt.getTime());
+  rules.sort((a, b) => compareSections(a.unitKey ?? a.section ?? sectionOf(a.ref), b.unitKey ?? b.section ?? sectionOf(b.ref)) || a.ref.localeCompare(b.ref, "da", { numeric: true }) || a.createdAt.getTime() - b.createdAt.getTime());
+  const crawlOf = (m: unknown) => (((m ?? {}) as Record<string, unknown>).crawl ?? {}) as Record<string, unknown>;
   return {
-    ...summary(r, coverage(rules), srcs.length),
-    sources_: visibleSources.map((s) => ({ id: s.id, sourceId: s.sourceId, title: s.title, kind: s.kind, url: s.url, status: s.status, role: s.role, readAt: iso(s.readAt), corpusVersion: s.corpusVersion })),
-    rules: rules.map((x) => ruleView(x, titles, readable)),
+    ...summary(r, coverage(rules.filter((x) => x.kind === "rule")), srcs.length),
+    sources_: visibleSources.map((s) => ({
+      id: s.id, sourceId: s.sourceId, title: s.title, kind: s.kind, url: s.url, status: s.status, role: s.role, readAt: iso(s.readAt), corpusVersion: s.corpusVersion,
+      mime: s.mime, fetchedAt: iso(s.fetchedAt), revision: s.revision, reason: typeof crawlOf(s.meta).reason === "string" ? (crawlOf(s.meta).reason as string) : null,
+      reference: crawlOf(s.meta).reference === true, amendment: crawlOf(s.meta).amendment === true,
+      pages: typeof (s.meta as Record<string, unknown>)?.pages === "number" ? ((s.meta as Record<string, unknown>).pages as number) : null,
+    })),
+    rules: rules.map((x) => ruleView(x, titles, readable, urls)),
     canManage: canManageCorpora(v),
+    coverage: coverageView(unitRows, srcs),
+    understanding: (r.understanding as UnderstandingState | null) ?? null,
   };
+}
+
+/** Units by state (main text first), and which chapters are covered. */
+function coverageView(units: { key: string; kind: string; status: string; chapter: string | null; sourceId: string }[], srcs: { sourceId: string; role: string }[]): CoverageView {
+  const roleOf = new Map(srcs.map((s) => [s.sourceId, s.role]));
+  const byStatus: Record<string, number> = {};
+  const chapters = new Map<string, { units: number; ruled: number }>();
+  const open: string[] = [];
+  for (const u of units) {
+    byStatus[u.status] = (byStatus[u.status] ?? 0) + 1;
+    if (u.status === "open" && roleOf.get(u.sourceId) === "text" && open.length < 80 && !/^(chapter|section|heading|preamble)$/.test(u.kind)) open.push(u.key);
+    if (u.chapter && roleOf.get(u.sourceId) === "text" && !/^(chapter|section|heading|preamble)$/.test(u.kind)) {
+      const ch = chapters.get(u.chapter) ?? { units: 0, ruled: 0 };
+      ch.units++;
+      if (u.status === "ruled" || u.status === "definition" || u.status === "no_rule") ch.ruled++;
+      chapters.set(u.chapter, ch);
+    }
+  }
+  return { total: units.length, byStatus, open, chapters: [...chapters.entries()].map(([chapter, c]) => ({ chapter, ...c })) };
 }
 
 /* ── Writing the corpus ─────────────────────────────────────────────────────────────────────────────────── */
@@ -183,7 +245,7 @@ export async function createCorpus(v: Viewer, input: CorpusInput): Promise<Corpu
   let nodeId: string | null = null;
   try {
     const { node } = await gbrain.upsertNode(v, {
-      id: randomUUID(), type: "document", kind: "corpus", label: name, summary: input.description?.trim() || undefined,
+      id: randomUUID(), type: "document", kind: "rule_set", label: name, summary: input.description?.trim() || undefined,
       props: nodeProps(input), visibility: "household",
     }, { ...PERSON(v), note: "Corpus created" });
     nodeId = node.id;
@@ -195,7 +257,7 @@ export async function createCorpus(v: Viewer, input: CorpusInput): Promise<Corpu
     binding: input.binding, version: input.version?.trim() || null, effectiveFrom: dateOrNull(input.effectiveFrom), effectiveTo: dateOrNull(input.effectiveTo),
     status: input.status ?? "draft", scope: (input.scope ?? { all: true }) as Record<string, unknown>, checkByDefault: input.checkByDefault ?? true, createdBy: v.id,
   }).returning();
-  void logActivity({ graphId: v.graphId, userId: v.id, actor: "wiki", action: "created_corpus", summary: `Started the corpus "${name}"`, subjectType: "corpus", subjectId: row.id, visibility: "household" });
+  void logActivity({ graphId: v.graphId, userId: v.id, actor: "wiki", action: "created_corpus", summary: `Started the rule set "${name}"`, subjectType: "corpus", subjectId: row.id, visibility: "household" });
   return summary(row, { active: 0, proposed: 0, retired: 0 }, 0);
 }
 
@@ -456,6 +518,11 @@ export async function decideRules(v: Viewer, corpusId: string, input: { ids: str
     await bump(corpusId);
     // A corpus with approved rules is in use: a draft becomes active the first time.
     if (c.status === "draft") await db.update(corpora).set({ status: "active" }).where(eq(corpora.id, corpusId));
+    // The approved rules become part of the graph: a change set this person delivers (their approval is the decision).
+    const { mirrorApproved } = await import("./graph");
+    const ids = rows.map((r) => r.id);
+    if (ids.length <= 60) await mirrorApproved(v, corpusId, ids);
+    else void mirrorApproved(v, corpusId, ids);
   }
   const refs = rows.map((r) => r.ref).slice(0, 12);
   await history(v, c, input.action === "approve" ? "corpus.rules.approved" : "corpus.rules.dropped", null, { count: rows.length, refs });
@@ -464,6 +531,31 @@ export async function decideRules(v: Viewer, corpusId: string, input: { ids: str
     summary: `${input.action === "approve" ? "Approved" : "Dropped"} ${rows.length} ${rows.length === 1 ? "rule" : "rules"} in "${c.name}"`, subjectType: "corpus", subjectId: corpusId, visibility: "household",
   });
   return { decided: rows.length };
+}
+
+export type DecideScope = { scope: "ids"; ids: string[] } | { scope: "text" | "all" } | { scope: "chapter"; chapter: string } | { scope: "definitions" };
+
+/**
+ * Approve or drop many at once: every proposed rule read from the text itself ("Approve all from the law text"),
+ * all of them, one chapter's, or the definitions. Rules read with low confidence are left for one-by-one review.
+ */
+export async function decideScope(v: Viewer, corpusId: string, input: DecideScope & { action: "approve" | "drop" }): Promise<{ decided: number }> {
+  assertManage(v);
+  await own(v, corpusId);
+  if (input.scope === "ids") return decideRules(v, corpusId, { ids: input.ids, action: input.action });
+  const rows = await db.select({ id: corpusRules.id, kind: corpusRules.kind, chapter: corpusRules.chapter, sourceId: corpusRules.sourceId, confidence: corpusRules.confidence })
+    .from(corpusRules).where(and(eq(corpusRules.corpusId, corpusId), eq(corpusRules.graphId, v.graphId), eq(corpusRules.status, "proposed")));
+  const textIds = new Set((await db.select({ sourceId: corpusSources.sourceId }).from(corpusSources).where(and(eq(corpusSources.corpusId, corpusId), eq(corpusSources.role, "text")))).map((r) => r.sourceId));
+  const sure = (r: { confidence: number | null }) => input.action === "drop" || r.confidence == null || r.confidence >= 0.55;
+  const pick = rows.filter((r) => {
+    if (input.scope === "definitions") return r.kind === "definition";
+    if (input.scope === "chapter") return r.chapter === input.chapter && sure(r);
+    if (input.scope === "text") return !!r.sourceId && textIds.has(r.sourceId) && sure(r);
+    return sure(r);
+  });
+  let decided = 0;
+  for (let i = 0; i < pick.length; i += 200) decided += (await decideRules(v, corpusId, { ids: pick.slice(i, i + 200).map((r) => r.id), action: input.action })).decided;
+  return { decided };
 }
 
 export type RulePatch = { ref?: string; title?: string; text?: string; modality?: Modality; severity?: Severity; checkHint?: string | null; appliesTo?: CorpusScope; status?: "active" | "retired" };
@@ -524,7 +616,7 @@ export async function activeRules(v: Viewer, corpusIds: string[], vector: number
     modality: corpusRules.modality, severity: corpusRules.severity, checkHint: corpusRules.checkHint, quote: corpusRules.quote, appliesTo: corpusRules.appliesTo,
     sourceId: corpusRules.sourceId, locator: corpusRules.locator, score,
   }).from(corpusRules).innerJoin(corpora, eq(corpora.id, corpusRules.corpusId))
-    .where(and(inArray(corpusRules.corpusId, corpusIds), eq(corpusRules.graphId, v.graphId), eq(corpora.graphId, v.graphId), eq(corpusRules.status, "active")))
+    .where(and(inArray(corpusRules.corpusId, corpusIds), eq(corpusRules.graphId, v.graphId), eq(corpora.graphId, v.graphId), eq(corpusRules.status, "active"), eq(corpusRules.kind, "rule")))
     .limit(400);
   return rows.map((r) => ({ ...r, score: Number(r.score), appliesTo: readScope(r.appliesTo), locator: (r.locator ?? {}) as Record<string, unknown> }))
     .sort((a, b) => b.score - a.score);

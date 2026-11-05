@@ -34,6 +34,12 @@ export const stateSchema = z.discriminatedUnion("type", [
       title: z.string().nullable(), description: z.string().nullable(), args: z.record(z.string(), z.unknown()), expiresAt: z.string(),
     })).max(10),
   }),
+  /** Page actions an answer ran in the person's browser (the saved text has no trace of the calls themselves). */
+  z.object({
+    type: z.literal("actions"),
+    messageId: z.string(),
+    calls: z.array(z.object({ name: z.string().max(80), status: z.string().max(20), note: z.string().max(400).nullish() })).max(10),
+  }),
 ]);
 export type ConversationState = z.infer<typeof stateSchema>;
 
@@ -59,15 +65,19 @@ export const decisionKey = (messageId: string, n: number) => `${messageId}#${n}`
 /** Fold the state messages of a conversation (oldest first). */
 export type McpApprovals = Map<string, Extract<ConversationState, { type: "mcp" }>["approvals"]>;
 
-export function foldState(contents: string[]): { decisions: Decisions; sensitive: boolean; mcp: McpApprovals } {
+export type ActionRecords = Map<string, Extract<ConversationState, { type: "actions" }>["calls"]>;
+
+export function foldState(contents: string[]): { decisions: Decisions; sensitive: boolean; mcp: McpApprovals; actions: ActionRecords } {
   const decisions: Decisions = new Map();
   const mcp: McpApprovals = new Map();
+  const actions: ActionRecords = new Map();
   let sensitive = false;
   for (const c of contents) {
     const s = decodeState(c);
     if (!s) continue;
     if (s.type === "sensitive") sensitive = true;
     else if (s.type === "mcp") mcp.set(s.messageId, [...(mcp.get(s.messageId) ?? []), ...s.approvals]);
+    else if (s.type === "actions") actions.set(s.messageId, [...(actions.get(s.messageId) ?? []), ...s.calls]);
     else {
       const key = decisionKey(s.messageId, s.n);
       // An undo keeps what was created (for the label) but the latest status wins.
@@ -76,5 +86,5 @@ export function foldState(contents: string[]): { decisions: Decisions; sensitive
       decisions.set(key, { status: s.status, result: s.result ?? prev?.result ?? null, auto: s.auto ?? prev?.auto ?? null, ...(why ? { why } : {}) });
     }
   }
-  return { decisions, sensitive, mcp };
+  return { decisions, sensitive, mcp, actions };
 }

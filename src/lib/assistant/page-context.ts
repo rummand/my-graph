@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 
-export const PAGE_KINDS = ["person", "node", "document", "change_set", "wiki", "library", "corpus", "client", "clinical_session"] as const;
+export const PAGE_KINDS = ["person", "node", "document", "change_set", "wiki", "library", "corpus", "client", "clinical_session", "connection"] as const;
 export type PageKind = (typeof PAGE_KINDS)[number];
 
 export type PageContext = { path: string; kind: PageKind; id: string; title?: string | null };
@@ -22,6 +22,8 @@ const ROUTES: { re: RegExp; kind: PageKind }[] = [
   { re: /^\/wiki\/([^/?#]+)/, kind: "wiki" }, // old address of a page (redirects to /artifacts/pages/…)
   { re: /^\/library\/([^/?#]+)/, kind: "library" },
   { re: /^\/corpora\/([^/?#]+)/, kind: "corpus" },
+  { re: /^\/rules\/([^/?#]+)/, kind: "corpus" }, // the Rules area (rule sets are corpora)
+  { re: /^\/connections\/(?!(?:aula|mac)(?:\/|$))([^/?#]+)/, kind: "connection" },
   { re: /^\/clinical\/clients\/([^/?#]+)/, kind: "client" },
   { re: /^\/clinical\/sessions\/([^/?#]+)/, kind: "clinical_session" },
 ];
@@ -32,7 +34,7 @@ const NOT_ITEMS = new Set(["new", "search", "all"]);
 /** Strip " · My Graph" and similar suffixes from a document title. */
 export function cleanPageTitle(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const t = raw.replace(/\s*[·|–—-]\s*My Graph\s*$/i, "").replace(/\s+/g, " ").trim();
+  const t = raw.replace(/(?:\s*[·|–—-]\s*My Graph)+\s*$/i, "").replace(/\s+/g, " ").trim();
   if (!t || /^my graph$/i.test(t)) return null;
   return t.length > 120 ? `${t.slice(0, 119).trimEnd()}…` : t;
 }
@@ -61,7 +63,8 @@ export const pageContextSchema = z.object({
 
 const KIND_WORDS: Record<PageKind, string> = {
   person: "the person", node: "the item", document: "the document", change_set: "the change set",
-  wiki: "the page", library: "the file", corpus: "the corpus", client: "the client record", clinical_session: "the session",
+  wiki: "the page", library: "the file", corpus: "the rule set", client: "the client record", clinical_session: "the session",
+  connection: "the connection",
 };
 
 /** The hint the model gets. Titles are data (quoted), never instructions. */

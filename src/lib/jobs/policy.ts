@@ -4,8 +4,8 @@
  * sources need a job after a restart (backfill).
  */
 
-export type JobKind = "ingest.read" | "ingest.rebuild" | "clinical.transcribe" | "clinical.draft" | "export.build";
-export const JOB_KINDS: JobKind[] = ["ingest.read", "ingest.rebuild", "clinical.transcribe", "clinical.draft", "export.build"];
+export type JobKind = "ingest.read" | "ingest.rebuild" | "clinical.transcribe" | "clinical.draft" | "export.build" | "corpus.work";
+export const JOB_KINDS: JobKind[] = ["ingest.read", "ingest.rebuild", "clinical.transcribe", "clinical.draft", "export.build", "corpus.work"];
 /** Clinical jobs: their subject is the session's audio or transcript source (sensitive, private to the clinician). */
 export const CLINICAL_KINDS: JobKind[] = ["clinical.transcribe", "clinical.draft"];
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";

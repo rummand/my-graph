@@ -293,6 +293,16 @@ const messages: MessageTree = {
     use: "Ret til og gem",
     viaMux: "Læst gennem mux.",
   },
+  assistantActions: {
+    insert: "Skriv dette ind på siden ved markøren?",
+    replace: "Erstat den markerede tekst med dette?",
+    addSection: "Tilføj afsnittet “{heading}” til siden?",
+    replaceSection: "Omskriv afsnittet “{section}” med dette?",
+    appendSection: "Tilføj dette sidst i “{section}”?",
+    newSection: "Tilføj et nyt afsnit “{section}”?",
+    changeStyle: "Skift dokumentet til stilen “{style}”?",
+    styleFailed: "Kunne ikke skifte stil. Prøv igen.",
+  },
 };
 
 export default messages;

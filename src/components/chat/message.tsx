@@ -18,8 +18,9 @@ import { shortModel } from "./recency";
 import { ClarifyPicker } from "./clarify-picker";
 import { LiveSteps, WorkedLine } from "./work-steps";
 import { AnswerCompliance } from "@/components/compliance/answer";
+import { PageActionCard, type ActionView } from "@/components/assistant/action-card";
 
-export type UiMessage = MessageView & { uid: string; streaming?: boolean; live?: Citation[]; fresh?: boolean };
+export type UiMessage = MessageView & { uid: string; streaming?: boolean; live?: Citation[]; fresh?: boolean; actions?: ActionView[] };
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -35,8 +36,10 @@ export function Question({ m, first }: { m: UiMessage; first: boolean }) {
   );
 }
 
-export function Answer({ m, conversationId, onDecided, canClarify, onClarify, onFeedback }: {
+export function Answer({ m, conversationId, onDecided, canClarify, onClarify, onFeedback, onAction }: {
   m: UiMessage; conversationId: string | null; onDecided: (messageId: string, p: ProposalView) => void;
+  /** Page actions in this answer: the person's decision on a change (the Ask window). */
+  onAction?: (callId: string, approve: boolean) => Promise<{ ok: boolean; label?: string }>;
   /** The latest answer, and nothing is being written: its clarifying question can be answered. */
   canClarify: boolean;
   onClarify: (text: string) => void;
@@ -54,6 +57,12 @@ export function Answer({ m, conversationId, onDecided, canClarify, onClarify, on
           <WorkedLine steps={m.steps} thoughtMs={m.thoughtMs} streaming={m.streaming} />
           <Markdown text={m.content} citations={citations} caret={m.streaming} />
         </>
+      )}
+
+      {m.actions && m.actions.length > 0 && onAction && (
+        <div aria-live="polite">
+          {m.actions.map((a) => <PageActionCard key={a.callId} a={a} onDecide={onAction} />)}
+        </div>
       )}
 
       {!m.streaming && m.clarify && (

@@ -1111,6 +1111,12 @@ export const corpora = pgTable("corpora", {
   rulesVersion: integer("rules_version").notNull().default(1),
   /** The last "Read rules": { status: running|done|failed, done, total, found, error, at, mode }. */
   readState: jsonb("read_state").$type<Record<string, unknown>>(),
+  /** "Add from a link": the page the rule set was started from (the crawl starts here; "Check for changes" re-reads it). */
+  startUrl: text("start_url"),
+  /** The crawl and the four reading passes (src/lib/corpus/work.ts WorkState): stage, counts per pass, model calls, report. */
+  work: jsonb("work").$type<Record<string, unknown>>(),
+  /** Pass 4: plain-language summary of the whole set and per chapter, open questions, the completeness report. */
+  understanding: jsonb("understanding").$type<Record<string, unknown>>(),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -1167,9 +1173,62 @@ export const corpusRules = pgTable("corpus_rules", {
   corpusVersion: text("corpus_version"),
   decidedBy: uuid("decided_by"),
   decidedAt: timestamp("decided_at", { withTimezone: true }),
+  /** rule | definition (a term the text defines: never checked, shown with the rules and in the graph). */
+  kind: text("kind").notNull().default("rule"),
+  /** The unit of the text it was read from ("§ 5, stk. 2", "Art. 6(1)(a)"): the coverage map's key. */
+  unitKey: text("unit_key"),
+  /** The chapter it sits in ("Kapitel 3 Behandling af oplysninger"), for grouping. */
+  chapter: text("chapter"),
+  /** How sure the reader was, 0..1 (null for rules people wrote). */
+  confidence: real("confidence"),
+  /** Which reading pass found it (2 extraction, 3 completeness re-read). */
+  pass: integer("pass"),
+  /** Cross-references in its unit: [{ ref, unitKey?, external? }] ("§ 12", "lov nr. 502"). */
+  refs: jsonb("refs").$type<Record<string, unknown>[]>().notNull().default([]),
+  /** Guidance attached as interpretation: [{ sourceId, chunkId, quote, title, url }]. */
+  interpretation: jsonb("interpretation").$type<Record<string, unknown>[]>().notNull().default([]),
+  /** Its node in the graph (kind rule / definition) once a person approved it. */
+  nodeId: uuid("node_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [index("corpus_rules_corpus_idx").on(t.corpusId, t.status), index("corpus_rules_graph_idx").on(t.graphId, t.status)]);
+
+/**
+ * The coverage map of a rule set (reading pass 1): every unit of its text — §, stk., nr., litra, article, paragraph,
+ * point, recital, annex — with where it is in its source. Pass 2/3 mark what each unit gave (rules, a definition, or
+ * why it has none: a heading, commencement, repeal …), so the completeness report can account for every unit.
+ */
+export const corpusUnits = pgTable("corpus_units", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  corpusId: uuid("corpus_id").notNull().references(() => corpora.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  sourceId: uuid("source_id").notNull().references(() => sources.id, { onDelete: "cascade" }),
+  /** "§ 5, stk. 2, nr. 3", "Art. 6(1)(a)", "Bilag 1". Unique within a source. */
+  key: text("key").notNull(),
+  /** paragraph | stk | nr | litra | article | para | point | recital | annex | chapter | section | heading */
+  kind: text("kind").notNull(),
+  parentKey: text("parent_key"),
+  chapter: text("chapter"),
+  idx: integer("idx").notNull(),
+  charStart: integer("char_start").notNull(),
+  charEnd: integer("char_end").notNull(),
+  /** The page of the official PDF it is on, when the PDF was found. */
+  page: integer("page"),
+  /** A hash of the unit's words: "Check for changes" re-reads only units whose text changed. */
+  hash: text("hash").notNull(),
+  /** open | ruled | definition | no_rule | heading */
+  status: text("status").notNull().default("open"),
+  /** Why a unit has no rule ("commencement", "repeal", "purpose", the reader's own words). */
+  note: text("note"),
+  /** Flags found in the text: definition, scope, exception, deadline, penalty. */
+  flags: jsonb("flags").$type<string[]>().notNull().default([]),
+  /** Cross-references read from the text: [{ ref, unitKey?, external? }]. */
+  refs: jsonb("refs").$type<Record<string, unknown>[]>().notNull().default([]),
+  /** When pass 2 / pass 3 read it. */
+  readAt: timestamp("read_at", { withTimezone: true }),
+  rereadAt: timestamp("reread_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("corpus_units_uq").on(t.corpusId, t.sourceId, t.key), index("corpus_units_corpus_idx").on(t.corpusId, t.status)]);
 
 /**
  * What a check found: one rule against one text (a wiki page, a document, a chat answer, a change set). Advisory —

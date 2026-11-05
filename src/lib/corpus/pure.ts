@@ -6,8 +6,26 @@
 import { z } from "zod";
 import { clip, locate, overlap } from "@/lib/compliance/text";
 
-export const CORPUS_KINDS = ["legislation", "regulation", "internal_governance", "guardrail", "policy", "standard", "other"] as const;
+/**
+ * What a rule set is, in words people use: a law (Danish act, executive order, EU regulation), an agreement, house
+ * rules, a school's or institution's rules, guidelines (an authority's guidance, a standard) or our own rules. The
+ * earlier kinds (legislation, regulation, internal governance …) are still read and shown as their new names.
+ */
+export const RULE_SET_KINDS = ["law", "agreement", "house_rules", "school", "guidelines", "own_rules"] as const;
+export const LEGACY_KINDS = ["legislation", "regulation", "internal_governance", "guardrail", "policy", "standard", "other"] as const;
+export const CORPUS_KINDS = [...RULE_SET_KINDS, ...LEGACY_KINDS] as const;
 export type CorpusKind = (typeof CORPUS_KINDS)[number];
+export type RuleSetKind = (typeof RULE_SET_KINDS)[number];
+
+const LEGACY_TO_KIND: Record<string, RuleSetKind> = {
+  legislation: "law", regulation: "law", internal_governance: "own_rules", guardrail: "own_rules", policy: "own_rules", standard: "guidelines", other: "own_rules",
+};
+
+/** The kind as one of the six names people see (an earlier kind becomes its new name). */
+export function ruleSetKind(kind: string | null | undefined): RuleSetKind {
+  if ((RULE_SET_KINDS as readonly string[]).includes(kind ?? "")) return kind as RuleSetKind;
+  return LEGACY_TO_KIND[kind ?? ""] ?? "own_rules";
+}
 export const BINDINGS = ["mandatory", "advisory"] as const;
 export type Binding = (typeof BINDINGS)[number];
 export const CORPUS_STATUSES = ["draft", "active", "retired"] as const;

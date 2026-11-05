@@ -20,6 +20,7 @@ import { AlsoInSection } from "@/components/links/also-in";
 import { WhoSaidField } from "@/components/history/live";
 import { LivingProfile } from "@/components/profile/living-profile";
 import type { ProfileView } from "@/lib/profile/types";
+import { usePersonAssistantActions } from "./assistant-actions";
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -30,6 +31,7 @@ export function PersonProfileView({ initial, living }: { initial: PersonProfile;
   const canWrite = profile.viewer.role !== "guest";
   const { t } = useFmt();
   const family = profile.graph?.family ?? true;
+  usePersonAssistantActions(living, reload);
 
   return (
     <div style={personStyle(id) as CSSProperties}>

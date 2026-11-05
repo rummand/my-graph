@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { pageContextSchema } from "./page-context";
+import { actionListSchema, pageViewSchema, selectionSchema } from "./page-actions";
 
 export function jsonError(status: number, error: string, extra: Record<string, unknown> = {}) {
   return NextResponse.json({ error, ...extra }, { status });
@@ -38,6 +39,11 @@ export const chatRequestSchema = z.object({
   question: z.string({ message: "Type a question first." }).trim().min(1, "Type a question first.").max(4000, "Keep the question under 4,000 characters."),
   /** What is open in the app when asked from the Ask panel (re-read as the viewer before use). */
   page: pageContextSchema.nullish(),
+  /** The open page's actions the assistant may call (run in the browser, as the person; see ./page-actions). */
+  actions: actionListSchema.nullish(),
+  /** What the list on the page shows (folder, filter), and text the person selected on it. */
+  view: pageViewSchema.nullish(),
+  selection: selectionSchema.nullish(),
 }).strict();
 
 /** PUT /api/chat/active: make a saved session active, or null for a new conversation. */

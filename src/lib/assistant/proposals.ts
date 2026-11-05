@@ -88,7 +88,7 @@ export const MAX_PROPOSALS = 4;
 const OPEN = "<proposals>";
 const CLOSE = "</proposals>";
 /** Blocks at the end of an answer that are parsed, never shown as text. */
-const HIDDEN_OPENS = ["<proposals>", "<clarify>"];
+const HIDDEN_OPENS = ["<proposals>", "<clarify>", "<page_action>"];
 
 const ALIASES: Record<string, Proposal["type"]> = {
   propose_reminder: "propose_reminder", reminder: "propose_reminder",

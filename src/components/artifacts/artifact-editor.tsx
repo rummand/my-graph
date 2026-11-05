@@ -13,6 +13,7 @@ import { useFormatDate, useT } from "@/lib/i18n/client";
 import { ArtifactPreview } from "./artifact-preview";
 import { ContentEditor } from "./block-editor";
 import { ExportMenu } from "./export-menu";
+import { useDocumentAssistantActions } from "./assistant-actions";
 import { ArtifactCompliance, PublishCompliance } from "@/components/compliance/artifact";
 
 type Loaded = { artifact: ArtifactView; set: DesignSetView };
@@ -107,6 +108,11 @@ export function ArtifactEditor({ initial, sets, graphName }: { initial: Loaded; 
   async function changeSet(id: string) {
     await save({ designSetId: id });
   }
+
+  useDocumentAssistantActions({
+    artifactId: a.id, canEdit, content, change, sets, currentSetId: a.designSetId,
+    changeSet: async (id) => { if (!(await save({ designSetId: id }))) throw new Error(t("artifacts.assistantActions.styleFailed")); },
+  });
 
   async function openVersions() {
     setShowVersions(true);

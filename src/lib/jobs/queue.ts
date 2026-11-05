@@ -100,11 +100,13 @@ const leaseSql = sql.raw(`interval '${Math.round(LEASE_MS / 1000)} seconds'`);
  * Claim the next due job (highest priority, then oldest), skipping rows another worker holds, heavy jobs when
  * `lightOnly`, and things that already have a running job.
  */
-export async function claimNext(lightOnly: boolean): Promise<JobRow | null> {
+export async function claimNext(lightOnly: boolean, kinds?: string[]): Promise<JobRow | null> {
+  // Only kinds this process can run: a server started with older code must leave newer kinds to the others.
+  const known = kinds?.length ? sql`and j.kind in (${sql.join(kinds.map((k) => sql`${k}`), sql`, `)})` : sql``;
   const rows = await db.execute<RawJob>(sql`
     with next as (
       select j.id from jobs j
-      where j.status = 'queued' and j.run_after <= now()
+      where j.status = 'queued' and j.run_after <= now() ${known}
         and (${!lightOnly}::boolean or j.heavy = false)
         and (j.subject_id is null or not exists (
           select 1 from jobs r where r.subject_id = j.subject_id and r.status = 'running' and r.id <> j.id))

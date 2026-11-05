@@ -25,6 +25,12 @@ import { ChatEmpty } from "./empty";
 import { Answer, Question, type UiMessage } from "./message";
 import { ThreadMenu } from "./thread-menu";
 import type { Starter } from "./recency";
+import type { ActionView } from "@/components/assistant/action-card";
+import { currentPageActions, prepareCall, runPrepared, toManifest } from "@/components/assistant/page-actions";
+import type { ClientActionCall, ClientActionOutcome, PageSelection, PageView } from "@/lib/assistant/page-actions";
+
+/** What the Ask window sends besides the open record: the list's view, the selection and the page's actions. */
+export type PageExtras = { view: PageView | null; selection: PageSelection | null; actions: boolean };
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 
@@ -41,7 +47,7 @@ function setActiveSession(conversationId: string | null) {
 }
 
 export function ChatApp({ conversations: initialList, conversation, mux, canFix, starters, graphKind = "other", initialQuestion, startedNew = false,
-  variant = "page", pageContext = null, askRef, onBusy, onActive, onOpenSession, panelActions }: {
+  variant = "page", pageContext = null, pageExtras, askRef, onBusy, onActive, onOpenSession, panelActions, onAttention, onAnswered }: {
   conversations: ConversationSummary[];
   conversation: ConversationView | null;
   mux: MuxStatus;
@@ -55,8 +61,14 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
   startedNew?: boolean;
   /** "page": /chat, full size. "panel": the Ask panel beside every page (scrolls itself, no URL changes). */
   variant?: "page" | "panel";
-  /** Panel: what is open on the page (sent with each question while its chip is kept). */
+  /** Panel: what is open on the page (sent with each question unless the person turned page sharing off). */
   pageContext?: PageContext | null;
+  /** Panel: read when a question is sent (null: the person isn't sharing the page). */
+  pageExtras?: () => PageExtras | null;
+  /** Panel: a page action is waiting for the person's approval (the launcher shows a dot). */
+  onAttention?: (waiting: boolean) => void;
+  /** Panel: an answer finished (the launcher shows a dot when the window is closed). */
+  onAnswered?: () => void;
   /** Lets the shell's "Ask anything" put a question to this session. */
   askRef?: MutableRefObject<((q: string) => void) | null>;
   onBusy?: (busy: boolean) => void;
@@ -156,10 +168,73 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
     window.history.replaceState(null, "", "/chat");
   }, [startedNew, panel]);
 
-  // The page's chip: kept until removed, and back when another page is opened.
-  const [pageOff, setPageOff] = useState(false);
-  useEffect(() => { setPageOff(false); }, [pageContext?.path]);
-  const page = panel && pageContext && !pageOff ? pageContext : null;
+  // The page that's open (the Ask window decides whether it is shared).
+  const page = panel && pageContext ? pageContext : null;
+
+  /* ── Page actions the assistant calls: read ones run at once, changes wait for the person's approval. ── */
+  const decisions = useRef(new Map<string, (approve: boolean) => Promise<ClientActionOutcome>>());
+  const [asking, setAsking] = useState(0);
+  useEffect(() => { onAttention?.(asking > 0); }, [asking, onAttention]);
+
+  const patchAction = useCallback((uid: string, callId: string, patch: Partial<ActionView> | ActionView) => {
+    setMessages((ms) => ms.map((m) => {
+      if (m.uid !== uid) return m;
+      const list = m.actions ?? [];
+      const has = list.some((a) => a.callId === callId);
+      return { ...m, actions: has ? list.map((a) => (a.callId === callId ? { ...a, ...patch } : a)) : [...list, patch as ActionView] };
+    }));
+  }, []);
+
+  async function reportAction(conversationId: string | null, callId: string, o: ClientActionOutcome) {
+    if (!conversationId) return;
+    const body = o.status === "done" ? { callId, status: o.status, result: o.result, summary: o.summary ?? null }
+      : o.status === "declined" ? { callId, status: o.status }
+        : { callId, status: o.status, error: o.error ?? null };
+    try {
+      await fetch(`/api/chat/${conversationId}/action`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    } catch { /* the answer gives up waiting by itself */ }
+  }
+
+  async function handleAction(uid: string, call: ClientActionCall) {
+    const conversationId = activeIdRef.current;
+    const prep = prepareCall(currentPageActions(), call);
+    const base: ActionView = { callId: call.callId, title: call.title, question: call.title, preview: null, danger: call.danger, status: "running" };
+    if (!prep.ok) {
+      const o = prep.outcome;
+      patchAction(uid, call.callId, { ...base, status: o.status, error: "error" in o ? o.error ?? null : null });
+      return reportAction(conversationId, call.callId, o);
+    }
+    const view: ActionView = { ...base, title: prep.action.title, question: prep.question, preview: prep.preview, danger: prep.approval ? "change" : "read" };
+    const finish = (o: ClientActionOutcome) => {
+      patchAction(uid, call.callId, { status: o.status, summary: o.status === "done" ? o.summary ?? null : null, error: o.status === "failed" || o.status === "unavailable" ? o.error ?? null : null });
+      void reportAction(conversationId, call.callId, o);
+      return o;
+    };
+    if (!prep.approval) {
+      patchAction(uid, call.callId, view);
+      finish(await runPrepared(prep));
+      return;
+    }
+    // A change: the card asks; the person's answer runs it (or not).
+    patchAction(uid, call.callId, { ...view, status: "asking" });
+    setAsking((n) => n + 1);
+    decisions.current.set(call.callId, async (approve) => {
+      decisions.current.delete(call.callId);
+      setAsking((n) => Math.max(0, n - 1));
+      if (!approve) return finish({ status: "declined" });
+      patchAction(uid, call.callId, { status: "running" });
+      const again = prepareCall(currentPageActions(), call);
+      return finish(again.ok ? await runPrepared(again) : again.outcome);
+    });
+  }
+
+  async function decideAction(callId: string, approve: boolean): Promise<{ ok: boolean; label?: string }> {
+    const fn = decisions.current.get(callId);
+    if (!fn) return { ok: false };
+    const o = await fn(approve);
+    if (o.status === "done" || o.status === "declined") return { ok: true, label: o.status === "done" ? o.summary ?? t("chat.actions.done") : undefined };
+    throw new Error(o.status === "failed" ? o.error : o.error ?? t("chat.actions.unavailable"));
+  }
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
@@ -230,10 +305,13 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
     const now = new Date().toISOString();
     const stamp = Date.now();
     const blank = { citations: [], proposals: [], model: null, route: null, createdAt: now, steps: [] as AssistantStep[], thoughtMs: null, clarify: null, feedback: null };
+    const answerUid = `a-${stamp}`;
+    const extras = panel ? pageExtras?.() ?? null : null;
+    const manifest = extras?.actions ? toManifest(currentPageActions()) : [];
     setMessages((ms) => [
       ...ms.map((m) => (m.fresh ? { ...m, fresh: false } : m)),
       { ...blank, id: `local-${stamp}`, uid: `q-${stamp}`, fresh: true, role: "user", content: question },
-      { ...blank, id: "pending", uid: `a-${stamp}`, fresh: true, role: "assistant", content: "", streaming: true, live: [] },
+      { ...blank, id: "pending", uid: answerUid, fresh: true, role: "assistant", content: "", streaming: true, live: [] },
     ]);
     setStreaming(true);
     const ac = new AbortController();
@@ -243,7 +321,13 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ conversationId: activeIdRef.current, question, ...(page ? { page } : {}) }),
+        body: JSON.stringify({
+          conversationId: activeIdRef.current, question,
+          ...(page && page.kind ? { page: { path: page.path, kind: page.kind, id: page.id, title: page.title ?? null } } : {}),
+          ...(manifest.length ? { actions: manifest } : {}),
+          ...(extras?.view && (extras.view.section || extras.view.detail) ? { view: extras.view } : {}),
+          ...(extras?.selection ? { selection: extras.selection } : {}),
+        }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) {
@@ -299,11 +383,14 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
             setTitle(nt);
             setList((l) => l.map((c) => (c.id === activeIdRef.current ? { ...c, title: nt } : c)));
           }
+        } else if (ev.event === "client_action") {
+          void handleAction(answerUid, data as unknown as ClientActionCall);
         } else if (ev.event === "error") {
           setError(String(data.message ?? t("chat.errors.whileAnswering")));
         }
       }
       if (!gotDone) patchLast((m) => ({ ...m, streaming: false, live: undefined }));
+      else onAnswered?.();
     } catch (e) {
       if (ac.signal.aborted) {
         patchLast((m) => ({ ...m, streaming: false, live: undefined, content: `${m.content}${m.content ? "\n\n" : ""}_${t("chat.stopped")}_` }));
@@ -314,6 +401,12 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
         setQueue([]);
       }
     } finally {
+      // A card still waiting when the answer ended (stopped, or the connection broke) can't do anything any more.
+      if (decisions.current.size) {
+        for (const id of decisions.current.keys()) patchAction(answerUid, id, { status: "unavailable" });
+        decisions.current.clear();
+        setAsking(0);
+      }
       window.clearTimeout(stopTimer.current);
       streamingRef.current = false;
       setStreaming(false);
@@ -500,7 +593,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
           <div key={m.uid}>
             {m.role === "user"
               ? <Question m={m} first={i === 0 && !panel} />
-              : <Answer m={m} conversationId={conversationId} onDecided={decided} onFeedback={feedback}
+              : <Answer m={m} conversationId={conversationId} onDecided={decided} onFeedback={feedback} onAction={decideAction}
                   canClarify={!streaming && m.uid === lastAnswerId} onClarify={(t) => submit(t)} />}
             {summary && m.id === summary.upTo && <SummaryDivider text={summary.text} />}
           </div>
@@ -509,23 +602,6 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
       <div ref={bottomRef} />
     </div>
   );
-
-  const chip = page?.title ? (
-    <div className="flex items-center gap-1.5 px-3 pt-2.5">
-      <span className="inline-flex min-w-0 items-center gap-1 rounded-full bg-accent-tint py-0.5 pl-2.5 pr-1 text-xs text-accent">
-        <span className="shrink-0 font-medium">{t("chat.session.about")}</span>
-        <span className="truncate">{page.title}</span>
-        <button type="button" onClick={() => setPageOff(true)} aria-label={t("chat.session.aboutRemove", { title: page.title })} title={t("chat.session.aboutRemove", { title: page.title })}
-          className="inline-flex size-5 shrink-0 items-center justify-center rounded-full hover:bg-accent/15"><X aria-hidden className="size-3" /></button>
-      </span>
-    </div>
-  ) : panel && pageOff && pageContext?.title ? (
-    <div className="px-3 pt-2.5">
-      <button type="button" onClick={() => setPageOff(false)} className="rounded-full px-2 py-0.5 text-xs text-muted ring-1 ring-inset ring-line hover:text-fg">
-        {t("chat.session.aboutAdd", { title: pageContext.title })}
-      </button>
-    </div>
-  ) : null;
 
   const footer = (
     <>
@@ -565,7 +641,7 @@ export function ChatApp({ conversations: initialList, conversation, mux, canFix,
       </AnimatePresence>
       <Composer value={input} onChange={setInput} onSend={(p) => void sendFromComposer(p)} onStop={() => void stop()}
         streaming={streaming} stopping={stopping} sensitive={sensitive} empty={empty} inputRef={inputRef}
-        top={chip} inputId={panel ? "assistant-input" : "chat-input"} />
+        inputId={panel ? "assistant-input" : "chat-input"} />
     </>
   );
 
