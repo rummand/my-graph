@@ -1,6 +1,5 @@
-import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
-import { Readable } from "node:stream";
+import { fileStream } from "@/lib/storage/file-stream";
 import { z } from "zod";
 import { requireUserApi } from "@/lib/auth";
 import { mediaPath, mediaType, parseRange } from "@/lib/docs/media";
@@ -50,7 +49,7 @@ async function serve(req: Request, ctx: { params: Promise<{ file: string }> }, h
   if (range) out["Content-Range"] = `bytes ${start}-${end}/${st.size}`;
   const status = range ? 206 : 200;
   if (head || length === 0) return new Response(null, { status, headers: out });
-  const body = Readable.toWeb(createReadStream(full, { start, end })) as ReadableStream<Uint8Array>;
+  const body = fileStream(full, { start, end });
   return new Response(body, { status, headers: out });
 }
 

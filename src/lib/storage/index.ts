@@ -3,10 +3,9 @@
  * <sha256[0:2]>/<sha256>, written once and never modified. The same bytes uploaded twice are stored once.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { fileStream } from "./file-stream";
 
 export function uploadDir(): string {
   return path.resolve(process.env.UPLOAD_DIR || "./data/uploads");
@@ -59,8 +58,7 @@ export async function statStored(key: string): Promise<{ size: number } | null> 
 
 /** A web ReadableStream of the file, optionally a byte range (inclusive end). */
 export function streamStored(key: string, range?: { start: number; end: number }): ReadableStream<Uint8Array> {
-  const node = createReadStream(pathFor(key), range ? { start: range.start, end: range.end } : undefined);
-  return Readable.toWeb(node) as unknown as ReadableStream<Uint8Array>;
+  return fileStream(pathFor(key), range);
 }
 
 export async function deleteStored(key: string): Promise<void> {
