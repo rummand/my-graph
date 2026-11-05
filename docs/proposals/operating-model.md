@@ -13,7 +13,7 @@ My Graph already holds what actually happens in a company — mail, meetings, ch
 This proposal adds that second world **to the same graph**, in a small, universal grammar, and lets the first world keep it alive:
 
 1. **Facts** — what is (built).
-2. **The operating model** — how a business works, expressed in our own **Enterprise Kernel** (section 5): nine questions every organisation answers (why, for whom, what, how, who, with what, under which rules, how well, what is changing), a fixed grammar of relations and five laws. Established frameworks — APQC, BIZBOK, ITIL, COBIT, IT4IT, SAFe, OKR, COSO, Team Topologies and more — become optional, licence-aware **packs** mapped onto the kernel. Seeded from our own SME edition, then grown from evidence.
+2. **The operating model** — how a business works, expressed in our own **Enterprise Kernel** (section 5): nine questions every organisation answers (why, for whom, what, how, who, with what, under which rules, how well, what is changing), a fixed grammar of relations, seven laws and a jurisdiction layer. Established frameworks — APQC, BIZBOK, ITIL, COBIT, IT4IT, SAFe, OKR, COSO, Team Topologies and more — become optional, licence-aware **packs** mapped onto the kernel. Seeded from our own SME edition, then grown from evidence.
 3. **Lenses** — how people look at it: declared viewpoints for a function or a question (enterprise architecture, customer service, finance, HR, compliance, management, a new employee), computed live from facts, every answer traceable to its source.
 
 The bridge between facts and model is **anchoring**: everything that comes in is placed on the capability and process it belongs to — proposed by agents, confirmed by people as patterns, not one item at a time.
@@ -193,13 +193,15 @@ A small, fixed vocabulary of typed relations — the same in every graph, labell
 
 ### 5.4 The kernel's laws
 
-Five rules the kernel enforces — each a built-in rule (Rules) whose breaches show up as proposals, not as errors:
+Seven rules the kernel enforces — each a built-in rule (Rules) whose breaches show up as proposals, not as errors:
 
 1. **Everything is anchored.** A model object without evidence is a hypothesis and is shown as one.
 2. **Every capability has an owner and a reason.** No owner → proposal to assign one; no goal it contributes to → question to the owner.
 3. **Every rule has a control, and every control has proof.** Missing or expired proof is a commitment someone owns.
 4. **Every case runs through a value stream.** Work that fits no stream reveals a capability nobody named yet.
 5. **Every change is a branch.** The model is never edited in place; reorganisations, new processes and new rules are change sets with impact, reviewed and delivered by people.
+6. **Every obligation has a jurisdiction.** A rule that binds the business names the legal order it comes from (a country, the EU, a state, a municipality, a contract) and the version in force; where the business operates decides which apply.
+7. **The stricter law wins, and the overruled one is named.** When jurisdictions overlap (the EU and a member state, a group policy and local law, two countries for one employee), the kernel applies the strictest obligation that is lawful in each place, and shows which one lost and why.
 
 ### 5.5 The self-steering loop (from the Viable System Model)
 
@@ -279,7 +281,75 @@ The kernel is fractal: the nine questions apply to a family as much as to a comp
 - **Federated:** two organisations can share a lens on their kernels without sharing their graphs.
 - **Licence-safe:** the kernel and the SME edition are ours; third-party frameworks are packs that ship only where their terms allow.
 
-### 5.10 One framework
+### 5.10 Jurisdictions: the laws the kernel abides by in every country
+
+A business does not operate in "the law"; it operates in **jurisdictions** — and every jurisdiction it touches brings obligations. The kernel makes that explicit so the operating model is lawful by construction, country by country.
+
+**New kernel objects and relations**
+
+| Object / relation | Meaning |
+| --- | --- |
+| **Legal entity** | The company (or each company in a group) — registration number, legal form, seat |
+| **Jurisdiction** | A legal order: the EU, a country, a state/region, a municipality, a sector regulator; with its language and official sources |
+| `operates_in` | Legal entity → Jurisdiction, *derived from evidence*: where it is registered, has sites (Place), employs people, sells to customers, processes data, holds licences |
+| `subject_to` | Capability / Process / Offering / System / Role → Rule, *computed* from operates_in + the rule's scope (sector, size thresholds, activities) |
+| `in_force` | Rule version → period (from–to), so the model can be read as of any date |
+| `implements` | National rule → EU directive (and which options the country chose) |
+| `conflicts_with` | Rule ↔ Rule across jurisdictions, resolved by law 7 and shown |
+
+**How it works**
+
+1. **Footprint from evidence.** The graph already knows where the company has sites, staff, customers, suppliers and data (connectors, contracts, invoices, payroll). From that it derives the jurisdictions it operates in — proposed, approved by a person, and updated when the footprint changes ("first customer in Germany → German consumer and VAT rules now apply").
+2. **Law packs per jurisdiction.** Each jurisdiction has a baseline pack covering the legal domains every business faces (table below), read from official sources through Rules (retsinformation.dk, EUR-Lex, and each country's equivalent) with versions and effective dates, and EU directives linked to their national implementations.
+3. **Applicability, not a checklist.** Rules carry their own scope (sector, headcount and turnover thresholds, activities such as "sells to consumers", "processes health data", "is an essential entity"). The kernel computes which rules bind which capability, process, offering, system and role — "what applies to us, here, now" — with the evidence for each step.
+4. **Conflicts named.** Overlaps are resolved by law 7 and shown, never hidden.
+5. **Ahead of time.** New and changed laws are read when published; their impact on the model is computed before they apply (regulatory foresight, 11.7), as commitments with owners and dates.
+
+**The legal kernel: domains every business faces in every country**
+
+Every jurisdiction regulates the same twenty domains; what differs is the content. Each domain is a slot in the law pack, bound to the kernel elements it governs.
+
+| # | Legal domain | Binds (kernel) | EU / Denmark examples (verify current versions) |
+| --- | --- | --- | --- |
+| 1 | Company and corporate law | Legal entity, board, owners, decisions | Selskabsloven; beneficial-owner registration |
+| 2 | Bookkeeping and financial reporting | Money capabilities, systems, evidence, retention | Bogføringsloven (digital bookkeeping, retention), Årsregnskabsloven; CSRD for those in scope |
+| 3 | Tax, VAT and customs | Invoicing, pricing, cross-border sales | Momsloven, EU VAT rules incl. e-invoicing and digital reporting as they phase in |
+| 4 | Employment and working terms | People capabilities, roles, contracts | Funktionærloven, Ferieloven, collective agreements, EU working-time and transparent-working-conditions rules |
+| 5 | Working environment and safety | Places, activities, roles | Arbejdsmiljøloven, risk assessments (APV) |
+| 6 | Equal treatment and anti-discrimination | Recruitment, pay, promotion | EU equal-treatment directives; pay-transparency rules as they apply |
+| 7 | Data protection and privacy | Information objects, systems, every process touching personal data | GDPR, Databeskyttelsesloven, ePrivacy/cookie rules |
+| 8 | Cyber security and resilience | Systems, incidents, suppliers | NIS2 and national implementation; DORA for financial entities |
+| 9 | AI and automated decisions | Agents, models, automated steps | EU AI Act (risk classes, transparency, human oversight), GDPR art. 22 |
+| 10 | Consumer protection and marketing | Offerings, sales, customer care | Forbrugeraftaleloven, Markedsføringsloven, EU consumer rules, cooling-off and information duties |
+| 11 | Contracts and commercial law | Customer and supplier contracts, commitments | Contract law, sale of goods, payment-terms rules, late-payment interest |
+| 12 | Competition | Pricing, partnerships | Konkurrenceloven, EU competition rules |
+| 13 | Anti-money-laundering, sanctions | Customers, payments, partners | Hvidvaskloven, EU sanctions lists (for entities in scope) |
+| 14 | Anti-bribery and corruption | Sales, purchasing, gifts | Criminal law provisions; company policies |
+| 15 | Whistleblowing | Roles, reporting channel, cases | Whistleblower Directive and the Danish act (thresholds apply) |
+| 16 | Product safety and liability | Offerings, delivery, returns | General product safety rules, CE marking where relevant, product liability |
+| 17 | Accessibility | Offerings, websites, apps | European Accessibility Act and national implementation |
+| 18 | Environment and sustainability | Places, assets, supply chain | Environmental permits, waste rules, CSRD/ESRS and due-diligence rules for those in scope |
+| 19 | Intellectual property and trade secrets | Information, offerings, people leaving | Copyright, trademarks, trade-secrets rules |
+| 20 | Records, retention and e-signatures | Evidence, documents, signatures | Retention periods by law; eIDAS for signatures and seals |
+
+Sector packs add their regulators on top (health, finance, food, transport, energy, education, public sector).
+
+**Family and practice graphs** use the same layer at their scale: a household operates in its country and municipality (tenancy, school, tax, inheritance, consumer rights); a clinic in its health and data-protection law.
+
+**My Graph itself must abide by the same laws**
+
+The kernel runs inside My Graph, so the product is held to the same standard in every country it is offered:
+
+- **Data protection:** My Graph is the customer's processor for their graphs (data-processing agreement, records, sub-processors listed, transfers only with a lawful basis); a controller for its own accounts and billing. Rights of access, export and deletion are already built (export, account deletion, history).
+- **Data residency:** hosting and model routing per jurisdiction where required; sensitive data never leaves for a model without no-fallback (already enforced through mux).
+- **AI Act:** transparency that people are dealing with AI, human oversight (agents propose, humans decide), logging and documentation of the assistant and agents, classification of any feature that could become high-risk (for example HR or credit-like uses) before it ships.
+- **Security:** NIS2-level practices where applicable — incident handling, supplier security, backups (encrypted backups already built), audit logs.
+- **Consumer and accessibility law** for the plans we sell; **e-invoicing and VAT** for our own billing.
+- **Records and evidence:** the history layer, provenance and audit logs are what make the company's — and our own — compliance provable.
+
+> This section describes how the product models and applies law; it is not legal advice. Each law pack names its official sources and versions, and a person approves every rule before it is checked.
+
+### 5.11 One framework
 
 The kernel is built to **contain all fifty sources in Appendix A**, not to sit beside them. Every core concept of every source has a home in it — as an object type, an attribute, a relation, a law, a signal or a lens — and Appendix B lists the mapping source by source. Where a source's core idea did not fit, the kernel was extended (choice, constraint, cadence, place, skill, line, circle, assessment, improvement loop, exception, decision context). The test we hold ourselves to: *any model drawn in any of these frameworks can be expressed in the kernel without loss of meaning, and read back out through its pack.*
 
@@ -569,6 +639,7 @@ Patterns that preceded trouble before — a key customer going quiet, an overloa
 | --- | --- | --- |
 | **1. The language** | The Enterprise Kernel in the meta model (nine questions, the relation grammar, the five laws as built-in rules); decision node type; the SME edition (en/da) as the work template; `/model` page; first packs (OKR, rule packs) | Meta model, roles, rules, commitments |
 | **2. Anchoring** | Anchoring engine; pattern rules; unanchored queue; anchors in ingest and connectors | Importers, connectors, change sets |
+| **2b. Jurisdictions** | Legal entity and jurisdiction objects; footprint derived from evidence; law packs for Denmark and the EU across the twenty legal domains (from official sources via Rules); applicability per capability/process/role; conflict resolution (law 7); My Graph's own compliance file | Rules, connectors, history |
 | **3. Lenses** | Lens language v1; lens engine; five built-in lenses (EA, customer service, finance, compliance, management) + onboarding; lenses as artifacts | Artifacts, history, search |
 | **4. Living views** | As-of and diff for lenses; "present that" to decks; meetings on lenses | Artifacts, Record, history |
 | **5. Discovery** | Discovered processes and conformance; model health (self-healing) | graph_events, anchoring |
@@ -585,6 +656,8 @@ Phase 1 and 2 are the foundation; Commitments (being built now) plugs straight i
 3. **Lens language surface** — YAML only for experts, a form for everyone, speech via the assistant; which one is primary in the UI.
 4. **Names people see** — "Operating model" / "Sådan arbejder vi"? "Lenses" / "Visninger"? "Capabilities" / "Evner"? To be tested with real users in Danish.
 5. **First industry editions** — which three after the generic SME edition (clinic, law firm, SaaS?).
+7. **Jurisdictions after Denmark and the EU** — which countries' law packs come next (the Nordics, Germany, the UK?), and legal review of each pack before it is offered.
+8. **Our own compliance file** — DPA template, sub-processor list, AI Act documentation and data-residency options per country, reviewed by counsel before selling outside Denmark.
 6. **Benchmarks** — whether and when to offer cross-company aggregates, and the privacy threshold.
 
 ---
