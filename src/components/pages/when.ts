@@ -1,5 +1,5 @@
 /**
- * How the wiki says when something happened: plain words in the reader's language and time zone, never an ISO
+ * How pages say when something happened: plain words in the reader's language and time zone, never an ISO
  * string. Pure (no React), so server pages, client components and tests share it. Build one with `makeWhen` from
  * `getT`/`getPrefs` on the server or `useT`/`useLocale`/`useTimeZone` on the client.
  */
@@ -40,17 +40,17 @@ export function makeWhen({ t, locale, timeZone, now }: { t: TFn; locale: Locale;
     short: (d) => {
       const n = days(d);
       if (n === 0) return time(d);
-      if (n === 1) return t("wiki.when.yesterday");
+      if (n === 1) return t("pages.when.yesterday");
       return formatDate(d, "weekday", { locale, timeZone, now: at() });
     },
     sentence: (d) => {
       const n = days(d);
-      if (n === 0) return t("wiki.when.todayAt", { time: time(d) });
-      if (n === 1) return t("wiki.when.yesterdayAt", { time: time(d) });
-      if (n > 1 && n < 7) return t("wiki.when.weekdayAt", { day: weekdayLong(d), time: time(d) });
-      return t("wiki.when.on", { date: formatDate(d, "date", { locale, timeZone, now: at() }) });
+      if (n === 0) return t("pages.when.todayAt", { time: time(d) });
+      if (n === 1) return t("pages.when.yesterdayAt", { time: time(d) });
+      if (n > 1 && n < 7) return t("pages.when.weekdayAt", { day: weekdayLong(d), time: time(d) });
+      return t("pages.when.on", { date: formatDate(d, "date", { locale, timeZone, now: at() }) });
     },
-    full: (d) => t("wiki.when.full", { date: formatDate(d, "dateLong", { locale, timeZone }), time: time(d) }),
+    full: (d) => t("pages.when.full", { date: formatDate(d, "dateLong", { locale, timeZone }), time: time(d) }),
     group: (d) => {
       const n = days(d);
       if (n <= 0) return "today";
@@ -59,6 +59,6 @@ export function makeWhen({ t, locale, timeZone, now }: { t: TFn; locale: Locale;
       if (dayKey(d, timeZone).slice(0, 4) === dayKey(at(), timeZone).slice(0, 4)) return "year";
       return "older";
     },
-    groupLabel: (g) => t(`wiki.when.groups.${g}`),
+    groupLabel: (g) => t(`pages.when.groups.${g}`),
   };
 }

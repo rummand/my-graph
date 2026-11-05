@@ -18,7 +18,7 @@ const CHUNKS_PER_SOURCE = 2;
 const NODE_WHAT: Record<string, string> = { person: "person", place: "place", event: "event", topic: "topic", document: "document", source: "document" };
 
 function sourceWhat(kind: string, mime: string | null, meta: Record<string, unknown>): string {
-  if (kind === "wiki") return "wiki page";
+  if (kind === "wiki") return "page";
   if (kind === "chat") return "note from a chat";
   if (kind === "manual") return "note";
   if (kind === "sync") return typeof meta.provider === "string" && /aula/i.test(meta.provider) ? "Aula message" : "synced message";

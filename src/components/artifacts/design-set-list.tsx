@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, ChevronLeft, Globe, Plus } from "lucide-react";
@@ -23,7 +23,7 @@ function Row({ s, isDefault, canEdit, onDefault, onArchive }: { s: DesignSetView
       <Swatches s={s} />
       <span className="min-w-0 flex-1">
         <span className="flex flex-wrap items-center gap-2">
-          <Link href={`/artifacts/design-sets/${s.id}`} className="font-medium hover:underline" style={{ fontFamily: fontStack(s.tokens.fonts.display) }}>{s.name}</Link>
+          <Link href={`/artifacts/styles/${s.id}`} className="font-medium hover:underline" style={{ fontFamily: fontStack(s.tokens.fonts.display) }}>{s.name}</Link>
           {isDefault && <Badge tone="accent"><Check className="size-3" aria-hidden />{t("artifacts.sets.isDefault")}</Badge>}
           {!s.builtin && <span className="text-xs text-muted tabular-nums">{t("artifacts.sets.version", { n: s.version })}</span>}
         </span>
@@ -31,14 +31,15 @@ function Row({ s, isDefault, canEdit, onDefault, onArchive }: { s: DesignSetView
       </span>
       <span className="flex flex-wrap gap-1">
         {canEdit && !isDefault && <Button size="sm" variant="ghost" onClick={onDefault}>{t("artifacts.sets.makeDefault")}</Button>}
-        {canEdit && <Link href={s.builtin ? `/artifacts/design-sets/new?from=${s.id}` : `/artifacts/design-sets/${s.id}`} className={buttonClass("secondary", "sm")}>{s.builtin ? t("artifacts.sets.copy") : t("artifacts.sets.edit")}</Link>}
+        {canEdit && <Link href={s.builtin ? `/artifacts/styles/new?from=${s.id}` : `/artifacts/styles/${s.id}`} className={buttonClass("secondary", "sm")}>{s.builtin ? t("artifacts.sets.copy") : t("artifacts.sets.edit")}</Link>}
         {canEdit && onArchive && <Button size="sm" variant="ghost" onClick={onArchive}>{t("artifacts.sets.archive")}</Button>}
       </span>
     </li>
   );
 }
 
-export function DesignSetList({ sets, defaultId, canEdit, graphName }: { sets: DesignSetView[]; defaultId: string; canEdit: boolean; graphName: string }) {
+/** `hub` is the Artifacts hub header (Styles tab); without it the list has its own back link and title. */
+export function DesignSetList({ sets, defaultId, canEdit, graphName, hub }: { sets: DesignSetView[]; defaultId: string; canEdit: boolean; graphName: string; hub?: ReactNode }) {
   const t = useT();
   const router = useRouter();
   const [def, setDef] = useState(defaultId);
@@ -59,16 +60,26 @@ export function DesignSetList({ sets, defaultId, canEdit, graphName }: { sets: D
   }
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className={hub ? undefined : "mx-auto max-w-4xl"}>
       <link rel="stylesheet" href={fonts} precedence="default" />
-      <Link href="/artifacts" className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-fg"><ChevronLeft className="size-4" aria-hidden />{t("artifacts.editor.back")}</Link>
-      <PageHeader title={t("artifacts.sets.title")} lead={t("artifacts.sets.lead", { graph: graphName })}
-        actions={canEdit ? <>
-          <Link href="/artifacts/design-sets/new?site=1" className={buttonClass("secondary")}><Globe className="size-4" aria-hidden />{t("artifacts.sets.fromSite")}</Link>
-          <Link href="/artifacts/design-sets/new" className={buttonClass("primary")}><Plus className="size-4" aria-hidden />{t("artifacts.sets.new")}</Link>
-        </> : undefined} />
-      {error && <p role="alert" className="mb-4 rounded-md bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>}
-      <div className="grid gap-10">
+      {hub ? <>
+        {hub}
+        {canEdit && (
+          <div className="mb-8 flex max-w-4xl flex-wrap items-center gap-2">
+            <Link href="/artifacts/styles/new" className={buttonClass("secondary")}><Plus className="size-4" aria-hidden />{t("artifacts.sets.new")}</Link>
+            <Link href="/artifacts/styles/new?site=1" className={buttonClass("ghost")}><Globe className="size-4" aria-hidden />{t("artifacts.sets.fromSite")}</Link>
+          </div>
+        )}
+      </> : <>
+        <Link href="/artifacts" className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-fg"><ChevronLeft className="size-4" aria-hidden />{t("artifacts.editor.back")}</Link>
+        <PageHeader title={t("artifacts.sets.title")} lead={t("artifacts.sets.lead", { graph: graphName })}
+          actions={canEdit ? <>
+            <Link href="/artifacts/styles/new?site=1" className={buttonClass("secondary")}><Globe className="size-4" aria-hidden />{t("artifacts.sets.fromSite")}</Link>
+            <Link href="/artifacts/styles/new" className={buttonClass("primary")}><Plus className="size-4" aria-hidden />{t("artifacts.sets.new")}</Link>
+          </> : undefined} />
+      </>}
+      {error && <p role="alert" className="mb-4 max-w-4xl rounded-md bg-danger-tint px-3 py-2 text-sm text-danger">{error}</p>}
+      <div className="grid max-w-4xl gap-10">
         <Section title={t("artifacts.sets.builtin")}>
           <ul className="-mx-2">{builtins.map((s) => <Row key={s.id} s={s} isDefault={def === s.id} canEdit={canEdit} onDefault={() => void makeDefault(s.id)} />)}</ul>
         </Section>

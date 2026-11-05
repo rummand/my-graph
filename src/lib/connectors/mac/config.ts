@@ -60,10 +60,27 @@ export const macConfig = z.object({
   }).default({ enabled: false, folders: null }),
   /** Pairing in progress: the hash of the one-time code, and when it ends. */
   pairing: z.object({ hash: z.string().regex(/^[0-9a-f]{64}$/), expiresAt: z.string() }).nullish(),
-  /** The paired helper: only a hash of its token is kept. */
+  /** The paired helper or app: only a hash of its token is kept. */
   helper: z.object({
     tokenHash: z.string().regex(/^[0-9a-f]{64}$/), pairedAt: z.string(), device: z.string().max(80).nullish(), lastSeenAt: z.string().nullish(),
+    /** "app": the My Graph for Mac menu bar app (signed in with the person's session); "helper": the Node helper (pairing code). */
+    kind: z.enum(["helper", "app"]).optional(),
+    appVersion: z.string().max(40).nullish(),
   }).nullish(),
+  /** The menu bar app's other sources (Messages and Notes are `messages.enabled` / `notes.enabled`). All off until chosen. */
+  sources: z.object({
+    contacts: z.boolean().default(false),
+    calendar: z.boolean().default(false),
+    reminders: z.boolean().default(false),
+    photos: z.boolean().default(false),
+    files: z.boolean().default(false),
+    voiceMemos: z.boolean().default(false),
+    calls: z.boolean().default(false),
+  }).default({ contacts: false, calendar: false, reminders: false, photos: false, files: false, voiceMemos: false, calls: false }),
+  /** What My Graph may hand the app to write on the Mac (only what a person delivered here). */
+  writeBack: z.object({ reminders: z.boolean().default(false), events: z.boolean().default(false) }).default({ reminders: false, events: false }),
+  /** The folders the person chose on the Mac, as labels ("Documents/Taxes"); the paths themselves stay on the Mac. */
+  folders: z.array(z.string().trim().min(1).max(300)).max(100).default([]),
   catalog: z.object({
     at: z.string(),
     chats: z.array(catalogChat).max(CATALOG_MAX_CHATS),
@@ -77,6 +94,8 @@ export const macConfig = z.object({
     chats: z.number().int().optional(),
     notes: z.number().int().optional(),
     sourceIds: z.array(z.string()).max(50).optional(),
+    /** The app's other sources: how many items each sent in this run ({ calendar: 12, files: 3 }). */
+    other: z.record(z.string(), z.number().int()).optional(),
   }).optional(),
 });
 export type MacConfig = z.infer<typeof macConfig>;

@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { authFile, chromeText, rawKeys, switchGraph, watchErrors } from "./helpers";
 
-export const MAIN_PAGES = ["/", "/chat", "/people", "/timeline", "/library", "/wiki", "/artifacts", "/graph", "/connections",
+export const MAIN_PAGES = ["/", "/chat", "/people", "/timeline", "/library", "/artifacts", "/artifacts/pages", "/artifacts/documents", "/artifacts/decks", "/artifacts/styles", "/graph", "/connections",
   "/changes", "/history", "/memory", "/automations", "/graphs", "/settings"];
 
 test.use({ storageState: authFile("anna") });
@@ -34,3 +34,23 @@ for (const graph of ["Family", "Work"]) {
     }
   });
 }
+
+test.describe("old addresses", () => {
+  test("the wiki and design sets moved under Artifacts", async ({ page }) => {
+    await switchGraph(page, "Family");
+    const index = await page.request.get("/wiki", { maxRedirects: 0 });
+    expect(index.status()).toBe(308);
+    expect(index.headers().location).toMatch(/\/artifacts\/pages$/);
+    const list = (await (await page.request.get("/api/pages?limit=1")).json()) as { pages: { slug: string }[] };
+    const old = (await (await page.request.get("/api/wiki?limit=1")).json()) as { pages: { slug: string }[] };
+    expect(old.pages.map((p) => p.slug)).toEqual(list.pages.map((p) => p.slug));
+    if (list.pages[0]) {
+      await page.goto(`/wiki/${list.pages[0].slug}`);
+      await expect(page).toHaveURL(new RegExp(`/artifacts/pages/${list.pages[0].slug}$`));
+    }
+    await page.goto("/artifacts/design-sets");
+    await expect(page).toHaveURL(/\/artifacts\/styles$/);
+    const text = await page.locator("main").innerText();
+    expect(text).not.toMatch(/wiki/i);
+  });
+});

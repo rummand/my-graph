@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>CFBundleDisplayName</key>
+	<string>My Graph</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>da</string>
+	</array>
+	<key>CFBundleName</key>
+	<string>My Graph</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(BUNDLE_ID)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>mygraph-mac</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>MGAppGroup</key>
+	<string>$(BUNDLE_ID).shared</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Read your notes in Notes as plain text, only the folders you choose, so My Graph can suggest what to add. Nothing is added until you approve it.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Send the events in your calendars (30 days back, 120 ahead) to My Graph for you to review, and keep a "My Graph" calendar with the events you approved.</string>
+	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
+	<string>Keep a "My Graph" calendar with the events you approved in My Graph.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Send your contacts (names, numbers, addresses, birthdays and related names) to My Graph, where you review what it finds before anything is added.</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>My Graph</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Send the details of your photos (when and where they were taken, albums, favourites), only if you turn this on in My Graph's settings.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Send your reminders to My Graph for you to review, and keep a "My Graph" list with the reminders you approved there.</string>
+</dict>
+</plist>

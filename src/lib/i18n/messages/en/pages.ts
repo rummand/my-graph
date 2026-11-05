@@ -1,15 +1,15 @@
 import type { MessageTree } from "../../core";
 
 /**
- * "wiki" namespace (en). Keys are used as t("wiki.<key>").
+ * "pages" namespace (en): pages written in the graph, under Artifacts. Keys are used as t("pages.<key>").
  * Family-only wording sits under a `family` key next to the generic one; components pick it only in a family graph.
  */
 const messages: MessageTree = {
-  title: "Wiki",
+  title: "Pages",
   meta: {
-    index: "Wiki · My Graph",
-    newPage: "New page · Wiki · My Graph",
-    page: "{title} · Wiki · My Graph",
+    index: "Pages · My Graph",
+    newPage: "New page · My Graph",
+    page: "{title} · My Graph",
     history: "History of {title} · My Graph",
     notFound: "Not found · My Graph",
   },
@@ -87,12 +87,12 @@ const messages: MessageTree = {
     andMore: "and {count} more",
   },
   newPage: {
-    back: "Wiki",
+    back: "Pages",
     cantAdd: "You can't add pages here",
     guest: "Ask someone in this graph to write it, or to share it with you.",
     guestFamily: "Ask someone in the family to write it, or to share it with you.",
     viewer: "You can read this graph but not add to it. Ask its owner to make you an editor.",
-    backToWiki: "Back to the wiki",
+    backToPages: "Back to pages",
     titleLabel: "Title",
     untitled: "Untitled page",
     example: "For example: Project kickoff, How we review designs, Reading list.",
@@ -109,7 +109,7 @@ const messages: MessageTree = {
     title: "This page isn't here",
     body: "It may have been deleted, it may live in another graph, or it hasn't been shared with you.",
   },
-  loading: "Loading the wiki…",
+  loading: "Loading pages…",
   page: {
     backlinksFailed: "Links to and from this page couldn't be loaded right now.",
     history: "History",

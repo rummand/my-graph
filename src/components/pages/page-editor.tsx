@@ -2,7 +2,7 @@
 /**
  * The page editor: TipTap with headings, lists, checklists, quotes, code and links, plus two suggestion triggers:
  *   @   mention anything in the current graph: the shared @mention typeahead (src/components/mention, GET /api/mentions)
- *   [[  link to another wiki page (GET /api/wiki?q=), or create one
+ *   [[  link to another page (GET /api/pages?q=), or create one
  */
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { EditorContent, mergeAttributes, useEditor, type Editor } from "@tiptap/react";
@@ -20,13 +20,13 @@ import { Button } from "@/components/ui";
 import { graphMention } from "@/components/mention/tiptap";
 import { useT } from "@/lib/i18n/client";
 import type { TFn } from "@/lib/i18n/core";
-import type { Doc } from "@/lib/wiki/doc";
-import type { Visibility } from "@/lib/wiki/labels";
+import type { Doc } from "@/lib/pages/doc";
+import type { Visibility } from "@/lib/pages/labels";
 import { CowritePanel, savedDocOf, type AcceptInfo, type AcceptResult } from "./cowrite/cowrite-panel";
 import { Cowrite, COWRITE_CLASSES, isCowriteTr } from "./cowrite/extension";
 import { mentionChip, PAGE_LINK_CLASS, PROSE } from "./prose";
 import { COMPLIANCE_CLASSES, ComplianceMarks } from "@/components/compliance/tiptap";
-import { LiveWikiCompliance } from "@/components/compliance/live-wiki";
+import { LivePageCompliance } from "@/components/compliance/live-page";
 
 /* ── Suggestion data ───────────────────────────────────────────────────────────────────────────────────── */
 
@@ -35,7 +35,7 @@ type PageItem = { kind: "page"; id: string; label: string; slug: string } | { ki
 async function fetchPages(q: string, excludeId: string): Promise<PageItem[]> {
   let pages: PageItem[] = [];
   try {
-    const res = await fetch(`/api/wiki?limit=8${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`, { headers: { accept: "application/json" } });
+    const res = await fetch(`/api/pages?limit=8${q.trim() ? `&q=${encodeURIComponent(q.trim())}` : ""}`, { headers: { accept: "application/json" } });
     if (res.ok) {
       const data = (await res.json()) as { pages?: { id: string; slug: string; title: string }[] };
       pages = (data.pages ?? []).filter((p) => p.id !== excludeId).map((p) => ({ kind: "page", id: p.id, label: p.title, slug: p.slug }));
@@ -71,9 +71,9 @@ function SuggestionList({ popup, index, onHover, listId }: { popup: Popup; index
   return (
     <div className="fixed z-50 w-[min(320px,calc(100vw-16px))] rounded-lg bg-surface p-1.5 font-sans shadow-float"
       style={pos ?? { visibility: "hidden" }}>
-      <p className="px-2.5 pb-1 pt-1 text-xs text-muted">{t("wiki.editor.pages.title")}</p>
-      <div role="listbox" id={listId} aria-label={t("wiki.editor.pages.title")} className="max-h-64 overflow-y-auto">
-        {popup.items.length === 0 && <p className="px-2.5 py-2 text-sm text-muted">{t("wiki.editor.pages.empty")}</p>}
+      <p className="px-2.5 pb-1 pt-1 text-xs text-muted">{t("pages.editor.pages.title")}</p>
+      <div role="listbox" id={listId} aria-label={t("pages.editor.pages.title")} className="max-h-64 overflow-y-auto">
+        {popup.items.length === 0 && <p className="px-2.5 py-2 text-sm text-muted">{t("pages.editor.pages.empty")}</p>}
         {popup.items.map((item, i) => {
           const on = i === index;
           return (
@@ -81,7 +81,7 @@ function SuggestionList({ popup, index, onHover, listId }: { popup: Popup; index
               onMouseDown={(e) => { e.preventDefault(); popup.select(item); }} onMouseEnter={() => onHover(i)}
               className={clsx("flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-sm", on ? "bg-surface-2 text-fg" : "text-fg")}>
               {item.kind === "page" && (<><FileText aria-hidden className="size-4 shrink-0 text-muted" /><span className="min-w-0 flex-1 truncate">{item.label}</span></>)}
-              {item.kind === "create" && (<><Plus aria-hidden className="size-4 shrink-0 text-accent" /><span className="min-w-0 flex-1 truncate">{t("wiki.editor.pages.newCalled")} <span className="font-medium">{item.label}</span></span></>)}
+              {item.kind === "create" && (<><Plus aria-hidden className="size-4 shrink-0 text-accent" /><span className="min-w-0 flex-1 truncate">{t("pages.editor.pages.newCalled")} <span className="font-medium">{item.label}</span></span></>)}
             </button>
           );
         })}
@@ -94,7 +94,7 @@ function SuggestionList({ popup, index, onHover, listId }: { popup: Popup; index
 
 function ToolButton({ label, keys, active, disabled, onClick, children }: { label: string; keys?: string; active?: boolean; disabled?: boolean; onClick: () => void; children: ReactNode }) {
   const t = useT();
-  const tip = keys ? t("wiki.editor.tip", { label, keys }) : label;
+  const tip = keys ? t("pages.editor.tip", { label, keys }) : label;
   return (
     <button type="button" aria-label={label} title={tip} aria-pressed={active} disabled={disabled}
       onMouseDown={(e) => e.preventDefault()} onClick={onClick}
@@ -125,11 +125,11 @@ function LinkEditor({ editor, onClose }: { editor: Editor; onClose: () => void }
   return (
     <form onSubmit={apply} onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); editor.commands.focus(); onClose(); } }}
       className="absolute left-2 top-[calc(100%+6px)] z-20 flex w-[min(26rem,calc(100vw-3rem))] items-center gap-1.5 rounded-lg bg-surface p-1.5 shadow-float">
-      <label htmlFor="wiki-link-url" className="sr-only">{t("wiki.editor.link.address")}</label>
-      <input id="wiki-link-url" ref={inputRef} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t("wiki.editor.link.placeholder")}
+      <label htmlFor="page-link-url" className="sr-only">{t("pages.editor.link.address")}</label>
+      <input id="page-link-url" ref={inputRef} value={url} onChange={(e) => setUrl(e.target.value)} placeholder={t("pages.editor.link.placeholder")}
         className="h-8 min-w-0 flex-1 rounded-md bg-surface-2 px-2.5 text-sm outline-none placeholder:text-muted focus:ring-2 focus:ring-accent" />
-      <Button type="submit" size="sm">{prev ? t("wiki.editor.link.update") : t("wiki.editor.link.add")}</Button>
-      {prev && <Button type="button" size="sm" variant="ghost" onClick={() => { editor.chain().focus().extendMarkRange("link").unsetLink().run(); onClose(); }}>{t("wiki.editor.link.remove")}</Button>}
+      <Button type="submit" size="sm">{prev ? t("pages.editor.link.update") : t("pages.editor.link.add")}</Button>
+      {prev && <Button type="button" size="sm" variant="ghost" onClick={() => { editor.chain().focus().extendMarkRange("link").unsetLink().run(); onClose(); }}>{t("pages.editor.link.remove")}</Button>}
     </form>
   );
 }
@@ -139,7 +139,7 @@ function Toolbar({ editor, end, onAsk }: { editor: Editor; end?: ReactNode; onAs
   const [, force] = useState(0);
   const [linking, setLinking] = useState(false);
   const t = useT();
-  const L = (k: string) => t(`wiki.editor.tools.${k}`);
+  const L = (k: string) => t(`pages.editor.tools.${k}`);
   useEffect(() => {
     const f = () => force((n) => n + 1);
     editor.on("transaction", f);
@@ -151,7 +151,7 @@ function Toolbar({ editor, end, onAsk }: { editor: Editor; end?: ReactNode; onAs
   return (
     <div className="sticky top-[56px] z-20 rounded-t-lg bg-surface lg:top-0">
       <div className="flex items-center gap-3 border-b border-line px-3 py-2 sm:px-6">
-        <div role="toolbar" aria-label={t("wiki.editor.toolbar")} className="-my-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto py-1 [scrollbar-width:none]">
+        <div role="toolbar" aria-label={t("pages.editor.toolbar")} className="-my-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto py-1 [scrollbar-width:none]">
           <ToolButton label={L("heading")} keys="Ctrl+Alt+2" active={editor.isActive("heading", { level: 2 })} onClick={() => c().toggleHeading({ level: 2 }).run()}><Heading2 className={icon} /></ToolButton>
           <ToolButton label={L("subheading")} keys="Ctrl+Alt+3" active={editor.isActive("heading", { level: 3 })} onClick={() => c().toggleHeading({ level: 3 }).run()}><Heading3 className={icon} /></ToolButton>
           <Gap />
@@ -183,7 +183,7 @@ function Toolbar({ editor, end, onAsk }: { editor: Editor; end?: ReactNode; onAs
 
 /* ── Editor ────────────────────────────────────────────────────────────────────────────────────────────── */
 
-export type WikiEditorProps = {
+export type PageEditorProps = {
   pageId: string;
   pageVisibility: Visibility;
   /** A family graph: family wording and examples in co-writing. */
@@ -208,7 +208,7 @@ export type WikiEditorProps = {
   compliance?: { pageId: string; title: () => string };
 };
 
-export function WikiEditor({ pageId, pageVisibility, family = false, initialContent, onChange, onReady, labelledBy, toolbarEnd, children, cowrite, compliance }: WikiEditorProps) {
+export function PageEditor({ pageId, pageVisibility, family = false, initialContent, onChange, onReady, labelledBy, toolbarEnd, children, cowrite, compliance }: PageEditorProps) {
   const t = useT();
   const tRef = useRef<TFn>(t);
   tRef.current = t;
@@ -224,7 +224,7 @@ export function WikiEditor({ pageId, pageVisibility, family = false, initialCont
   onChangeRef.current = onChange;
   const visibilityRef = useRef(pageVisibility);
   visibilityRef.current = pageVisibility;
-  const listId = `wiki-suggest-${pageId}`;
+  const listId = `page-suggest-${pageId}`;
 
   const show = (p: Popup | null) => {
     popupRef.current = p;
@@ -268,10 +268,10 @@ export function WikiEditor({ pageId, pageVisibility, family = false, initialCont
       Cowrite,
       ComplianceMarks,
       Placeholder.configure({
-        placeholder: ({ node }) => node.type.name === "heading" ? tRef.current("wiki.editor.heading") : tRef.current("wiki.editor.placeholder"),
+        placeholder: ({ node }) => node.type.name === "heading" ? tRef.current("pages.editor.heading") : tRef.current("pages.editor.placeholder"),
         emptyEditorClass: "is-editor-empty",
       }),
-      // The shared @mention: same typeahead and markup as the chat composer. The chip keeps the wiki's look so
+      // The shared @mention: same typeahead and markup as the chat composer. The chip keeps the page's look so
       // writing matches reading (PersonChip / NodeChip in the read view).
       graphMention().configure({
         renderHTML: ({ options, node }) => {
@@ -310,16 +310,16 @@ export function WikiEditor({ pageId, pageVisibility, family = false, initialCont
             if (item.kind === "page") { insert(item); return; }
             void (async () => {
               try {
-                const res = await fetch("/api/wiki", {
+                const res = await fetch("/api/pages", {
                   method: "POST", headers: { "content-type": "application/json" },
                   body: JSON.stringify({ title: item.label, visibility: visibilityRef.current }),
                 });
                 const data = await res.json().catch(() => ({}));
-                if (!res.ok) throw new Error(data.error ?? tRef.current("wiki.editor.pages.createFailed"));
+                if (!res.ok) throw new Error(data.error ?? tRef.current("pages.editor.pages.createFailed"));
                 insert({ id: data.page.id, label: data.page.title, slug: data.page.slug });
-                setNotice(tRef.current("wiki.editor.pages.created", { title: data.page.title }));
+                setNotice(tRef.current("pages.editor.pages.created", { title: data.page.title }));
               } catch (e) {
-                setNotice(e instanceof Error ? e.message : tRef.current("wiki.editor.pages.createFailed"));
+                setNotice(e instanceof Error ? e.message : tRef.current("pages.editor.pages.createFailed"));
               }
             })();
           },
@@ -335,7 +335,7 @@ export function WikiEditor({ pageId, pageVisibility, family = false, initialCont
         // Writing on the page itself: the caret shows focus, not a ring around the whole text.
         style: "outline: none",
         "aria-multiline": "true",
-        ...(labelledBy ? { "aria-labelledby": labelledBy } : { "aria-label": tRef.current("wiki.editor.pageText") }),
+        ...(labelledBy ? { "aria-labelledby": labelledBy } : { "aria-label": tRef.current("pages.editor.pageText") }),
       },
     },
     // Autosave never stores the assistant's draft: only the person's own text, until they accept the draft.
@@ -372,7 +372,7 @@ export function WikiEditor({ pageId, pageVisibility, family = false, initialCont
         <div className={sheet}>
           {children}
           <div className="mt-6 max-w-[68ch] space-y-3">{[92, 100, 76].map((w) => <div key={w} className="h-4 animate-pulse rounded bg-surface-2" style={{ width: `${w}%` }} />)}</div>
-          <span className="sr-only">{t("wiki.editor.loading")}</span>
+          <span className="sr-only">{t("pages.editor.loading")}</span>
         </div>
       </div>
     );
@@ -380,7 +380,7 @@ export function WikiEditor({ pageId, pageVisibility, family = false, initialCont
   return (
     <div>
       <Toolbar editor={editor} end={toolbarEnd} onAsk={cowrite ? () => setAsking(true) : undefined} />
-      {compliance && <LiveWikiCompliance editor={editor} pageId={compliance.pageId} title={compliance.title} />}
+      {compliance && <LivePageCompliance editor={editor} pageId={compliance.pageId} title={compliance.title} />}
       <div className={sheet}>
         {children}
         <EditorContent editor={editor} className="mt-6" />

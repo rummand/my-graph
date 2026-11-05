@@ -44,7 +44,7 @@ describe("unattended policy (Scout: only propose when nobody is watching)", () =
     expect(suggest).toEqual([]);
     expect(skipped).toHaveLength(3);
     expect(skipped[0]).toContain("reminders are turned off");
-    expect(skipped[1]).toContain("wiki writing is turned off");
+    expect(skipped[1]).toContain("writing pages is turned off");
     expect(skipped[2]).toContain("memory isn't available");
   });
   it("drops duplicates within one run", () => {

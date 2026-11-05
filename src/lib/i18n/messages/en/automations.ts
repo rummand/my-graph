@@ -125,7 +125,7 @@ const messages: MessageTree = {
     at: "At",
     time: "Time",
     conditionLabel: "When…",
-    conditionHint: "Checked against new files and wiki pages. A quick keyword check runs first, then the assistant decides.",
+    conditionHint: "Checked against new files and pages. A quick keyword check runs first, then the assistant decides.",
     conditionPlaceholder: { family: "a document mentions a vaccination", other: "a document mentions a deadline" },
     check: "Check",
     oneShot: "Only once, then switch it off",
@@ -202,14 +202,14 @@ const messages: MessageTree = {
     alwaysAllowed: "Always allowed",
     nothingAllowed: "Nothing. The assistant asks every time. Choose “Always allow” on a suggestion to skip asking for that kind.",
     revoke: "Revoke",
-    stillAsks: "Check-ins and automations still ask before adding facts, merging or editing the wiki.",
+    stillAsks: "Check-ins and automations still ask before adding facts, merging or editing pages.",
     mayUse: "What it may use",
     caps: {
       library: { label: "Read the library", hint: { family: "Letters, photos and files", other: "Documents, mail and files" } },
       timeline: { label: "Read the timeline", hint: "Events and dates" },
       people: { label: "Read about people", hint: { family: "Birthdays, how people are, who you see", other: "Who people are, how you know them, when you last spoke" } },
       reminders: { label: "Suggest reminders", hint: "Always asks first" },
-      wiki_write: { label: "Suggest wiki notes", hint: "Always asks first" },
+      wiki_write: { label: "Suggest pages", hint: "Always asks first" },
       web: { label: "Look things up on the web", hint: "Only names and the topic leave the graph. Pages it reads are saved as sources, and what it finds waits for you as a proposal" },
     },
     howItWrites: "How it writes",
@@ -220,18 +220,18 @@ const messages: MessageTree = {
     couldNotSave: "Couldn't save.",
     actions: {
       reminder_create: "Add reminders", fact_add: "Add facts to the graph", node_merge: "Merge duplicates",
-      memory_save: "Save memories", rule_save: { family: "Save family rules", other: "Save rules" }, wiki_edit: "Edit wiki pages",
-      fact_create: "Add facts to the graph from chat", wiki_create: "Write wiki notes from chat",
+      memory_save: "Save memories", rule_save: { family: "Save family rules", other: "Save rules" }, wiki_edit: "Edit pages",
+      fact_create: "Add facts to the graph from chat", wiki_create: "Write pages from chat",
     },
   },
   suggestion: {
     kind: {
       reminder: "New reminder", fact: "A fact to check", merge: "Possible duplicate", memory: "Something to remember",
-      rule: "A rule to keep", wiki_edit: "Wiki note", nudge: "Heads-up",
+      rule: "A rule to keep", wiki_edit: "Page", nudge: "Heads-up",
     },
     always: {
       reminder: "Always allow new reminders", memory: "Always save memories", rule: "Always save rules like this",
-      wiki_edit: "Always allow wiki notes", fact: "Always allow facts like this", merge: "Always merge duplicates",
+      wiki_edit: "Always allow pages", fact: "Always allow facts like this", merge: "Always merge duplicates",
     },
     origin: {
       heartbeat: "From the check-in, {when}",

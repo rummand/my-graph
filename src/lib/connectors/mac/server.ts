@@ -38,23 +38,23 @@ const pairPerAddress = g.__mgMacPairIp ?? (g.__mgMacPairIp = new AttemptLimiter(
 const pairOverall = g.__mgMacPairAll ?? (g.__mgMacPairAll = new AttemptLimiter(60, 15 * 60_000));
 const badTokens = g.__mgMacBadToken ?? (g.__mgMacBadToken = new AttemptLimiter(30, 15 * 60_000));
 
-function assertMayConnect(v: Viewer) {
+export function assertMayConnect(v: Viewer) {
   if (v.role === "guest") throw new ConnectionError(403, "Guests can't connect accounts.");
   if (!scopeOf(v).canWrite) throw new ConnectionError(403, "You can look at this graph but not connect accounts to it.");
 }
 
-async function ownMac(v: Viewer): Promise<ConnectionRow | null> {
+export async function ownMac(v: Viewer): Promise<ConnectionRow | null> {
   const [row] = await db.select().from(connections)
     .where(and(eq(connections.graphId, v.graphId), eq(connections.userId, v.id), eq(connections.connector, MAC_CONNECTOR))).limit(1);
   return row ?? null;
 }
 
-function configOf(row: ConnectionRow): MacConfig {
+export function configOf(row: ConnectionRow): MacConfig {
   const r = macConfig.safeParse(row.config ?? {});
   return r.success ? r.data : macConfig.parse({});
 }
 
-async function knownPeople(v: Viewer): Promise<ImportKnown[]> {
+export async function knownPeople(v: Viewer): Promise<ImportKnown[]> {
   const people = await gbrain.listNodes(v, { type: "person", limit: 500 }).catch(() => []);
   return people.map((p) => ({
     id: p.id, type: p.type, kind: p.kind ?? null, label: p.label, aliases: p.aliases, startAt: p.startAt?.toISOString() ?? null, props: p.props ?? {},
@@ -74,7 +74,7 @@ function cursorsOf(state: ConnectionState) {
 export type MacStatus = {
   connection: ConnectionDTO | null;
   pairing: { expiresAt: string } | null;
-  helper: { device: string | null; pairedAt: string; lastSeenAt: string | null } | null;
+  helper: { device: string | null; pairedAt: string; lastSeenAt: string | null; kind: "helper" | "app"; appVersion: string | null } | null;
   choices: { visibility: MacConfig["visibility"]; messages: MacConfig["messages"]; notes: MacConfig["notes"] };
   catalog: {
     at: string | null;
@@ -101,7 +101,7 @@ export async function macStatus(v: Viewer): Promise<MacStatus> {
   return {
     connection: row ? (await getConnection(v, row.id)).connection : null,
     pairing: live,
-    helper: cfg.helper ? { device: cfg.helper.device ?? null, pairedAt: cfg.helper.pairedAt, lastSeenAt: cfg.helper.lastSeenAt ?? null } : null,
+    helper: cfg.helper ? { device: cfg.helper.device ?? null, pairedAt: cfg.helper.pairedAt, lastSeenAt: cfg.helper.lastSeenAt ?? null, kind: cfg.helper.kind ?? "helper", appVersion: cfg.helper.appVersion ?? null } : null,
     choices: { visibility: cfg.visibility, messages: cfg.messages, notes: cfg.notes },
     catalog: { at: cfg.catalog?.at ?? null, chats, folders: cfg.catalog?.folders ?? [], canRead: cfg.catalog?.canRead ?? null },
     knownCount: chats.filter((c) => c.known).length,
@@ -291,7 +291,7 @@ export async function importBatch(a: HelperAuth, importer: "imessage" | "apple_n
   return result;
 }
 
-async function store(v: Viewer, importer: "imessage" | "apple_notes", payload: unknown, o: { row: ConnectionRow; cfg: MacConfig; batch: string; title: string; sensitive: boolean }) {
+export async function store(v: Viewer, importer: string, payload: unknown, o: { row: ConnectionRow; cfg: MacConfig; batch: string; title: string; sensitive: boolean }) {
   try {
     const r = await importPayload(v, importer, {
       bytes: Buffer.from(JSON.stringify(payload)), title: o.title, connectionId: o.row.id, externalId: `${importer}:${o.batch}`,
@@ -304,7 +304,7 @@ async function store(v: Viewer, importer: "imessage" | "apple_notes", payload: u
   }
 }
 
-async function moveCursor(id: string, stream: "messages" | "notes", next: (prev: unknown) => unknown): Promise<void> {
+export async function moveCursor(id: string, stream: string, next: (prev: unknown) => unknown): Promise<void> {
   await db.transaction(async (tx) => {
     const [locked] = await tx.select({ state: connections.state }).from(connections).where(eq(connections.id, id)).for("update");
     if (!locked) throw new ConnectionError(410, "This connection was disconnected.", "macUnpaired");
@@ -315,7 +315,7 @@ async function moveCursor(id: string, stream: "messages" | "notes", next: (prev:
 }
 
 /** One connection run per helper run (its batches add up), plus the "last send" shown on the page. */
-async function recordRun(row: ConnectionRow, runId: string, stream: "messages" | "notes", r: BatchResult, counts: { messages?: number; chats?: number; notes?: number }, device: string | null) {
+export async function recordRun(row: ConnectionRow, runId: string, stream: string, r: BatchResult, counts: { messages?: number; chats?: number; notes?: number; other?: number }, device: string | null) {
   const now = new Date();
   // Nothing new (the helper's "still here" batch): only note that it was heard from; no run, no new "last send".
   if (!r.kept && !r.dropped) {
@@ -341,7 +341,7 @@ async function recordRun(row: ConnectionRow, runId: string, stream: "messages" |
   if (r.duplicate) s.unchanged = (s.unchanged ?? 0) + 1;
   if (r.dropped) s.skipped = (s.skipped ?? 0) + r.dropped;
   const log = [...(c.log ?? [])];
-  if (log.length < 50 && r.kept) log.push(stream === "messages" ? `Received ${r.kept} messages from ${device ?? "the Mac"}.` : `Received ${r.kept} notes from ${device ?? "the Mac"}.`);
+  if (log.length < 50 && r.kept) log.push(stream === "messages" ? `Received ${r.kept} messages from ${device ?? "the Mac"}.` : stream === "notes" ? `Received ${r.kept} notes from ${device ?? "the Mac"}.` : `Received ${r.kept} ${stream} items from ${device ?? "the Mac"}.`);
   const nextCounts = { ...c, trigger: "helper", streams: { ...(c.streams ?? {}), [stream]: s }, log };
   if (prev) {
     await db.update(connectionRuns).set({ counts: nextCounts, status: "done", finishedAt: now }).where(and(eq(connectionRuns.id, runId), eq(connectionRuns.connectionId, row.id))).catch(() => {});
@@ -358,6 +358,7 @@ async function recordRun(row: ConnectionRow, runId: string, stream: "messages" |
       ...base, at: now.toISOString(), runId,
       ...(counts.messages !== undefined ? { messages: (sameRun ? base.messages ?? 0 : 0) + counts.messages, chats: Math.max(sameRun ? base.chats ?? 0 : 0, counts.chats ?? 0) } : {}),
       ...(counts.notes !== undefined ? { notes: (sameRun ? base.notes ?? 0 : 0) + counts.notes } : {}),
+      ...(counts.other !== undefined ? { other: { ...(sameRun ? base.other ?? {} : {}), [stream]: (sameRun ? base.other?.[stream] ?? 0 : 0) + counts.other } } : {}),
       sourceIds: [...new Set([...(sameRun ? base.sourceIds ?? [] : []), ...(r.sourceId ? [r.sourceId] : [])])].slice(-50),
     };
     const next = { ...(locked.config ?? {}), lastSend, ...(cfg.helper ? { helper: { ...cfg.helper, lastSeenAt: now.toISOString(), ...(device ? { device } : {}) } } : {}) };

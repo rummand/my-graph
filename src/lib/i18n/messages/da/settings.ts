@@ -161,7 +161,7 @@ const messages: MessageTree = {
     lead: "Tag en kopi af det, der er dit, eller slet din konto.",
     export: "Lav en download",
     exportTitle: "Hent en kopi",
-    exportLead: "En zip-fil med personer, steder, begivenheder og fakta, hvor hvert faktum kommer fra, de originale filer, wikisider med alle versioner og historikken over ændringer. Åbne formater (JSON), beskrevet i README-filen indeni.",
+    exportLead: "En zip-fil med personer, steder, begivenheder og fakta, hvor hvert faktum kommer fra, de originale filer, sider med alle versioner og historikken over ændringer. Åbne formater (JSON), beskrevet i README-filen indeni.",
     exportHint: "Den bliver lavet i baggrunden og ligger her i 24 timer.",
     whatAccount: "Alt mit",
     whatAccountHint: "Alt i de grafer, du ejer; i andres grafer kun det, du har tilføjet. Plus din profil, samtaler, påmindelser og hukommelse.",

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore }
 import Link from "next/link";
 import { clsx } from "clsx";
 import { AnimatePresence, motion } from "motion/react";
-import { ArrowUpFromLine, Check, ClipboardPaste, Globe, LoaderCircle, X } from "lucide-react";
+import { ArrowUpFromLine, Check, ClipboardPaste, Folder, Globe, LoaderCircle, X } from "lucide-react";
 import { Button, Kbd } from "@/components/ui";
 import type { SourceSummary } from "@/lib/ingest/library";
 import { ACCEPT_ATTR, MAX_UPLOAD_BYTES, mimeCategory } from "@/lib/ingest/mime";
@@ -30,13 +30,14 @@ type PasteResponse = { sourceId?: string; duplicate?: boolean; title?: string; r
 
 type UploadResponse = { results?: { name: string; sourceId?: string; duplicate?: boolean; error?: string }[]; error?: string };
 
-function uploadOne(file: File, visibility: Visibility, sensitive: boolean, onProgress: (p: number) => void, dropped: string): Promise<UploadResponse & { status: number }> {
+function uploadOne(file: File, visibility: Visibility, sensitive: boolean, folderId: string | null, onProgress: (p: number) => void, dropped: string): Promise<UploadResponse & { status: number }> {
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
     const fd = new FormData();
     fd.append("file", file);
     fd.append("visibility", visibility);
     fd.append("sensitive", String(sensitive));
+    if (folderId) fd.append("folderId", folderId);
     xhr.open("POST", "/api/library");
     xhr.responseType = "json";
     xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
@@ -109,7 +110,10 @@ const useApple = () => useSyncExternalStore(noSubscribe, () => isApplePlatform(n
  * as a note, or a web address as a saved page),
  * the default sharing for new files, and one row per file that follows it from upload to "read".
  */
-export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false, family = false }: {
+export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false, family = false, folderId = null, folderName = null }: {
+  /** The folder the person is looking at: new files go into it. */
+  folderId?: string | null;
+  folderName?: string | null;
   /** Family wording (family graph only). */
   family?: boolean;
   onUploaded?: () => void;
@@ -153,7 +157,7 @@ export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false
       for (let b = queue.shift(); b; b = queue.shift()) {
         const { item, file } = b;
         patch(item.key, { state: "uploading" });
-        const r = await uploadOne(file, visibility, sensitive, (p) => patch(item.key, { progress: p }), t("library.upload.dropped"));
+        const r = await uploadOne(file, visibility, sensitive, folderId, (p) => patch(item.key, { progress: p }), t("library.upload.dropped"));
         const res = r.results?.[0];
         if (res && !res.error) patch(item.key, { state: res.duplicate ? "duplicate" : "done", progress: 1, sourceId: res.sourceId });
         else patch(item.key, { state: "error", error: res?.error ?? r.error ?? (r.status === 401 ? t("library.upload.signedOut") : t("library.upload.failed")) });
@@ -161,7 +165,7 @@ export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false
       }
     };
     await Promise.all([worker(), worker()]);
-  }, [visibility, sensitive, onUploaded, L, t]);
+  }, [visibility, sensitive, folderId, onUploaded, L, t]);
 
   // The whole window is a drop target while files are dragged over it.
   useEffect(() => {
@@ -240,8 +244,8 @@ export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false
       : { key, name: title || p.url, size: null, mime: "text/html", progress: 0, preview: null, state: "uploading", origin: "url", host: hostOf(p.url) };
     setItems((xs) => [item, ...xs]);
     const payload = p.kind === "text"
-      ? { kind: "text", title, text: p.text, sourceUrl: p.sourceUrl, visibility, sensitive }
-      : { kind: "url", url: p.url, title: title || p.title || null, visibility, sensitive };
+      ? { kind: "text", title, text: p.text, sourceUrl: p.sourceUrl, visibility, sensitive, folderId }
+      : { kind: "url", url: p.url, title: title || p.title || null, visibility, sensitive, folderId };
     let status = 0;
     let r: PasteResponse = {};
     try {
@@ -299,6 +303,11 @@ export function UploadZone({ onUploaded, statusOf, onWatching, prominent = false
                 {t(family ? "library.upload.lead" : "library.upload.leadGraph")}
               </p>
               <p className="mt-1 text-sm text-muted sm:hidden">{t("library.upload.leadPhone")}</p>
+              {folderName && (
+                <p className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-0.5 text-sm">
+                  <Folder aria-hidden className="size-3.5 shrink-0 text-muted" /><span className="truncate">{t("library.folders.uploadInto", { name: folderName })}</span>
+                </p>
+              )}
               <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
                 <input ref={inputRef} id={inputId} type="file" multiple accept={ACCEPT_ATTR} className="sr-only" tabIndex={-1} aria-label={t("library.upload.choose")}
                   onChange={(e) => { void start(Array.from(e.target.files ?? [])); e.target.value = ""; }} />

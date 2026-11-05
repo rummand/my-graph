@@ -9,7 +9,7 @@ import { clsx } from "clsx";
 import { NodeChip, PersonChip } from "@/components/ui";
 import { useT } from "@/lib/i18n/client";
 import type { TFn } from "@/lib/i18n/core";
-import { safeHref, type DocMark, type DocNode } from "@/lib/wiki/doc";
+import { safeHref, type DocMark, type DocNode } from "@/lib/pages/doc";
 import { PAGE_LINK_CLASS, PROSE } from "./prose";
 
 /** What the server knows about a mentioned node: its type, and whether this viewer may open it. */
@@ -56,7 +56,7 @@ function render(n: DocNode, key: string, t: TFn, info?: MentionInfo): ReactNode 
       const checked = n.attrs?.checked === true;
       return (
         <li key={key} data-type="taskItem" data-checked={checked}>
-          <label className="pointer-events-none"><input type="checkbox" checked={checked} readOnly tabIndex={-1} aria-readonly aria-label={checked ? t("wiki.doc.done") : t("wiki.doc.notDone")} /></label>
+          <label className="pointer-events-none"><input type="checkbox" checked={checked} readOnly tabIndex={-1} aria-readonly aria-label={checked ? t("pages.doc.done") : t("pages.doc.notDone")} /></label>
           <div>{kids()}</div>
         </li>
       );
@@ -66,7 +66,7 @@ function render(n: DocNode, key: string, t: TFn, info?: MentionInfo): ReactNode 
     case "horizontalRule": return <hr key={key} />;
     case "mention": {
       const id = String(n.attrs?.id ?? "");
-      const label = String(n.attrs?.label ?? t("wiki.doc.someone"));
+      const label = String(n.attrs?.label ?? t("pages.doc.someone"));
       const known = info?.get(id);
       const type = known?.type ?? (typeof n.attrs?.nodeType === "string" ? n.attrs.nodeType : "topic");
       const readable = known ? known.readable : true;
@@ -81,8 +81,8 @@ function render(n: DocNode, key: string, t: TFn, info?: MentionInfo): ReactNode 
     }
     case "pageLink": {
       const slug = typeof n.attrs?.slug === "string" ? n.attrs.slug : null;
-      const label = String(n.attrs?.label ?? t("wiki.doc.page"));
-      const href = slug ? `/wiki/${encodeURIComponent(slug)}` : `/wiki?q=${encodeURIComponent(label)}`;
+      const label = String(n.attrs?.label ?? t("pages.doc.page"));
+      const href = slug ? `/artifacts/pages/${encodeURIComponent(slug)}` : `/artifacts/pages?q=${encodeURIComponent(label)}`;
       return <Link key={key} href={href} data-type="pageLink" className={PAGE_LINK_CLASS}>{label}</Link>;
     }
     default:

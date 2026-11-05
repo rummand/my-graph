@@ -1,5 +1,5 @@
 /**
- * Wiki pages: per-household pages with an owner, visibility, full revision history and a footprint in the graph.
+ * Pages (shown under Artifacts; stored in wiki_pages): per-graph pages with an owner, visibility, full revision history and a footprint in the graph.
  * Server-only. Reads of wiki rows are checked here (./access), not through GBrain.
  */
 import { and, desc, eq, inArray, like, ne, or, sql } from "drizzle-orm";
@@ -15,33 +15,33 @@ import {
   type PagePermissions, type Visibility,
 } from "./access";
 import { docToText, EMPTY_DOC, excerpt, extractMentions, extractPageLinks, sameDoc, sanitizeDoc, type Doc, type DocNode } from "./doc";
-import { WikiError } from "./errors";
+import { PageError } from "./errors";
 import { cancelPendingIngest, syncPageGraphLater } from "./graph-sync";
 import { slugify, uniqueSlug } from "./slug";
 
-export { WikiError };
+export { PageError };
 export type { Visibility, PagePermissions };
 
 /* ── Types ─────────────────────────────────────────────────────────────────────────────────────────────── */
 
-export type WikiPageSummary = {
+export type PageSummary = {
   id: string; slug: string; title: string; excerpt: string; visibility: Visibility;
   ownerId: string; ownerName: string; updatedAt: Date; updatedByName: string | null;
 };
 
-export type WikiPage = {
+export type PageRecord = {
   id: string; slug: string; title: string; content: Doc; contentText: string; visibility: Visibility; version: number;
   ownerId: string; ownerName: string; nodeId: string | null; sourceId: string | null;
   createdAt: Date; updatedAt: Date; updatedByName: string | null;
   can: PagePermissions;
 };
 
-export type WikiRevisionSummary = {
+export type PageRevisionSummary = {
   id: string; version: number; title: string; authorKind: "user" | "assistant"; authorName: string;
   summary: string | null; createdAt: Date;
 };
 
-export type WikiRevision = WikiRevisionSummary & { content: Doc; contentText: string };
+export type PageRevision = PageRevisionSummary & { content: Doc; contentText: string };
 
 export type Backlinks = {
   pages: { id: string; slug: string; title: string; via: "link" | "mention" }[];
@@ -75,7 +75,7 @@ const pageCols = {
 
 type Row = NonNullable<Awaited<ReturnType<typeof loadRow>>>;
 
-function toPage(v: Viewer, r: Row): WikiPage {
+function toPage(v: Viewer, r: Row): PageRecord {
   return {
     id: r.id, slug: r.slug, title: r.title, content: r.content as Doc, contentText: r.contentText, visibility: r.visibility,
     version: r.version, ownerId: r.ownerId, ownerName: r.ownerName ?? "Someone", nodeId: r.nodeId, sourceId: r.sourceId,
@@ -96,21 +96,21 @@ async function loadRow(graphId: string, slug: string) {
 /** The page if the viewer may read it; a 404 otherwise (we don't reveal that a hidden page exists). */
 async function readablePage(v: Viewer, slug: string) {
   const r = await loadRow(v.graphId, slug);
-  if (!r || !canReadPage(v, r)) throw new WikiError(404, "This page doesn't exist, or it hasn't been shared with you.");
+  if (!r || !canReadPage(v, r)) throw new PageError(404, "This page doesn't exist, or it hasn't been shared with you.");
   return r;
 }
 
 function cleanTitle(t: string): string {
   const s = t.replace(/\s+/g, " ").trim();
-  if (!s) throw new WikiError(400, "Give the page a title.");
-  if (s.length > 200) throw new WikiError(400, "Keep the title under 200 characters.");
+  if (!s) throw new PageError(400, "Give the page a title.");
+  if (s.length > 200) throw new PageError(400, "Keep the title under 200 characters.");
   return s;
 }
 
 /* ── Reads ─────────────────────────────────────────────────────────────────────────────────────────────── */
 
 /** Pages the viewer can see, most recently edited first. `q` matches title and text (title matches rank first). */
-export async function listPages(v: Viewer, opts: { q?: string; limit?: number } = {}): Promise<WikiPageSummary[]> {
+export async function listPages(v: Viewer, opts: { q?: string; limit?: number } = {}): Promise<PageSummary[]> {
   const limit = Math.min(Math.max(opts.limit ?? 50, 1), 200);
   const q = opts.q?.trim();
   const pattern = q ? `%${likeEscape(q)}%` : null;
@@ -142,14 +142,14 @@ function snippet(text: string, q?: string): string {
   return excerpt(text, 160);
 }
 
-export async function getPage(v: Viewer, slug: string): Promise<WikiPage | null> {
+export async function getPage(v: Viewer, slug: string): Promise<PageRecord | null> {
   const r = await loadRow(v.graphId, slug);
   if (!r || !canReadPage(v, r)) return null;
   return toPage(v, r);
 }
 
 /** Other pages that link to or mention this page, and the graph nodes this page mentions. */
-export async function getBacklinks(v: Viewer, page: Pick<WikiPage, "id" | "nodeId" | "content">): Promise<Backlinks> {
+export async function getBacklinks(v: Viewer, page: Pick<PageRecord, "id" | "nodeId" | "content">): Promise<Backlinks> {
   const idNeedle = `%"${page.id}"%`;
   const nodeNeedle = page.nodeId ? `%"${page.nodeId}"%` : null;
   const rows = await db.select({ id: wikiPages.id, slug: wikiPages.slug, title: wikiPages.title, content: wikiPages.content })
@@ -222,9 +222,9 @@ export async function pagesByPerson(v: Viewer, opts: { people?: number; perPerso
 
 /* ── Writes ────────────────────────────────────────────────────────────────────────────────────────────── */
 
-export async function createPage(v: Viewer, input: { title: string; visibility?: Visibility; content?: unknown }): Promise<WikiPage> {
-  if (v.role === "guest" && scopeOf(v).family) throw new WikiError(403, "Guests can't create wiki pages.");
-  if (!scopeOf(v).canWrite) throw new WikiError(403, "You can look at this graph but not add pages to it.");
+export async function createPage(v: Viewer, input: { title: string; visibility?: Visibility; content?: unknown }): Promise<PageRecord> {
+  if (v.role === "guest" && scopeOf(v).family) throw new PageError(403, "Guests can't create pages.");
+  if (!scopeOf(v).canWrite) throw new PageError(403, "You can look at this graph but not add pages to it.");
   const title = cleanTitle(input.title);
   const content = input.content === undefined ? EMPTY_DOC : sanitizeDoc(input.content);
   const contentText = docToText(content);
@@ -251,16 +251,16 @@ export async function createPage(v: Viewer, input: { title: string; visibility?:
       throw e;
     }
   }
-  if (!created) throw new WikiError(409, "Couldn't find a free address for this page. Try a slightly different title.");
+  if (!created) throw new PageError(409, "Couldn't find a free address for this page. Try a slightly different title.");
 
   safeAudit(v, "wiki.create", { type: "wiki_page", id: created.id });
   syncPageGraphLater(v, created.id, null);
   const page = await getPage(v, created.slug);
-  if (!page) throw new WikiError(404, "The page was created but couldn't be loaded.");
+  if (!page) throw new PageError(404, "The page was created but couldn't be loaded.");
   return page;
 }
 
-export type SaveResult = { page: WikiPage; changed: boolean };
+export type SaveResult = { page: PageRecord; changed: boolean };
 
 /**
  * Save title and/or content with an optimistic version check. A stale `version` throws 409 with the current page in
@@ -277,15 +277,15 @@ async function save(
   input: { title?: string; content?: Doc; force: boolean; summary?: string; author?: "user" | "assistant" },
 ): Promise<SaveResult> {
   const cur0 = await readablePage(v, slug);
-  if (!canEditPage(v, cur0)) throw new WikiError(403, "You can read this page but not change it. Ask its owner to share it with the family.");
+  if (!canEditPage(v, cur0)) throw new PageError(403, "You can read this page but not change it. Ask its owner to share it with the family.");
 
   const res = await db.transaction(async (tx) => {
     const [cur] = await tx.select().from(wikiPages).where(eq(wikiPages.id, cur0.id)).for("update");
-    if (!cur) throw new WikiError(404, "This page was deleted while you were editing it.");
+    if (!cur) throw new PageError(404, "This page was deleted while you were editing it.");
     if (cur.version !== version && !input.force) {
       const [by] = cur.updatedBy ? await tx.select({ name: users.name }).from(users).where(eq(users.id, cur.updatedBy)) : [];
       const who = cur.updatedBy === v.id ? "You changed this page in another tab or window" : `${by?.name ?? "Someone"} changed this page`;
-      throw new WikiError(409, `${who} while you were editing it here.`, {
+      throw new PageError(409, `${who} while you were editing it here.`, {
         current: { version: cur.version, title: cur.title, content: cur.content, updatedAt: cur.updatedAt, updatedByName: by?.name ?? null },
       });
     }
@@ -316,21 +316,21 @@ async function save(
 
   if (res.prev) syncPageGraphLater(v, res.id, res.prev);
   const page = await getPage(v, slug);
-  if (!page) throw new WikiError(404, "This page is no longer available to you.");
+  if (!page) throw new PageError(404, "This page is no longer available to you.");
   return { page, changed: !!res.prev };
 }
 
 /** Change who can see the page (owner only). Doesn't create a revision or bump the version. */
-export async function setVisibility(v: Viewer, slug: string, visibility: Visibility): Promise<WikiPage> {
+export async function setVisibility(v: Viewer, slug: string, visibility: Visibility): Promise<PageRecord> {
   const cur = await readablePage(v, slug);
-  if (!canChangeVisibility(v, cur)) throw new WikiError(403, "Only the person who created this page can change who sees it.");
+  if (!canChangeVisibility(v, cur)) throw new PageError(403, "Only the person who created this page can change who sees it.");
   if (cur.visibility !== visibility) {
     await db.update(wikiPages).set({ visibility }).where(eq(wikiPages.id, cur.id));
     safeAudit(v, "wiki.visibility", { type: "wiki_page", id: cur.id }, { from: cur.visibility, to: visibility });
     syncPageGraphLater(v, cur.id, { title: cur.title, visibility: cur.visibility, content: cur.content as DocNode });
   }
   const page = await getPage(v, slug);
-  if (!page) throw new WikiError(404, "This page is no longer available to you.");
+  if (!page) throw new PageError(404, "This page is no longer available to you.");
   return page;
 }
 
@@ -341,7 +341,7 @@ export async function setVisibility(v: Viewer, slug: string, visibility: Visibil
 export async function deletePage(v: Viewer, slug: string): Promise<void> {
   const cur = await readablePage(v, slug);
   if (!canDeletePage(v, cur)) {
-    throw new WikiError(403, cur.visibility === "household"
+    throw new PageError(403, cur.visibility === "household"
       ? "Only the person who created this page or a parent can delete it."
       : "Only the person who created this page can delete it.");
   }
@@ -374,7 +374,7 @@ function authorName(kind: "user" | "assistant", name: string | null) {
   return name ?? "Someone who has left the family account";
 }
 
-export async function listRevisions(v: Viewer, slug: string, opts: { withText?: boolean; limit?: number } = {}): Promise<(WikiRevisionSummary & { contentText?: string })[]> {
+export async function listRevisions(v: Viewer, slug: string, opts: { withText?: boolean; limit?: number } = {}): Promise<(PageRevisionSummary & { contentText?: string })[]> {
   const page = await readablePage(v, slug);
   const rows = await db.select({ ...revCols, ...(opts.withText ? { contentText: wikiRevisions.contentText } : {}) })
     .from(wikiRevisions).leftJoin(users, eq(users.id, wikiRevisions.authorId))
@@ -384,7 +384,7 @@ export async function listRevisions(v: Viewer, slug: string, opts: { withText?: 
   return rows.map((r) => ({ ...r, authorName: authorName(r.authorKind, r.authorName) }));
 }
 
-export async function getRevision(v: Viewer, slug: string, revisionId: string): Promise<WikiRevision | null> {
+export async function getRevision(v: Viewer, slug: string, revisionId: string): Promise<PageRevision | null> {
   const page = await readablePage(v, slug);
   const [r] = await db.select({ ...revCols, content: wikiRevisions.content, contentText: wikiRevisions.contentText })
     .from(wikiRevisions).leftJoin(users, eq(users.id, wikiRevisions.authorId))
@@ -396,7 +396,7 @@ export async function getRevision(v: Viewer, slug: string, revisionId: string): 
 /** Bring back an earlier version's title and text as a new revision (history is never rewritten). */
 export async function restoreRevision(v: Viewer, slug: string, revisionId: string, version: number): Promise<SaveResult> {
   const rev = await getRevision(v, slug, revisionId);
-  if (!rev) throw new WikiError(404, "That version of the page doesn't exist.");
+  if (!rev) throw new PageError(404, "That version of the page doesn't exist.");
   const when = rev.createdAt.toISOString().slice(0, 10);
   const res = await save(v, slug, version, {
     title: rev.title, content: sanitizeDoc(rev.content), force: false, summary: `Restored version ${rev.version} (${when})`,

@@ -28,7 +28,7 @@ export const restoreBody = z.object({
 
 export const cowriteMode = z.enum(["insert", "rewrite", "page"], { message: "Choose where the assistant should write." });
 
-/** POST /api/wiki/[slug]/cowrite — the request and the page as the writer sees it now (it may have unsaved edits). */
+/** POST /api/pages/[slug]/cowrite — the request and the page as the writer sees it now (it may have unsaved edits). */
 export const cowriteBody = z.object({
   instruction: z.string({ message: "Tell the assistant what to write." }).trim().min(3, "Tell the assistant what to write.").max(2000, "Keep the request under 2,000 characters."),
   mode: cowriteMode,
@@ -36,7 +36,7 @@ export const cowriteBody = z.object({
   selectionMarkdown: z.string().max(40_000, "Select a shorter passage to rewrite.").optional(),
 }).refine((b) => b.mode !== "rewrite" || !!b.selectionMarkdown?.trim(), { message: "Select the text you want rewritten first.", path: ["selectionMarkdown"] });
 
-/** POST /api/wiki/[slug]/cowrite/accept — keep the assistant's draft as its own revision. */
+/** POST /api/pages/[slug]/cowrite/accept — keep the assistant's draft as its own revision. */
 export const acceptBody = z.object({
   version: z.number().int().min(1, "Send the current page version."),
   content,

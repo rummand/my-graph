@@ -47,7 +47,7 @@ export function alwaysLabelOf(p: Proposal): string {
   switch (p.type) {
     case "propose_reminder": return "Always allow reminders";
     case "propose_fact": return "Always allow suggested facts";
-    case "propose_wiki_note": return "Always allow new wiki pages";
+    case "propose_wiki_note": return "Always allow new pages";
     case "propose_memory": return "Always save what I tell it";
   }
 }

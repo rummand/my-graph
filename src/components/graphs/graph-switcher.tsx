@@ -100,13 +100,16 @@ export function GraphSwitcher({ graphs, youId, compact = false }: { graphs: Grap
           <ChevronsUpDown size={13} className="shrink-0 text-muted" aria-hidden />
         </button>
       ) : (
+        <div className="flex w-full items-center gap-0.5">
+          {/* The mark goes home (Today); the name next to it switches graphs. */}
+          <Link href="/" aria-label={t("shell.homeLabel")} title={t("shell.homeLabel")}
+            className="relative shrink-0 rounded-lg p-1.5 transition-[transform,background-color] hover:bg-surface-2/70 active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            <Mark size={30} />
+            <span aria-hidden className="absolute bottom-0.5 left-0.5 size-3.5 rounded-full bg-[var(--g)] ring-[2.5px] ring-bg" />
+          </Link>
         <button ref={trigger} type="button" data-graph-switcher onClick={() => setOpen((o) => !o)}
           aria-expanded={open} aria-haspopup="dialog"
-          className="group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-surface-2/70">
-          <span className="relative shrink-0">
-            <Mark size={30} />
-            <span aria-hidden className="absolute -bottom-1 -right-1 size-3.5 rounded-full bg-[var(--g)] ring-[2.5px] ring-bg" />
-          </span>
+          className="group flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-1.5 py-1.5 text-left transition-colors hover:bg-surface-2/70">
           <span className="min-w-0 flex-1 leading-tight">
             <span className="block text-xs text-muted">{t("graphs.switcher.product")}</span>
             {/* The name comes from the visible text (so voice control can say what it sees), plus these hidden words. */}
@@ -116,6 +119,7 @@ export function GraphSwitcher({ graphs, youId, compact = false }: { graphs: Grap
           </span>
           <ChevronsUpDown size={15} className="shrink-0 text-muted transition-colors group-hover:text-fg" aria-hidden />
         </button>
+        </div>
       )}
 
       <AnimatePresence>

@@ -59,7 +59,7 @@ async function main() {
   await anna.switchTo(fam.id);
   const famNode = (await anna.req("/api/nodes", { method: "POST", body: { type: "event", label: `${FAM} birthday`, visibility: "household", startAt: new Date(Date.now() + 3 * 86400e3).toISOString() } })).json.node;
   const famPerson = (await anna.req("/api/nodes", { method: "POST", body: { type: "person", label: `${FAM} Grandma`, visibility: "household" } })).json.node;
-  const famPage = await anna.req("/api/wiki", { method: "POST", body: { title: `${FAM} recipes`, visibility: "household" } });
+  const famPage = await anna.req("/api/pages", { method: "POST", body: { title: `${FAM} recipes`, visibility: "household" } });
   const famSlug = famPage.json.page?.slug;
   const fd = new FormData();
   fd.append("file", new Blob([`${FAM} secret note about the family`], { type: "text/plain" }), `${FAM}.txt`);
@@ -78,7 +78,7 @@ async function main() {
   ok(g.text.includes(WORK) && !g.text.includes(FAM) && !g.text.includes("Weekend in Skagen"), "Anna in Work: graph shows only Work");
   ok(!(await anna.req(`/api/nodes/${famNode.id}`)).text.includes(FAM), "Anna in Work: family node by id is not found");
   ok(!(await anna.req("/api/timeline")).text.includes(FAM), "Anna in Work: timeline has no family events");
-  ok(!(await anna.req("/api/wiki")).text.includes(FAM), "Anna in Work: wiki has no family pages");
+  ok(!(await anna.req("/api/pages")).text.includes(FAM), "Anna in Work: pages have no family pages");
   ok(!(await anna.req("/api/library")).text.includes(FAM), "Anna in Work: library has no family files");
 
   await anna.switchTo(forSara.id);
@@ -118,8 +118,8 @@ async function main() {
   await check("people", "/api/people");
   await check("library", "/api/library");
   await check("library search", `/api/library?q=${FAM}`);
-  await check("wiki list", "/api/wiki");
-  await check("wiki search", `/api/wiki?q=${FAM}`);
+  await check("pages list", "/api/pages");
+  await check("pages search", `/api/pages?q=${FAM}`);
   await check("reminders", "/api/reminders");
   await check("merge suggestions", "/api/nodes/merge-suggestions");
   await check("meta model", "/api/meta");
@@ -130,7 +130,7 @@ async function main() {
     ok((await sara.req(`/api/people/${id}`)).status === 404, "…and from the people API");
   }
   if (famSlug) {
-    const r = await check("family wiki page by slug", `/api/wiki/${famSlug}`);
+    const r = await check("family page by slug", `/api/pages/${famSlug}`);
     ok(r.status === 404, `Sara gets 404 for the family wiki page (${r.status})`);
   }
   if (famSourceId) {
@@ -177,7 +177,7 @@ async function main() {
   ok((await anna.req(`/api/graphs/${forSara.id}/members/${newbie.userId}`, { method: "PATCH", body: { role: "viewer" } })).status === 200, "Anna makes Newbie a viewer");
   const denied = await pub.req("/api/nodes", { method: "POST", body: { type: "topic", label: "viewer wrote this" } });
   ok(denied.status === 403, `viewer can't add a node (${denied.status})`);
-  ok((await pub.req("/api/wiki", { method: "POST", body: { title: "viewer page" } })).status === 403, "viewer can't add a wiki page");
+  ok((await pub.req("/api/pages", { method: "POST", body: { title: "viewer page" } })).status === 403, "viewer can't add a page");
   ok((await pub.req("/api/reminders", { method: "POST", body: { title: "x", dueAt: new Date(Date.now() + 86400e3).toISOString() } })).status >= 400, "viewer can't add a reminder");
   // Leaving.
   ok((await pub.req(`/api/graphs/${forSara.id}/members/${newbie.userId}`, { method: "DELETE" })).status === 200, "Newbie leaves For Sara");

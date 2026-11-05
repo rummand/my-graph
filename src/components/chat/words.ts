@@ -93,7 +93,7 @@ export function resultWords(label: string | null | undefined, t: TFn = EN_T): st
   if ((m = label.match(/^Remembered: ([\s\S]+)$/))) return t("chat.result.remembered", { text: m[1] });
   if ((m = label.match(/^Kept, waiting for you to confirm: ([\s\S]+)$/))) return t("chat.result.keptWaiting", { text: m[1] });
   if ((m = label.match(/^Already remembered: ([\s\S]+)$/))) return t("chat.result.alreadyRemembered", { text: m[1] });
-  if ((m = label.match(/^Wiki page created: ([\s\S]+)$/))) return t("chat.result.wiki", { title: m[1] });
+  if ((m = label.match(/^(?:Wiki page|Page) created: ([\s\S]+)$/))) return t("chat.result.wiki", { title: m[1] });
   if ((m = label.match(/^Added as a guess: ([\s\S]+)$/))) return t("chat.result.guess", { text: m[1] });
   if ((m = label.match(/^Reminder added for (.+?): ([\s\S]+)$/))) return t("chat.result.reminder", { day: m[1], title: m[2] });
   return label;

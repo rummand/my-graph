@@ -1,7 +1,7 @@
 # My Graph
 
 A private family knowledge graph: a per-login brain (GBrain) with provenance on every fact, a chat assistant whose model
-calls all go through **mux**, a library for files/photos/audio, wiki pages, a visual timeline, and family accounts.
+calls all go through **mux**, a library for files/photos/audio, Artifacts (pages, documents, decks) made in the graph, a visual timeline, and family accounts.
 See `PROPOSAL.md` for the product.
 
 ## Stack
@@ -25,7 +25,7 @@ mux's own GBrain is unrelated — do not use it.
 
 ## Agents propose, humans decide
 
-This is the rule for everything that changes the graph. Facts, people, merges, wiki edits, new kinds/relations in the
+This is the rule for everything that changes the graph. Facts, people, merges, page edits, new kinds/relations in the
 meta model, connector imports and web findings are proposals on a change set (a branch, see `src/lib/changes`) with
 evidence and provenance; a person delivers (approves), edits or drops them. "Always allow" is itself a human
 decision and stays revocable.
@@ -122,9 +122,21 @@ nothing links two graphs. The family graph keeps the household rules; other grap
   `node_identity_members`. Later changes travel only as "Update <name>" change sets in the other graph (gbrain's node
   writes call `onNodeChanged` after commit), addressed to someone in both graphs. Link events in history are shown only
   to members of every graph involved.
-- **Documents and design sets** (`src/lib/artifacts`, `src/lib/design-sets`): reports, one-pagers, decks, briefs and
+- **Artifacts** (`/artifacts`, one nav item): everything made in a graph. One registry of kinds,
+  `src/lib/artifacts/kinds.ts` (page, document, deck, image, diagram; `available: false` hides image and diagram until
+  they exist) feeds the hub (tabs All / Pages / Documents / Decks / Styles), its New menu, kind filters and search
+  (`listMade` in `src/lib/artifacts/made.ts`). Add a kind there, not in a page.
+- **Pages** (`src/lib/pages`, `src/components/pages`, `/artifacts/pages[/new|/<slug>[/history]]`, API `/api/pages/**`):
+  what used to be the wiki — editor, co-writing, @mentions, [[links]], live compliance, revisions/restore, graph-sync,
+  the assistant's `propose_page` (stored as `propose_wiki_note`) and the change op `editWiki`. Storage keeps the old
+  names for data compatibility: tables `wiki_pages`/`wiki_revisions`, source kind `wiki`, audit `wiki.*`, history
+  subject `wiki`, export `wiki.json`, page-context kind `wiki`, i18n keys like `editWiki`/`wiki_edit`. Never show the
+  word "wiki" to a person: it's "page"/"side". Old URLs `/wiki/**` and `/artifacts/design-sets/**` redirect
+  (next.config.ts); `/api/wiki/**` re-exports `/api/pages/**` for old clients. Copy: namespace `pages.*`.
+- **Documents, decks and styles** (`src/lib/artifacts`, `src/lib/design-sets`): reports, one-pagers, decks, briefs and
   profiles drafted from the current graph only (every claim cited), styled by design sets (built-in + per graph,
-  versioned). A draft is private until a person publishes it; publishing pins the design set version. Page `/artifacts`.
+  versioned, shown as Styles at `/artifacts/styles`). A draft is private until a person publishes it; publishing pins the
+  design set version. Tabs `/artifacts/documents` and `/artifacts/decks`, editor `/artifacts/<id>`.
 - **Languages** (`src/lib/i18n`): English and Danish for all UI copy (`messages/<locale>/<namespace>.ts`, `getT` /
   `useT`). Text stored by the server in English is translated where it is shown, or written in the reader's language.
   Generated text (assistant, runs, check-ins, Brain Keeper) is written in the reader's language
@@ -174,7 +186,7 @@ index files.
 | gbrain | `src/lib/gbrain/**`, `src/app/api/graph/**`, `src/app/api/nodes/**`, `src/app/(app)/graph/**`, `src/app/(app)/node/**`, `src/components/graph/**`, `src/components/provenance/**` |
 | library | `src/lib/ingest/**`, `src/lib/storage/**`, `src/app/api/library/**`, `src/app/api/files/**`, `src/app/(app)/library/**`, `src/components/library/**` |
 | assistant | `src/lib/mux/**`, `src/lib/assistant/**`, `src/app/api/chat/**`, `src/app/(app)/chat/**`, `src/components/chat/**` |
-| wiki | `src/lib/wiki/**`, `src/app/api/wiki/**`, `src/app/(app)/wiki/**`, `src/components/wiki/**` |
+| pages (under artifacts) | `src/lib/pages/**`, `src/app/api/pages/**` (+ `src/app/api/wiki/**` aliases), `src/app/(app)/artifacts/pages/**`, `src/components/pages/**` |
 | timeline | `src/lib/timeline/**`, `src/app/api/timeline/**`, `src/app/(app)/timeline/**`, `src/components/timeline/**` |
 | today | `src/lib/briefs/**`, `src/app/api/reminders/**`, `src/app/(app)/page.tsx`, `src/components/today/**` |
 | people & meta model | `src/lib/meta/**`, `src/lib/people/**`, `src/app/api/meta/**`, `src/app/api/people/**`, `src/app/(app)/people/**`, `src/components/people/**` |
@@ -186,7 +198,7 @@ index files.
 | connectors | `src/lib/connectors/**`, `src/app/api/connections/**`, `src/app/(app)/connections/**`, `src/components/connections/**` |
 | importers | `src/lib/importers/**`, `src/app/api/import/**` |
 | cross-graph links | `src/lib/links/**`, `src/app/api/links/**`, `src/components/links/**` |
-| documents | `src/lib/artifacts/**`, `src/lib/design-sets/**`, `src/app/api/{artifacts,design-sets}/**`, `src/app/(app)/artifacts/**`, `src/components/artifacts/**` |
+| artifacts & documents | `src/lib/artifacts/**`, `src/lib/design-sets/**`, `src/app/api/{artifacts,design-sets}/**`, `src/app/(app)/artifacts/**`, `src/components/artifacts/**` |
 
 The **meta model** (`meta_kinds`, `meta_relations`, `meta_attributes` + `nodes.kind`) is the household's ontology:
 kinds of people/places/events/topics, the relation types allowed on edges (with inverse labels), and the attributes

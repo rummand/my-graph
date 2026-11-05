@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { format } from "date-fns";
 import { getAssistantSettings } from "@/lib/automations";
 import { isMuxDown, MuxAuthError, MuxError, stream } from "@/lib/mux";
-import { getPage, WikiError } from "@/lib/wiki";
-import { gatherCowriteSources } from "@/lib/wiki/cowrite/context";
-import { buildCowriteMessages, type CowriteEvent } from "@/lib/wiki/cowrite/prompt";
-import { parseBody, route, slugParam } from "@/lib/wiki/http";
+import { getPage, PageError } from "@/lib/pages";
+import { gatherCowriteSources } from "@/lib/pages/cowrite/context";
+import { buildCowriteMessages, type CowriteEvent } from "@/lib/pages/cowrite/prompt";
+import { parseBody, route, slugParam } from "@/lib/pages/http";
 import { cowriteBody } from "../../schemas";
 
 type P = { slug: string };
@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 const MUX_DOWN = "The assistant can't be reached right now, so it can't write. Your page is unchanged. Try again in a few minutes.";
 
 /**
- * POST /api/wiki/[slug]/cowrite { instruction, mode, pageMarkdown, selectionMarkdown? }
+ * POST /api/pages/[slug]/cowrite { instruction, mode, pageMarkdown, selectionMarkdown? }
  * Streams the assistant's draft for this page as NDJSON: first the numbered sources it read (scoped to the asker),
  * then text deltas, then done. Nothing is saved here; the editor shows the draft as a pending change.
  */
@@ -23,11 +23,11 @@ export const POST = route<P>(async (req, v, params) => {
   const { slug } = slugParam.parse(params);
   const body = await parseBody(req, cowriteBody);
   const page = await getPage(v, slug);
-  if (!page) throw new WikiError(404, "This page doesn't exist, or it hasn't been shared with you.");
-  if (!page.can.edit) throw new WikiError(403, "You can read this page but not change it, so the assistant can't write in it for you.");
+  if (!page) throw new PageError(404, "This page doesn't exist, or it hasn't been shared with you.");
+  if (!page.can.edit) throw new PageError(403, "You can read this page but not change it, so the assistant can't write in it for you.");
   const settings = await getAssistantSettings(v).catch(() => null);
   if (settings && settings.capabilities.wiki_write === false) {
-    throw new WikiError(403, "Writing in the wiki is turned off for the assistant. Turn it on in the assistant's settings.");
+    throw new PageError(403, "Writing pages is turned off for the assistant. Turn it on in the assistant's settings.");
   }
 
   const sources = await gatherCowriteSources(v, page, body.instruction);

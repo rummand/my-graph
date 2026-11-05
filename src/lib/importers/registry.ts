@@ -16,6 +16,9 @@ import { healthImporter } from "./health";
 import { slackImporter } from "./slack";
 import { notionApiImporter } from "./notion";
 import { homeAssistantImporter } from "./home_assistant";
+import { calendarImporter } from "./calendar";
+import { remindersImporter } from "./reminders";
+import { callsImporter } from "./calls";
 import { schoolworkImporter } from "@/lib/connectors/dk/minuddannelse/importer";
 
 export const IMPORTERS: Importer[] = [
@@ -33,6 +36,8 @@ export const IMPORTERS: Importer[] = [
   healthImporter,
   // Batches from the Slack, Notion (API) and Home Assistant connectors (never claim an upload).
   slackImporter, notionApiImporter, homeAssistantImporter,
+  // Calendar, Reminders and call history from the My Graph for Mac app (JSON batches only; never claim an upload).
+  calendarImporter, remindersImporter, callsImporter,
   // Notes vaults (notes/), last: a zip of Markdown is theirs only when nothing more specific claimed it.
   notionImporter, obsidianImporter,
 ];

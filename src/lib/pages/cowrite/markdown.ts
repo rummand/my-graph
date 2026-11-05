@@ -1,5 +1,5 @@
 /**
- * Co-writing: the bridge between a wiki page (TipTap JSON) and the small markdown the assistant writes. Pure and
+ * Co-writing: the bridge between a page (TipTap JSON) and the small markdown the assistant writes. Pure and
  * client-safe.
  *
  *   docToMarkdown     page → markdown, so the assistant sees headings, lists and checklists (mentions as @Name,
@@ -19,7 +19,7 @@ export type KnownRefs = {
 };
 
 export const citeHref = (c: Pick<CiteTarget, "kind" | "id" | "slug">) =>
-  c.kind === "page" && c.slug ? `/wiki/${encodeURIComponent(c.slug)}` : c.kind === "node" ? `/node/${c.id}` : `/library/${c.id}`;
+  c.kind === "page" && c.slug ? `/artifacts/pages/${encodeURIComponent(c.slug)}` : c.kind === "node" ? `/node/${c.id}` : `/library/${c.id}`;
 
 /** The short label shown on a citation inside the page. */
 export function citeLabel(title: string): string {
@@ -29,7 +29,7 @@ export function citeLabel(title: string): string {
 
 /** True for the links co-writing inserts as citations (styled as chips in the editor and the read view). */
 export function isCitationHref(href: string | null | undefined): boolean {
-  return !!href && (/^\/(library|node)\/[0-9a-f-]{36}$/i.test(href) || /^\/wiki\/[a-z0-9-]{1,120}$/.test(href));
+  return !!href && (/^\/(library|node)\/[0-9a-f-]{36}$/i.test(href) || /^\/(?:artifacts\/pages|wiki)\/[a-z0-9-]{1,120}$/.test(href));
 }
 
 /* ── Page → markdown ───────────────────────────────────────────────────────────────────────────────────── */
@@ -103,7 +103,7 @@ export function parseInlineMd(src: string, ctx: Ctx, marks: DocMark[] = []): Doc
           const c = ctx.cites.get(n)!;
           ctx.used.add(n);
           if (k) out.push(text(" ", marks));
-          // Another wiki page is cited as a [[page link]]; anything else as a cobalt citation link.
+          // Another page is cited as a [[page link]]; anything else as a cobalt citation link.
           out.push(c.kind === "page"
             ? { type: "pageLink", attrs: { id: c.id, label: c.title, slug: c.slug ?? null } }
             : text(citeLabel(c.title), [{ type: "link", attrs: { href: citeHref(c) } }]));

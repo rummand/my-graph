@@ -15,17 +15,17 @@ export function RestoreButton({ slug, revisionId, revisionVersion, pageVersion }
   const restore = async () => {
     setBusy(true); setError(null);
     try {
-      const res = await fetch(`/api/wiki/${encodeURIComponent(slug)}/restore`, {
+      const res = await fetch(`/api/pages/${encodeURIComponent(slug)}/restore`, {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ revisionId, version: pageVersion }),
       });
       const data = await res.json().catch(() => ({}));
-      if (res.status === 409) throw new Error(t("wiki.restore.conflict"));
-      if (!res.ok) throw new Error(data.error ?? t("wiki.restore.failed"));
-      router.push(`/wiki/${encodeURIComponent(slug)}`);
+      if (res.status === 409) throw new Error(t("pages.restore.conflict"));
+      if (!res.ok) throw new Error(data.error ?? t("pages.restore.failed"));
+      router.push(`/artifacts/pages/${encodeURIComponent(slug)}`);
       router.refresh();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("wiki.restore.failed"));
+      setError(e instanceof Error ? e.message : t("pages.restore.failed"));
       setBusy(false);
       setConfirming(false);
       router.refresh();
@@ -34,13 +34,13 @@ export function RestoreButton({ slug, revisionId, revisionVersion, pageVersion }
   return (
     <div className="flex flex-col items-start gap-2 sm:items-end">
       {confirming ? (
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t("wiki.restore.confirmGroup", { n: revisionVersion })}>
-          <span className="text-sm text-muted">{t("wiki.restore.confirm")}</span>
-          <Button size="sm" onClick={() => void restore()} disabled={busy}>{busy ? t("wiki.restore.restoring") : t("wiki.restore.restoreN", { n: revisionVersion })}</Button>
-          <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={busy}>{t("wiki.restore.cancel")}</Button>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t("pages.restore.confirmGroup", { n: revisionVersion })}>
+          <span className="text-sm text-muted">{t("pages.restore.confirm")}</span>
+          <Button size="sm" onClick={() => void restore()} disabled={busy}>{busy ? t("pages.restore.restoring") : t("pages.restore.restoreN", { n: revisionVersion })}</Button>
+          <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={busy}>{t("pages.restore.cancel")}</Button>
         </div>
       ) : (
-        <Button size="sm" variant="secondary" onClick={() => setConfirming(true)}><RotateCcw aria-hidden className="size-3.5" />{t("wiki.restore.button")}</Button>
+        <Button size="sm" variant="secondary" onClick={() => setConfirming(true)}><RotateCcw aria-hidden className="size-3.5" />{t("pages.restore.button")}</Button>
       )}
       {error && <p role="alert" className="max-w-sm text-sm text-danger">{error}</p>}
     </div>

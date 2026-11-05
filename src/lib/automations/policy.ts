@@ -75,9 +75,9 @@ export const ACTION_KIND: Record<SuggestionKind, string> = {
 
 export const ACTION_LABEL: Record<string, string> = {
   "reminder.create": "Add reminders", "fact.add": "Add facts to the graph", "node.merge": "Merge duplicates",
-  "memory.save": "Save memories", "rule.save": "Save rules", "wiki.edit": "Edit wiki pages",
+  "memory.save": "Save memories", "rule.save": "Save rules", "wiki.edit": "Edit pages",
   // The keys chat's approval cards use for the same choice.
-  "fact.create": "Add facts to the graph from chat", "wiki.create": "Write wiki notes from chat",
+  "fact.create": "Add facts to the graph from chat", "wiki.create": "Write pages from chat",
 };
 
 /** The "Always allow …" button label for a kind, or null when the option makes no sense (nudges). */
@@ -86,7 +86,7 @@ export function alwaysLabelFor(kind: SuggestionKind): string | null {
     case "reminder": return "Always allow new reminders";
     case "memory": return "Always save memories";
     case "rule": return "Always save rules";
-    case "wiki_edit": return "Always allow wiki notes";
+    case "wiki_edit": return "Always allow pages";
     case "fact": return "Always allow facts like this";
     case "merge": return "Always merge duplicates";
     default: return null;
@@ -133,7 +133,7 @@ const SKIP_REASON: Record<Exclude<UnattendedAction["type"], "read" | "propose">,
   share: "would share something",
   change_visibility: "would change who can see something",
   message: "would send a message",
-  write_wiki: "would edit a wiki page",
+  write_wiki: "would edit a page",
   write_reminder: "would add a reminder",
 };
 

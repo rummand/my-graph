@@ -50,7 +50,7 @@ const messages: MessageTree = {
     apply: "Vis",
     about: "Om",
     model: "Grafens model",
-    wikiPage: "Wikiside",
+    wikiPage: "Side",
     fact: "Forbindelse",
     loadMore: "Vis ældre ændringer",
     today: "I dag",
@@ -98,7 +98,7 @@ const messages: MessageTree = {
     evidence: "Belæg",
     none: "Intet registreret endnu.",
   },
-  subject: { node: "", edge: "Forbindelse", meta: "Model", wiki: "Wiki" },
+  subject: { node: "", edge: "Forbindelse", meta: "Model", wiki: "Side" },
 
   whoSaid: {
     title: "Hvem har sagt det",

@@ -6,7 +6,7 @@
 import { Extension, type Editor } from "@tiptap/react";
 import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { caretPos, mapEdit, touchesRange, type PendingEdit } from "@/lib/wiki/cowrite/pending";
+import { caretPos, mapEdit, touchesRange, type PendingEdit } from "@/lib/pages/cowrite/pending";
 
 export type CowriteState = { edit: PendingEdit | null; streaming: boolean; touched: boolean };
 type Meta = { edit: PendingEdit | null; streaming: boolean };

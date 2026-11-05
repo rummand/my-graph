@@ -16,16 +16,17 @@ export type ResolvedPage = { kind: PageKind; id: string; title: string; nodeId: 
 const ROUTES: { re: RegExp; kind: PageKind }[] = [
   { re: /^\/people\/([^/?#]+)/, kind: "person" },
   { re: /^\/node\/([^/?#]+)/, kind: "node" },
-  { re: /^\/artifacts\/([^/?#]+)/, kind: "document" },
+  { re: /^\/artifacts\/pages\/([^/?#]+)/, kind: "wiki" },
+  { re: /^\/artifacts\/(?!(?:pages|styles|documents|decks)(?:\/|$))([^/?#]+)/, kind: "document" },
   { re: /^\/changes\/([^/?#]+)/, kind: "change_set" },
-  { re: /^\/wiki\/([^/?#]+)/, kind: "wiki" },
+  { re: /^\/wiki\/([^/?#]+)/, kind: "wiki" }, // old address of a page (redirects to /artifacts/pages/…)
   { re: /^\/library\/([^/?#]+)/, kind: "library" },
   { re: /^\/corpora\/([^/?#]+)/, kind: "corpus" },
   { re: /^\/clinical\/clients\/([^/?#]+)/, kind: "client" },
   { re: /^\/clinical\/sessions\/([^/?#]+)/, kind: "clinical_session" },
 ];
 
-/** Index pages under these prefixes are lists, not one item ("/wiki/new" is the editor for a new page). */
+/** Index pages under these prefixes are lists, not one item ("/artifacts/pages/new" is the editor for a new page). */
 const NOT_ITEMS = new Set(["new", "search", "all"]);
 
 /** Strip " · My Graph" and similar suffixes from a document title. */
@@ -60,7 +61,7 @@ export const pageContextSchema = z.object({
 
 const KIND_WORDS: Record<PageKind, string> = {
   person: "the person", node: "the item", document: "the document", change_set: "the change set",
-  wiki: "the wiki page", library: "the file", corpus: "the corpus", client: "the client record", clinical_session: "the session",
+  wiki: "the page", library: "the file", corpus: "the corpus", client: "the client record", clinical_session: "the session",
 };
 
 /** The hint the model gets. Titles are data (quoted), never instructions. */

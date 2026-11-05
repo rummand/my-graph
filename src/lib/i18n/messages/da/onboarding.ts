@@ -6,7 +6,7 @@ const messages: MessageTree = {
   title: "Sådan arbejder assistenten i {graph}",
   tryTitle: "Prøv at spørge",
   step: "Trin {step} af {total}",
-  introFamily: "Den læser familiens kalender, breve, personer og wiki her, og kun det, du må se. Den foreslår; du bestemmer.",
+  introFamily: "Den læser familiens kalender, breve, personer og sider her, og kun det, du må se. Den foreslår; du bestemmer.",
   intro: "Kun det, der er i {graph}, bliver brugt. Intet fra dine andre grafer kommer ind, og intet herfra kommer ud. Den foreslår; du bestemmer.",
   canDo: "Det kan den",
   canAnswer: "Svare på spørgsmål, med et link til, hvor hvert svar kommer fra",

@@ -9,7 +9,7 @@ import { assistantSessions } from "@/db/schema";
 import type { Viewer } from "@/lib/auth";
 import * as gbrain from "@/lib/gbrain";
 import { getReadableSource } from "@/lib/ingest/library";
-import * as wiki from "@/lib/wiki";
+import * as wiki from "@/lib/pages";
 import { getArtifact } from "@/lib/artifacts";
 import { getChangeSet } from "@/lib/changes";
 import { getCorpus } from "@/lib/corpus";

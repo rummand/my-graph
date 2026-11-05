@@ -1,6 +1,11 @@
 /** Plain-English wording for audit log entries (pure). */
 const LABELS: Record<string, string> = {
   "setup.complete": "Set up the household",
+  "wiki.create": "Created a page",
+  "wiki.visibility": "Changed who can see a page",
+  "wiki.delete": "Deleted a page",
+  "wiki.restore": "Restored an earlier version of a page",
+  "wiki.assistant_draft": "Kept the assistant's draft on a page",
   "auth.login": "Signed in",
   "auth.login_failed": "Failed sign-in attempt",
   "auth.login_refused": "Sign-in refused",
@@ -74,11 +79,14 @@ const LABELS: Record<string, string> = {
   "mcp.key.revoke": "Revoked an access key for AI apps",
 };
 
+/** Stored area names that read differently today (the wiki became Pages; its audit actions keep the old name). */
+const AREA_NAMES: Record<string, string> = { wiki: "pages" };
+
 export function auditActionLabel(action: string): string {
   if (LABELS[action]) return LABELS[action];
   const [area, verb] = action.split(".");
   const words = `${verb ?? area}`.replace(/_/g, " ");
-  return `${words.charAt(0).toUpperCase()}${words.slice(1)}${verb ? ` (${area.replace(/_/g, " ")})` : ""}`;
+  return `${words.charAt(0).toUpperCase()}${words.slice(1)}${verb ? ` (${(AREA_NAMES[area] ?? area).replace(/_/g, " ")})` : ""}`;
 }
 
 /** Entries worth highlighting in the log. */

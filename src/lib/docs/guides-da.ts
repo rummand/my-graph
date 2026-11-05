@@ -97,7 +97,7 @@ const guides: MessageTree = {
       },
       "05_mention": {
         "title": "Skriv @ for at nævne noget.",
-        "text": "Skriv snabel-a for at nævne noget ved navn. Menuen finder personer, steder og sider i denne graf, og en omtale linker spørgsmålet, erindringen eller wikisiden til dem, så den også dukker op på deres side."
+        "text": "Skriv snabel-a for at nævne noget ved navn. Menuen finder personer, steder og sider i denne graf, og en omtale linker spørgsmålet, erindringen eller siden til dem, så den også dukker op på deres side."
       },
       "05_model": {
         "title": "Sådan ser denne graf verden.",
@@ -160,12 +160,12 @@ const guides: MessageTree = {
     }
   },
   "wiki": {
-    "title": "Wiki og at skrive sammen",
+    "title": "Sider og at skrive sammen",
     "sub": "Familiens egne sider, skrevet sammen med assistenten.",
     "parts": {
       "09_wiki": {
         "title": "Familiens egne sider.",
-        "text": "Wikien er til familiens egne sider: planer, vejledninger, noter fra skolen og lægen. Siderne er sat med en læseskrift, fordi de bliver læst, ikke skimmet. Nævn nogen med snabel-a, og siden dukker op på deres profil."
+        "text": "Sider, under Artefakter, er familiens egne tekster: planer, vejledninger, noter fra skolen og lægen. Siderne er sat med en læseskrift, fordi de bliver læst, ikke skimmet. Nævn nogen med snabel-a, og siden dukker op på deres profil."
       },
       "09_cowrite": {
         "title": "Bed assistenten skrive.",
@@ -234,16 +234,16 @@ const guides: MessageTree = {
     }
   },
   "documents": {
-    "title": "Dokumenter og designsæt",
+    "title": "Dokumenter, præsentationer og stilarter",
     "sub": "Rapporter, slides og overblik skrevet ud fra grafen, med en kilde til hver påstand.",
     "parts": {
       "14_docs": {
         "title": "Dokumenter fra din graf.",
-        "text": "Dokumenter er rapporter, enkeltsidede overblik, slides, briefinger og profiler, som assistenten skriver ud fra det, der er i grafen, med en kilde til hver påstand. Her er en rapport om Emma. Intet bliver delt, før du udgiver det."
+        "text": "Under Artefakter er dokumenter rapporter, enkeltsidede overblik, briefinger og profiler, og præsentationer er slides, som assistenten skriver ud fra det, der er i grafen, med en kilde til hver påstand. Her er en rapport om Emma. Intet bliver delt, før du udgiver det."
       },
       "14_design": {
-        "title": "Designsæt bestemmer, hvordan de ser ud.",
-        "text": "Et designsæt bestemmer, hvordan dokumenter ser ud: skrift, farver og layout. Brug det indbyggede, eller lav dit eget. Slides kan eksporteres til PowerPoint, så et oplæg lavet her kan tages med til et møde."
+        "title": "Stilarter bestemmer, hvordan de ser ud.",
+        "text": "En stilart (et designsæt) bestemmer, hvordan dokumenter og præsentationer ser ud: skrift, farver og layout. Brug det indbyggede, eller lav dit eget. Slides kan eksporteres til PowerPoint, så et oplæg lavet her kan tages med til et møde."
       }
     }
   },

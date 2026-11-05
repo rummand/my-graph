@@ -1,19 +1,19 @@
-import { deletePage, getBacklinks, getPage, setVisibility, updatePage, WikiError } from "@/lib/wiki";
-import { parseBody, route, slugParam } from "@/lib/wiki/http";
+import { deletePage, getBacklinks, getPage, setVisibility, updatePage, PageError } from "@/lib/pages";
+import { parseBody, route, slugParam } from "@/lib/pages/http";
 import { patchBody } from "../schemas";
 
 type P = { slug: string };
 
-/** GET /api/wiki/[slug] — the page, what the viewer may do with it, and its backlinks. */
+/** GET /api/pages/[slug] — the page, what the viewer may do with it, and its backlinks. */
 export const GET = route<P>(async (_req, v, params) => {
   const { slug } = slugParam.parse(params);
   const page = await getPage(v, slug);
-  if (!page) throw new WikiError(404, "This page doesn't exist, or it hasn't been shared with you.");
+  if (!page) throw new PageError(404, "This page doesn't exist, or it hasn't been shared with you.");
   return { page, backlinks: await getBacklinks(v, page) };
 });
 
 /**
- * PATCH /api/wiki/[slug] — save { version, title?, content?, force? } and/or change { visibility }.
+ * PATCH /api/pages/[slug] — save { version, title?, content?, force? } and/or change { visibility }.
  * 409 with `current` when someone else saved first (resend with force: true to overwrite).
  */
 export const PATCH = route<P>(async (req, v, params) => {
@@ -30,7 +30,7 @@ export const PATCH = route<P>(async (req, v, params) => {
   return { page, changed };
 });
 
-/** DELETE /api/wiki/[slug] — the owner, or a parent for a whole-family page. */
+/** DELETE /api/pages/[slug] — the owner, or a parent for a whole-family page. */
 export const DELETE = route<P>(async (_req, v, params) => {
   const { slug } = slugParam.parse(params);
   await deletePage(v, slug);

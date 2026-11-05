@@ -62,7 +62,7 @@ const MODE_TASK: Record<CowriteMode, string> = {
 
 export function systemPrompt(opts: { today: string; mode: CowriteMode }): string {
   return [
-    "You help a family write pages in their private wiki. You are \"the assistant\", not a person.",
+    "You help a family write pages in their private graph. You are \"the assistant\", not a person.",
     `Today is ${opts.today}.`,
     "",
     "How to treat what you are given:",

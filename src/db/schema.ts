@@ -1,5 +1,5 @@
 import {
-  pgTable, pgEnum, uuid, text, timestamp, integer, real, boolean, jsonb, index, uniqueIndex, unique, vector, customType, primaryKey,
+  type AnyPgColumn, pgTable, pgEnum, uuid, text, timestamp, integer, real, boolean, jsonb, index, uniqueIndex, unique, vector, customType, primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -213,6 +213,37 @@ export const edges = pgTable("edges", {
 }, (t) => [index("edges_from_idx").on(t.fromId), index("edges_to_idx").on(t.toId), index("edges_graph_idx").on(t.graphId)]);
 
 /** Original artefacts: uploaded files, wiki pages, chat messages, manual entries. Stored unchanged. */
+/**
+ * Library folders (src/lib/ingest/folders.ts): a tree per graph. A folder is seen like a file is (owner, or
+ * visibility parents/household); a file in a folder the viewer can't see shows at the top level for them. Names are
+ * unique among the siblings a person can see (checked in code, so a private folder is never revealed by a clash).
+ * `origin`: made by a person, from a template, or from an accepted suggestion.
+ */
+export const libraryFolders = pgTable("library_folders", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").notNull().references(() => graphs.id, { onDelete: "cascade" }),
+  parentId: uuid("parent_id").references((): AnyPgColumn => libraryFolders.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  ownerId: uuid("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  visibility: visibilityEnum("visibility").notNull().default("private"),
+  sort: integer("sort").notNull().default(0),
+  origin: text("origin").$type<"person" | "template" | "suggested">().notNull().default("person"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("library_folders_parent_idx").on(t.graphId, t.parentId)]);
+
+/** Folder structures a person saved to start other folders from: for their household (graphId null) or one graph. */
+export const libraryFolderTemplates = pgTable("library_folder_templates", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
+  graphId: uuid("graph_id").references(() => graphs.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  tree: jsonb("tree").$type<{ name: string; children?: unknown[] }[]>().notNull().default([]),
+  createdBy: uuid("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [index("library_folder_templates_household_idx").on(t.householdId, t.graphId)]);
+
 export const sources = pgTable("sources", {
   id: uuid("id").primaryKey().defaultRandom(),
   householdId: uuid("household_id").notNull().references(() => households.id, { onDelete: "cascade" }),
@@ -255,8 +286,10 @@ export const sources = pgTable("sources", {
   docKey: text("doc_key"),
   nameKey: text("name_key"),
   contentKey: text("content_key"),
+  /** The library folder it is filed in (every version of a document is in the same one); null = not in a folder. */
+  folderId: uuid("folder_id").references(() => libraryFolders.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [index("sources_thread_idx").on(t.graphId, t.threadKey), index("sources_lineage_idx").on(t.graphId, t.lineageId), index("sources_dockey_idx").on(t.graphId, t.docKey), index("sources_namekey_idx").on(t.graphId, t.nameKey), index("sources_contentkey_idx").on(t.graphId, t.contentKey), index("sources_docdate_idx").on(t.graphId, t.documentDate), index("sources_owner_idx").on(t.ownerId, t.createdAt), index("sources_graph_idx").on(t.graphId, t.createdAt), index("sources_node_idx").on(t.nodeId)]);
+}, (t) => [index("sources_folder_idx").on(t.graphId, t.folderId), index("sources_thread_idx").on(t.graphId, t.threadKey), index("sources_lineage_idx").on(t.graphId, t.lineageId), index("sources_dockey_idx").on(t.graphId, t.docKey), index("sources_namekey_idx").on(t.graphId, t.nameKey), index("sources_contentkey_idx").on(t.graphId, t.contentKey), index("sources_docdate_idx").on(t.graphId, t.documentDate), index("sources_owner_idx").on(t.ownerId, t.createdAt), index("sources_graph_idx").on(t.graphId, t.createdAt), index("sources_node_idx").on(t.nodeId)]);
 
 /** Text chunks of a source for retrieval; locator points back into the source (page, offsets, bbox, time). */
 export const chunks = pgTable("chunks", {

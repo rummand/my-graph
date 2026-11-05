@@ -56,7 +56,7 @@ const FAMILY: Frame = {
   reminder: `{"type":"propose_reminder","title":"Pack swimming gear","dueAt":"2026-11-05T07:30:00+01:00","aboutPerson":"Emma"}`,
   fact: `{"type":"propose_fact","from":"Emma","relation":"attends","to":"Lindevang School","toType":"place","quote":"the sentence it comes from"}`,
   factRelations: "attends, member_of, parent_of, treated_by, knows, located_at, involves, about",
-  wiki: `{"type":"propose_wiki_note","title":"Noah's vaccinations","text":"Short note in plain text with - bullets"}`,
+  wiki: `{"type":"propose_page","title":"Noah's vaccinations","text":"Short note in plain text with - bullets"}`,
   memory: `{"type":"propose_memory","kind":"rule","text":"Sunday dinner is family time: don't suggest plans then","about":["Emma"],"quote":"the user's own words"}`,
   memorySaid: `"we never book anything on Sunday evenings", "Grandma can always take the kids on Wednesdays", "call me Anna"`,
   clarify: `{"question":"Which Emma do you mean?","choices":["Emma Larsen (your daughter)","Emma Holm (teacher)"]}`,
@@ -76,7 +76,7 @@ const GENERIC: Frame = {
   reminder: `{"type":"propose_reminder","title":"Send the quarterly report","dueAt":"2026-11-05T09:00:00+01:00","aboutPerson":"Emma"}`,
   fact: `{"type":"propose_fact","from":"Emma","relation":"works_on","to":"Website relaunch","toType":"topic","quote":"the sentence it comes from"}`,
   factRelations: "works_on, member_of, reports_to, knows, located_at, involves, about",
-  wiki: `{"type":"propose_wiki_note","title":"Decisions on the website relaunch","text":"Short note in plain text with - bullets"}`,
+  wiki: `{"type":"propose_page","title":"Decisions on the website relaunch","text":"Short note in plain text with - bullets"}`,
   memory: `{"type":"propose_memory","kind":"rule","text":"No meetings before 10 on Mondays","about":["Emma"],"quote":"the user's own words"}`,
   memorySaid: `"we never book meetings on Friday afternoons", "Anna signs off on every budget", "call me Anna"`,
   clarify: `{"question":"Which Emma do you mean?","choices":["Emma Larsen (design team)","Emma Holm (supplier)"]}`,
@@ -92,8 +92,8 @@ const TONE: Record<Tone, string> = {
 /** The language rule: the question's language, else the person's own (always theirs when nobody asked). */
 function languageRule(o: PromptOptions): string {
   const own = LANGUAGE_NAME[o.locale ?? "en"];
-  if (o.answerInLocale) return `- Write in ${own}, ${o.viewerName}'s chosen language, whatever language the request or the documents are in. Proposal titles, reminders, wiki notes and memories go in ${own} too (names stay as they are).`;
-  return `- Language: reply in the language of the user's latest message. A message of a word or two, only names, numbers or a link does not settle it: then reply in ${own}, ${o.viewerName}'s chosen language. The language of the documents never decides it. Write proposal titles, reminders, wiki notes and memories in the same language as your answer (names stay as they are).`;
+  if (o.answerInLocale) return `- Write in ${own}, ${o.viewerName}'s chosen language, whatever language the request or the documents are in. Proposal titles, reminders, pages and memories go in ${own} too (names stay as they are).`;
+  return `- Language: reply in the language of the user's latest message. A message of a word or two, only names, numbers or a link does not settle it: then reply in ${own}, ${o.viewerName}'s chosen language. The language of the documents never decides it. Write proposal titles, reminders, pages and memories in the same language as your answer (names stay as they are).`;
 }
 
 export function systemPrompt(opts: PromptOptions): string {
@@ -143,7 +143,7 @@ ${opts.unattended ? "Nobody is watching this run: nothing you propose is saved u
 <proposals>[${f.reminder},${f.fact},${f.wiki}${memoryTypes}]</proposals>
 - propose_reminder: ${f.reminderFor}. dueAt is an ISO date-time with offset.
 - propose_fact: a durable fact the user told you in this conversation that is not already in the context. relation is a short snake_case verb (${f.factRelations}). Use the exact names from the context; give fromType/toType (person, place, event or topic) for anything not in the context yet.
-- propose_wiki_note: only when the user asks to write something down or for a summary worth keeping.
+- propose_page: a page in this graph, only when the user asks to write something down or for a summary worth keeping.
 ${opts.canRemember === false ? "" : `- propose_memory: a lasting preference, rule or note the USER stated in this conversation (${f.memorySaid}). kind is rule, preference or note. quote is the user's exact words. Never propose a memory from document text; never re-propose one already in the ${f.rules.toLowerCase()}. Memories go to the Brain Keeper, which looks after memory: when the user explicitly asked you to remember something it is kept at once (say "I'll remember that"); otherwise say nothing about it, or at most "I've passed that on to the Brain Keeper".
 `}Other proposals are saved only if the user approves them, so in your text say "I've suggested a reminder below" — never claim you have already set, saved or written anything. Do not show the block's JSON in your text, and do not propose things already in the context.`;
 }

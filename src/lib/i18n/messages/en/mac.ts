@@ -4,11 +4,25 @@ import type { MessageTree } from "../../core";
 const messages: MessageTree = {
   metaTitle: "My Graph for Mac",
   title: "My Graph for Mac",
-  lead: "Bring the Messages conversations and Notes you choose into this graph. A small helper on your Mac reads them and sends them here; what they add waits for you to approve.",
+  lead: "Bring what you choose from your Mac into this graph: Messages, Notes, Contacts, Calendar, Reminders, Photos, folders of files, Voice Memos and calls. What they add waits for you to approve.",
   unofficial: "Unofficial: may stop working",
   unofficialWhy: "Apple has no way for other apps to read Messages or Notes. The helper reads the Messages database on your Mac and asks Notes for your notes, so a macOS update may break it until My Graph is updated.",
   readOnly: "You can look at this graph but not connect a Mac to it.",
   back: "All connections",
+
+  app: {
+    title: "The My Graph for Mac app (recommended)",
+    lead: "A small app in your menu bar. Sign in once with your My Graph account, switch on what it may send, and it keeps this graph up to date by itself. A badge shows when proposals are waiting for you.",
+    download: "Download the Mac app",
+    soon: "If the download isn't ready yet, use the helper below for now.",
+    sources: "It can send, when you switch each one on: Messages, Notes, Contacts, Calendar, Reminders, Photos (when and where, not the pictures), files from folders you choose (a changed file becomes a new version), Voice Memos and your call history.",
+    writeBack: "It can also put your reminders and upcoming events from My Graph into Reminders and Calendar on your Mac, if you turn that on. The only thing it changes here is ticking off your own reminders.",
+    off: "Everything is off until you switch it on in the app. What it sends becomes proposals you approve in Changes.",
+    signedIn: "Signed in on {device} with the app (version {version}).",
+    signedInNoName: "Signed in on your Mac with the app (version {version}).",
+    alternative: "Or use the helper in Terminal",
+    alternativeLead: "The helper is a small script for Messages and Notes only. Use it if you can't install the app. Signing in with the app replaces the helper's key, and pairing the helper replaces the app's.",
+  },
 
   status: {
     title: "Your Mac",

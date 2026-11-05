@@ -174,15 +174,16 @@ test("People: add a person with how they know you", async ({ page }) => {
   await expect(page.locator("main")).toContainText(/Colleague|colleague/);
 });
 
-test("Wiki: create a page and edit it", async ({ page }) => {
+test("Pages: create a page from the Artifacts New menu and edit it", async ({ page }) => {
   await switchGraph(page, "Family");
   const title = `E2E page ${uid()}`;
-  await page.goto("/wiki"); await settled(page);
-  await page.getByRole("link", { name: "New page" }).first().click();
-  await expect(page).toHaveURL(/\/wiki\/new/);
+  await page.goto("/artifacts"); await settled(page);
+  await page.getByRole("button", { name: "New" }).click();
+  await page.getByRole("menuitem", { name: /^Page/ }).click();
+  await expect(page).toHaveURL(/\/artifacts\/pages\/new/);
   await page.getByRole("textbox", { name: "Title" }).fill(title);
   await page.getByRole("button", { name: "Create and start writing" }).click();
-  await expect(page).toHaveURL(/\/wiki\/[^/]+/);
+  await expect(page).toHaveURL(/\/artifacts\/pages\/[^/]+/);
   const editor = page.locator('[contenteditable="true"]').first();
   await editor.click();
   await page.keyboard.type("Opening hours are 9 to 17 on weekdays.");
@@ -223,7 +224,8 @@ test.describe("Documents @slow", () => {
     test.setTimeout(420_000);
     await switchGraph(page, "Work");
     await page.goto("/artifacts"); await settled(page);
-    await page.getByRole("link", { name: "New document" }).first().click();
+    await page.getByRole("button", { name: "New" }).click();
+    await page.getByRole("menuitem", { name: /^Document/ }).click();
     await expect(page).toHaveURL(/\/artifacts\/new/);
     await page.getByRole("radio", { name: /^One-pager/ }).check({ force: true });
     const title = `E2E one-pager ${uid()}`;

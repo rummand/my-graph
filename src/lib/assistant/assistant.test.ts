@@ -5,7 +5,7 @@ import { buildMessages, cleanTitle, fallbackTitle, trimHistory } from "./prompt"
 import { parseProposals, ProposalStreamFilter } from "./proposals";
 import { chooseRoute } from "./route";
 import { decodeState, encodeState, foldState } from "./state";
-import { wikiDocFromText, wikiSlug } from "./wiki-doc";
+import { wikiDocFromText, wikiSlug } from "./page-doc";
 import { degradedAnswer } from "./fallback";
 
 const passage = (id: string, text: string, sensitive = false): ContextItem => ({ kind: "passage", sourceId: id, title: `Doc ${id}`, text, locator: { page: 2 }, sensitive });

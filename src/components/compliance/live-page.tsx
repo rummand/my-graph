@@ -17,7 +17,7 @@ const PAUSE_MS = 2500;
 
 type Note = { id: string; top: number; left: number; mobile: boolean };
 
-export function LiveWikiCompliance({ editor, pageId, title, canEdit = true }: { editor: Editor; pageId: string; title: () => string; canEdit?: boolean }) {
+export function LivePageCompliance({ editor, pageId, title, canEdit = true }: { editor: Editor; pageId: string; title: () => string; canEdit?: boolean }) {
   const t = useT();
   const [state, setState] = useState<StripState>({ phase: "idle", corpora: [], findings: [], counts: countsOf([]), status: null, checked: false });
   const [note, setNote] = useState<Note | null>(null);

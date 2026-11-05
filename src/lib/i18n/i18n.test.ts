@@ -75,7 +75,7 @@ describe("translation", () => {
 });
 
 describe("dictionaries", () => {
-  const NS = ["common", "shell", "settings", "auth", "today", "people", "timeline", "chat", "library", "wiki", "graph", "changes",
+  const NS = ["common", "shell", "settings", "auth", "today", "people", "timeline", "chat", "library", "pages", "graph", "changes",
     "history", "memory", "automations", "connections", "graphs", "onboarding", "model", "mention"];
   it("ship every namespace in both languages", () => {
     for (const ns of NS) {

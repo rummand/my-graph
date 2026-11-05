@@ -109,3 +109,53 @@ export const appleNotesPayload = z.object({
   })).max(20_000),
 });
 export type AppleNotesPayload = z.infer<typeof appleNotesPayload>;
+
+/** calendar: events the Mac app read from Calendar (EventKit). The server keeps 30 days back and 120 days ahead. */
+export const calendarPayload = z.object({
+  events: z.array(z.object({
+    /** The event's id on the Mac (EKEvent.calendarItemExternalIdentifier, plus the occurrence date for repeats). */
+    id: text(300),
+    calendar: text(200),
+    title: text(500),
+    start: iso,
+    end: iso.optional(),
+    allDay: z.boolean().default(false),
+    location: text(500).optional(),
+    notes: text(10_000).optional(),
+    attendees: z.array(z.object({ name: text(200).optional(), email: text(320).optional() })).max(200).optional(),
+    url: text(2000).optional(),
+  })).max(10_000),
+});
+export type CalendarPayload = z.infer<typeof calendarPayload>;
+
+/** reminders: reminders the Mac app read from Reminders (EventKit). Only open ones with a date are proposed. */
+export const remindersPayload = z.object({
+  reminders: z.array(z.object({
+    /** EKReminder.calendarItemExternalIdentifier. */
+    id: text(300),
+    list: text(200),
+    title: text(500),
+    due: iso.optional(),
+    notes: text(10_000).optional(),
+    done: z.boolean(),
+    /** EventKit's 0 (none) to 9 (low); 1 is high. */
+    priority: z.number().int().min(0).max(9).optional(),
+  })).max(10_000),
+});
+export type RemindersPayload = z.infer<typeof remindersPayload>;
+
+/** calls: the Mac's call history (phone via iPhone, FaceTime). Always sensitive and private. */
+export const callsPayload = z.object({
+  calls: z.array(z.object({
+    id: text(300),
+    at: iso,
+    durationSec: z.number().int().min(0).max(7 * 86_400),
+    direction: z.enum(["in", "out", "missed"]),
+    /** A phone number or an email address (FaceTime). */
+    handle: text(320),
+    /** The name the Mac's Contacts gives this handle, if any. */
+    name: text(200).optional(),
+    service: z.enum(["phone", "facetime_audio", "facetime_video"]),
+  })).max(50_000),
+});
+export type CallsPayload = z.infer<typeof callsPayload>;

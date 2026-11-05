@@ -18,6 +18,7 @@ import { canEditSourceRow, canReadSourceRow, sourceVisibleTo } from "./access";
 import { IngestError } from "./errors";
 import { docKindOf, type DocKind } from "./classify";
 import { mimeCategory, MBOX_MIME, ZIP_MIME, type FileCategory } from "./mime";
+import { folderPathFor, rootCondition, visibleFolderIds } from "./folders";
 
 export type Visibility = "private" | "parents" | "household";
 export type SourceStatus = "pending" | "processing" | "ready" | "failed";
@@ -47,13 +48,18 @@ export type SourceSummary = {
   otherNames: string[];
   /** Set on an upload that turned out to be a file already in the library (it was not kept). */
   duplicateOf: { id: string; title: string } | null;
+  /** The folder it is in, when the viewer can see that folder (else null: it shows as not in a folder). */
+  folderId: string | null;
+  /** The viewer may move, rename or delete it (the owner, while they may write in the graph). */
+  canEdit: boolean;
 };
 
 /** What people filter by: the kind of file, or what the item is (mail, letter, scan, photo). */
 export type LibraryType = FileCategory | "mail" | "letter" | "scan" | "photo" | "recording" | "note";
 export const LIBRARY_TYPES: LibraryType[] = ["pdf", "document", "text", "image", "audio", "email", "mailbox", "other", "mail", "letter", "scan", "photo", "recording", "note"];
 
-export type ListFilters = { category?: LibraryType; status?: SourceStatus; q?: string; thread?: string; limit?: number; offset?: number };
+/** `folder`: a folder id, or "root" for files in no folder (the viewer can see). Ignored while searching (q). */
+export type ListFilters = { category?: LibraryType; status?: SourceStatus; q?: string; thread?: string; folder?: string; limit?: number; offset?: number };
 
 const LIBRARY_KINDS = ["upload", "manual", "sync", "email", "web", "connector"] as const;
 
@@ -81,7 +87,7 @@ function categoryCondition(c: LibraryType): SQL | undefined {
 
 const escapeLike = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
 
-function summarize(r: typeof sources.$inferSelect & { ownerName: string | null }, v: Viewer, t?: TFn): SourceSummary {
+function summarize(r: typeof sources.$inferSelect & { ownerName: string | null }, v: Viewer, t?: TFn, visibleFolders?: Set<string>): SourceSummary {
   const m = r.meta ?? {};
   const exif = (m.exif ?? null) as { takenAt?: string | null } | null;
   return {
@@ -106,6 +112,8 @@ function summarize(r: typeof sources.$inferSelect & { ownerName: string | null }
     revision: r.revision ?? 1, superseded: !!r.supersededAt,
     otherNames: Array.isArray(m.otherNames) ? (m.otherNames as unknown[]).filter((x): x is string => typeof x === "string") : [],
     duplicateOf: typeof m.duplicateOf === "string" ? { id: m.duplicateOf, title: typeof m.duplicateOfTitle === "string" ? m.duplicateOfTitle : "" } : null,
+    folderId: r.folderId && visibleFolders?.has(r.folderId) ? r.folderId : null,
+    canEdit: canEditSourceRow(v, r),
   };
 }
 
@@ -124,6 +132,10 @@ export async function listSources(v: Viewer, f: ListFilters = {}): Promise<{ ite
   // A mail import's messages show under Mail, in search and in their thread; "Everything" shows the import itself.
   if (!f.category && !f.q?.trim() && !f.thread) conds.push(sql`${sources.meta}->>'containerId' is null`);
   if (f.status) conds.push(eq(sources.status, f.status));
+  const folderIds = await visibleFolderIds(v);
+  const visibleFolders = new Set(folderIds);
+  // A folder shows its own files; search looks in every folder.
+  if (f.folder && !f.q?.trim()) conds.push(f.folder === "root" ? rootCondition(folderIds) : visibleFolders.has(f.folder) ? eq(sources.folderId, f.folder) : sql`false`);
   // Only the newest version of a document is listed; the earlier ones are on its page.
   conds.push(isNull(sources.supersededAt));
   const q = f.q?.trim();
@@ -140,7 +152,7 @@ export async function listSources(v: Viewer, f: ListFilters = {}): Promise<{ ite
       nodeId: sources.nodeId, documentDate: sources.documentDate, documentDatePrecision: sources.documentDatePrecision, threadKey: sources.threadKey,
       url: sources.url, externalId: sources.externalId, connectionId: sources.connectionId, fetchedAt: sources.fetchedAt,
       lineageId: sources.lineageId, revision: sources.revision, supersededAt: sources.supersededAt, docKey: sources.docKey,
-      nameKey: sources.nameKey, contentKey: sources.contentKey, createdAt: sources.createdAt, ownerName: users.name,
+      nameKey: sources.nameKey, contentKey: sources.contentKey, folderId: sources.folderId, createdAt: sources.createdAt, ownerName: users.name,
     })
     .from(sources)
     .leftJoin(users, eq(users.id, sources.ownerId))
@@ -150,7 +162,7 @@ export async function listSources(v: Viewer, f: ListFilters = {}): Promise<{ ite
     .offset(f.offset ?? 0);
   const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(sources).where(where);
   const t = await readerT(v);
-  const items = await withJobs(rows.map((r) => summarize(r, v, t)));
+  const items = await withJobs(rows.map((r) => summarize(r, v, t, visibleFolders)));
   const keys = [...new Set(items.map((i) => i.threadKey).filter((k): k is string => !!k))];
   if (keys.length) {
     const counts = await db.select({ key: sources.threadKey, n: sql<number>`count(*)::int` }).from(sources)
@@ -189,6 +201,8 @@ export type ExtractedEntity = { id: string; label: string; type: string; summary
 export type SourceDetail = {
   /** hasFile: an original is stored (pasted notes and web pages have only their text). */
   source: SourceSummary & { textContent: string | null; meta: Record<string, unknown>; nodeId: string | null; hasFile: boolean };
+  /** The folder it is in, top down, as the viewer sees it (null: not in a folder they can see). */
+  folder: { id: string; name: string }[] | null;
   chunks: { id: string; idx: number; text: string; locator: Locator }[];
   entities: ExtractedEntity[];
   facts: ExtractedFact[];
@@ -260,7 +274,8 @@ export async function getSourceDetail(v: Viewer, id: string): Promise<SourceDeta
     .sort((a, b) => a.type.localeCompare(b.type) || a.label.localeCompare(b.label));
 
   const t = await readerT(v);
-  const [summary] = await withJobs([summarize({ ...src, ownerName: src.ownerName }, v, t)]);
+  const folder = await folderPathFor(v, src.folderId);
+  const [summary] = await withJobs([summarize({ ...src, ownerName: src.ownerName }, v, t, new Set(folder?.map((f) => f.id) ?? []))]);
   const m = src.meta ?? {};
 
   let thread: SourceDetail["thread"] = null;
@@ -304,7 +319,7 @@ export async function getSourceDetail(v: Viewer, id: string): Promise<SourceDeta
     chunks: chunkRows.map((c) => ({ ...c, locator: c.locator ?? {} })),
     entities,
     facts: [...facts.values()],
-    thread, proposal, attachments, parent: parentRow[0] ?? null, importedMessages, versions,
+    thread, proposal, attachments, parent: parentRow[0] ?? null, importedMessages, versions, folder,
   };
 }
 

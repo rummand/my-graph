@@ -4,11 +4,25 @@ import type { MessageTree } from "../../core";
 const messages: MessageTree = {
   metaTitle: "My Graph til Mac",
   title: "My Graph til Mac",
-  lead: "Hent de samtaler fra Beskeder og de noter, du vælger, ind i denne graf. En lille hjælper på din Mac læser dem og sender dem hertil; det, de tilføjer, venter på din godkendelse.",
+  lead: "Hent det, du vælger fra din Mac, ind i denne graf: Beskeder, Noter, Kontakter, Kalender, Påmindelser, Fotos, mapper med filer, Memoer og opkald. Det, de tilføjer, venter på din godkendelse.",
   unofficial: "Uofficielt: kan holde op med at virke",
   unofficialWhy: "Apple giver ikke andre apps adgang til Beskeder eller Noter. Hjælperen læser databasen for Beskeder på din Mac og beder Noter om dine noter, så en macOS-opdatering kan få den til at holde op med at virke, indtil My Graph er opdateret.",
   readOnly: "Du kan se denne graf, men ikke forbinde en Mac til den.",
   back: "Alle forbindelser",
+
+  app: {
+    title: "Appen My Graph til Mac (anbefales)",
+    lead: "En lille app i din menulinje. Log ind én gang med din My Graph-konto, slå til, hvad den må sende, og den holder selv denne graf opdateret. Et mærke viser, når der er forslag, der venter på dig.",
+    download: "Hent appen til Mac",
+    soon: "Hvis overførslen ikke er klar endnu, så brug hjælperen nedenfor indtil videre.",
+    sources: "Den kan sende, når du slår hver enkelt til: Beskeder, Noter, Kontakter, Kalender, Påmindelser, Fotos (hvornår og hvor, ikke billederne), filer fra mapper, du vælger (en ændret fil bliver en ny version), Memoer og din opkaldshistorik.",
+    writeBack: "Den kan også lægge dine påmindelser og kommende begivenheder fra My Graph ind i Påmindelser og Kalender på din Mac, hvis du slår det til. Det eneste, den ændrer her, er at krydse dine egne påmindelser af.",
+    off: "Alt er slået fra, indtil du slår det til i appen. Det, den sender, bliver forslag, som du godkender under Ændringer.",
+    signedIn: "Logget ind på {device} med appen (version {version}).",
+    signedInNoName: "Logget ind på din Mac med appen (version {version}).",
+    alternative: "Eller brug hjælperen i Terminal",
+    alternativeLead: "Hjælperen er et lille script kun til Beskeder og Noter. Brug den, hvis du ikke kan installere appen. Logger du ind med appen, erstatter det hjælperens nøgle, og parrer du hjælperen, erstatter det appens.",
+  },
 
   status: {
     title: "Din Mac",

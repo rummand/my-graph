@@ -156,7 +156,7 @@ async function syncPageGraph(editorNow: Viewer, pageId: string, prev: PrevState 
 async function createPageNode(owner: Viewer, page: PageRow, prov: ProvenanceInput): Promise<string | null> {
   // GBrain reuses an existing document node with the same name. Only accept it if it's this page's own node;
   // otherwise use a more specific label so two pages (or a page and a file) with the same title stay separate.
-  const labels = [page.title, `${page.title} (wiki page)`, `${page.title} (wiki: ${page.slug})`];
+  const labels = [page.title, `${page.title} (page)`, `${page.title} (page: ${page.slug})`];
   for (const label of labels) {
     const { node, created } = await upsertNode(owner, {
       type: "document", label, visibility: page.visibility, props: { wikiPageId: page.id, slug: page.slug },

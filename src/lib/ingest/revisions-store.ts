@@ -70,19 +70,30 @@ export async function settleRevision(src: Src, textContent: string): Promise<Set
   }
   if (!prev) return { outcome: "new" };
 
+  const { lineageId, revision } = await appendRevision(src, prev);
+  return { outcome: "revision", lineageId, revision, of: { id: prev.id, title: prev.title } };
+}
+
+/**
+ * Record `src` as the next version of the document `prev` belongs to: the lineage is `prev`'s (its first version's
+ * id), `src` gets the next revision number, and every earlier version is marked superseded. Both must be the same
+ * owner's files in the same graph (callers check; the pipeline's settleRevision, the Mac app's file door).
+ */
+export async function appendRevision(src: Pick<Src, "id" | "graphId" | "ownerId">, prev: Pick<Src, "id" | "graphId" | "ownerId" | "lineageId">): Promise<{ lineageId: string; revision: number }> {
+  if (src.graphId !== prev.graphId || src.ownerId !== prev.ownerId) throw new Error("A version must be the same person's file in the same graph.");
   const lineageId = prev.lineageId ?? prev.id;
   const revision = await db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`mygraph:lineage:${lineageId}`}))`);
     const [{ max }] = await tx.select({ max: sql<number>`coalesce(max(${sources.revision}), 1)` }).from(sources)
       .where(and(eq(sources.graphId, src.graphId), sql`coalesce(${sources.lineageId}, ${sources.id}) = ${lineageId}`));
     const next = Number(max) + 1;
-    await tx.update(sources).set({ lineageId }).where(and(eq(sources.id, prev!.id), isNull(sources.lineageId)));
+    await tx.update(sources).set({ lineageId }).where(and(eq(sources.id, prev.id), isNull(sources.lineageId)));
     await tx.update(sources).set({ supersededAt: new Date() })
       .where(and(eq(sources.graphId, src.graphId), sql`coalesce(${sources.lineageId}, ${sources.id}) = ${lineageId}`, isNull(sources.supersededAt), ne(sources.id, src.id)));
     await tx.update(sources).set({ lineageId, revision: next, supersededAt: null }).where(eq(sources.id, src.id));
     return next;
   });
-  return { outcome: "revision", lineageId, revision, of: { id: prev.id, title: prev.title } };
+  return { lineageId, revision };
 }
 
 /** When a version is deleted, the newest one left becomes the current one again. */

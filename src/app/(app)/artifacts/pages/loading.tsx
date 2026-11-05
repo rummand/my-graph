@@ -6,7 +6,7 @@ export default function Loading() {
   const t = useT();
   return (
     <div aria-busy="true" aria-live="polite">
-      <span className="sr-only">{t("wiki.loading")}</span>
+      <span className="sr-only">{t("pages.loading")}</span>
       <div className="mb-3 h-8 w-28 animate-pulse rounded-md bg-surface-2" />
       <div className="mb-8 h-4 w-full max-w-lg animate-pulse rounded bg-surface-2" />
       <div className="mb-8 h-10 max-w-xl animate-pulse rounded-md bg-surface-2" />

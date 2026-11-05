@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { jsonError, withViewer } from "@/lib/ingest/http";
 import { addPastedText, addPastedUrl } from "@/lib/ingest/paste";
+import { assertFolderVisible, moveFiles } from "@/lib/ingest/folders";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
 const sharing = {
   visibility: z.enum(["private", "parents", "household"]).default("private"),
   sensitive: z.boolean().default(false),
+  folderId: z.string().uuid("That isn't a valid folder.").nullish(),
 };
 
 const body = z.discriminatedUnion("kind", [
@@ -39,9 +41,12 @@ export async function POST(req: Request) {
     let raw: unknown;
     try { raw = await req.json(); } catch { return jsonError(400, "The paste couldn't be read. Please try again."); }
     const b = body.parse(raw);
+    const folderId = b.folderId ? await assertFolderVisible(v, b.folderId) : null;
     const r = b.kind === "text"
       ? await addPastedText(v, { title: b.title, text: b.text, sourceUrl: b.sourceUrl, visibility: b.visibility, sensitive: b.sensitive })
       : await addPastedUrl(v, { url: b.url, title: b.title, visibility: b.visibility, sensitive: b.sensitive, signal: req.signal });
+    // Saved while looking at a folder: it goes there (a note or page already here stays where it is).
+    if (folderId && !r.duplicate && r.sourceId) await moveFiles(v, [r.sourceId], folderId).catch(() => null);
     return NextResponse.json(r, { status: r.duplicate ? 200 : 201 });
   });
 }

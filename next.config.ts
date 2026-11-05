@@ -17,6 +17,15 @@ const config: NextConfig = {
   devIndicators: false,
   serverExternalPackages: ["tesseract.js", "unpdf", "mammoth", "postgres"],
   experimental: { serverActions: { bodySizeLimit: "50mb" }, webpackMemoryOptimizations: true },
+  /** Old addresses: the wiki became Pages under Artifacts, design sets became Styles. Links in stored pages still work. */
+  async redirects() {
+    return [
+      { source: "/wiki", destination: "/artifacts/pages", permanent: true },
+      { source: "/wiki/:path*", destination: "/artifacts/pages/:path*", permanent: true },
+      { source: "/artifacts/design-sets", destination: "/artifacts/styles", permanent: true },
+      { source: "/artifacts/design-sets/:path*", destination: "/artifacts/styles/:path*", permanent: true },
+    ];
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

@@ -141,7 +141,7 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
   const wikiOps = todo.filter((c) => c.op === "editWiki");
   const wikiDone: { pageId: string; title: string; kind: "created" | "updated"; text: string }[] = [];
   if (wikiOps.length) {
-    const wiki = await import("@/lib/wiki");
+    const wiki = await import("@/lib/pages");
     for (const c of wikiOps) {
       const p = c.payload as Record<string, unknown>;
       try {
@@ -163,7 +163,7 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
         }
       } catch (e) {
         await undoWiki();
-        return fail(`Nothing was delivered: the wiki page “${String(p.title ?? p.slug ?? "")}” couldn't be changed (${(e as Error).message}).`);
+        return fail(`Nothing was delivered: the page “${String(p.title ?? p.slug ?? "")}” couldn't be changed (${(e as Error).message}).`);
       }
     }
   }

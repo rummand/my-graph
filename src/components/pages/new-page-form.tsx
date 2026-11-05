@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { Lock, Users } from "lucide-react";
 import { Button } from "@/components/ui";
 import { useT } from "@/lib/i18n/client";
-import { VISIBILITIES, type Visibility } from "@/lib/wiki/labels";
+import { VISIBILITIES, type Visibility } from "@/lib/pages/labels";
 import { visibilityHint, visibilityLabel } from "./copy";
 
 export function NewPageForm({ initialTitle = "", family = false }: { initialTitle?: string; family?: boolean }) {
@@ -18,33 +18,33 @@ export function NewPageForm({ initialTitle = "", family = false }: { initialTitl
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) { setError(t("wiki.newPage.needTitle")); return; }
+    if (!title.trim()) { setError(t("pages.newPage.needTitle")); return; }
     setBusy(true); setError(null);
     try {
-      const res = await fetch("/api/wiki", {
+      const res = await fetch("/api/pages", {
         method: "POST", headers: { "content-type": "application/json" },
         body: JSON.stringify({ title: title.trim(), visibility }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error ?? t("wiki.newPage.couldNotCreate"));
-      router.push(`/wiki/${encodeURIComponent(data.page.slug)}?edit=1`);
+      if (!res.ok) throw new Error(data.error ?? t("pages.newPage.couldNotCreate"));
+      router.push(`/artifacts/pages/${encodeURIComponent(data.page.slug)}?edit=1`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("wiki.newPage.couldNotCreate"));
+      setError(err instanceof Error ? err.message : t("pages.newPage.couldNotCreate"));
       setBusy(false);
     }
   };
 
   return (
     <form onSubmit={submit} noValidate className="rounded-lg bg-surface px-5 pb-8 pt-8 sm:px-12 sm:pt-12 lg:px-16">
-      <label htmlFor={`${id}-title`} className="sr-only">{t("wiki.newPage.titleLabel")}</label>
+      <label htmlFor={`${id}-title`} className="sr-only">{t("pages.newPage.titleLabel")}</label>
       <input id={`${id}-title`} value={title} onChange={(e) => { setTitle(e.target.value); if (error) setError(null); }} maxLength={200} autoFocus required
-        placeholder={t("wiki.newPage.untitled")} autoComplete="off"
+        placeholder={t("pages.newPage.untitled")} autoComplete="off"
         aria-invalid={!!error && !title.trim()} aria-describedby={error ? `${id}-error` : `${id}-title-hint`}
         className="block w-full max-w-[68ch] bg-transparent p-0 text-[28px]/[1.2] font-semibold tracking-[-0.02em] text-fg caret-accent outline-none placeholder:text-muted/60" style={{ outline: "none" }} />
-      <p id={`${id}-title-hint`} className="mt-3 text-sm text-muted">{t(family ? "wiki.newPage.exampleFamily" : "wiki.newPage.example")}</p>
+      <p id={`${id}-title-hint`} className="mt-3 text-sm text-muted">{t(family ? "pages.newPage.exampleFamily" : "pages.newPage.example")}</p>
 
       <fieldset className="mt-10">
-        <legend className="mb-3 font-semibold">{t("wiki.newPage.whoCanSee")}</legend>
+        <legend className="mb-3 font-semibold">{t("pages.newPage.whoCanSee")}</legend>
         <div className="grid gap-2 sm:grid-cols-3">
           {VISIBILITIES.map((v) => {
             const Icon = v === "private" ? Lock : Users;
@@ -57,13 +57,13 @@ export function NewPageForm({ initialTitle = "", family = false }: { initialTitl
             );
           })}
         </div>
-        <p className="mt-2 text-sm text-muted">{t("wiki.newPage.changeLater")}</p>
+        <p className="mt-2 text-sm text-muted">{t("pages.newPage.changeLater")}</p>
       </fieldset>
 
       {error && <p id={`${id}-error`} role="alert" className="mt-6 text-sm text-danger">{error}</p>}
       <div className="mt-8 flex flex-wrap items-center gap-2">
-        <Button type="submit" disabled={busy}>{busy ? t("wiki.newPage.creating") : t("wiki.newPage.create")}</Button>
-        <Button type="button" variant="ghost" onClick={() => router.back()} disabled={busy}>{t("wiki.newPage.cancel")}</Button>
+        <Button type="submit" disabled={busy}>{busy ? t("pages.newPage.creating") : t("pages.newPage.create")}</Button>
+        <Button type="button" variant="ghost" onClick={() => router.back()} disabled={busy}>{t("pages.newPage.cancel")}</Button>
       </div>
     </form>
   );

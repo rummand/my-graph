@@ -709,7 +709,7 @@ struct ProposalResult: Codable, Hashable {
     let label: String?
 }
 
-/// One suggestion card from the assistant (reminder, fact, wiki note or memory).
+/// One suggestion card from the assistant (reminder, fact, page or memory).
 struct Proposal: Codable, Hashable, Identifiable {
     let type: String
     let n: Int

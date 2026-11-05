@@ -93,7 +93,7 @@ const HIDDEN_OPENS = ["<proposals>", "<clarify>"];
 const ALIASES: Record<string, Proposal["type"]> = {
   propose_reminder: "propose_reminder", reminder: "propose_reminder",
   propose_fact: "propose_fact", fact: "propose_fact",
-  propose_wiki_note: "propose_wiki_note", wiki_note: "propose_wiki_note", wiki: "propose_wiki_note", note: "propose_wiki_note",
+  propose_page: "propose_wiki_note", page: "propose_wiki_note", propose_wiki_note: "propose_wiki_note", wiki_note: "propose_wiki_note", wiki: "propose_wiki_note", note: "propose_wiki_note",
   propose_memory: "propose_memory", memory: "propose_memory", remember: "propose_memory", propose_rule: "propose_memory", rule: "propose_memory",
 };
 
@@ -169,7 +169,7 @@ export function describeProposal(p: Proposal): string {
   switch (p.type) {
     case "propose_reminder": return `Reminder: ${p.title}`;
     case "propose_fact": return `Fact: ${p.from} ${p.relation.replace(/_/g, " ")} ${p.to}`;
-    case "propose_wiki_note": return `Wiki note: ${p.title}`;
+    case "propose_wiki_note": return `Page: ${p.title}`;
     case "propose_memory": return `Remember: ${p.text}`;
   }
 }

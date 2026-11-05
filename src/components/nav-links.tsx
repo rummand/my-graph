@@ -7,7 +7,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useT } from "@/lib/i18n/client";
 import { recordingsAvailable } from "./nav-recordings";
 import {
-  BookOpen, Brain, Mic, Scale, CalendarRange, FileText, FileStack, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, ShieldCheck, Stethoscope, Users, Workflow, X, type LucideIcon,
+  BookOpen, Brain, Mic, Scale, CalendarRange, FolderOpen, GitPullRequestArrow, History, House, Layers, MessageCircle, MoreHorizontal, Network, Settings, Shapes, ShieldCheck, Stethoscope, Users, Workflow, X, type LucideIcon,
 } from "lucide-react";
 
 /**
@@ -67,8 +67,7 @@ const PRIMARY: NavItem[] = [
 ];
 const SECONDARY: NavItem[] = [
   { href: "/library", key: "library", icon: FolderOpen },
-  { href: "/wiki", key: "wiki", icon: FileText, hideFor: ["guest"] },
-  { href: "/artifacts", key: "artifacts", icon: FileStack, hideFor: ["guest"], label: "artifacts.nav" },
+  { href: "/artifacts", key: "artifacts", icon: Shapes, hideFor: ["guest"], label: "artifacts.nav" },
   { href: "/corpora", key: "corpora", icon: Scale, hideFor: ["guest", "child"], label: "corpus.nav" },
   { href: "/graph", key: "connections", icon: Network },
   { href: "/changes", key: "changes", icon: GitPullRequestArrow, hideFor: ["guest"], label: "changes.nav" },

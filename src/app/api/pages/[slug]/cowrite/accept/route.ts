@@ -1,11 +1,11 @@
-import { acceptAssistantDraft } from "@/lib/wiki";
-import { parseBody, route, slugParam } from "@/lib/wiki/http";
+import { acceptAssistantDraft } from "@/lib/pages";
+import { parseBody, route, slugParam } from "@/lib/pages/http";
 import { acceptBody } from "../../../schemas";
 
 type P = { slug: string };
 
 /**
- * POST /api/wiki/[slug]/cowrite/accept { version, content, instruction, mode, words?, sourceCount?, usedNarrower? }
+ * POST /api/pages/[slug]/cowrite/accept { version, content, instruction, mode, words?, sourceCount?, usedNarrower? }
  * Keeps the assistant's draft: a new revision attributed to "Assistant (asked by <you>)", logged in the assistant's
  * activity. 409 with `current` when someone else saved the page first.
  */

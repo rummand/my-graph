@@ -122,7 +122,7 @@ const messages: MessageTree = {
     at: "Kl.",
     time: "Tidspunkt",
     conditionLabel: "Når…",
-    conditionHint: "Tjekkes mod nye filer og wikisider. Først et hurtigt tjek af nøgleord, så afgør assistenten det.",
+    conditionHint: "Tjekkes mod nye filer og sider. Først et hurtigt tjek af nøgleord, så afgør assistenten det.",
     conditionPlaceholder: { family: "et dokument nævner en vaccination", other: "et dokument nævner en deadline" },
     check: "Tjek",
     oneShot: "Kun én gang, og slå den så fra",
@@ -199,14 +199,14 @@ const messages: MessageTree = {
     alwaysAllowed: "Altid tilladt",
     nothingAllowed: "Intet. Assistenten spørger hver gang. Vælg “Tillad altid” på et forslag for at springe spørgsmålet over for den slags.",
     revoke: "Tilbagekald",
-    stillAsks: "Tjek og automatiseringer spørger stadig, før de tilføjer fakta, slår sammen eller retter i wikien.",
+    stillAsks: "Tjek og automatiseringer spørger stadig, før de tilføjer fakta, slår sammen eller retter i sider.",
     mayUse: "Det må den bruge",
     caps: {
       library: { label: "Læse biblioteket", hint: { family: "Breve, billeder og filer", other: "Dokumenter, mails og filer" } },
       timeline: { label: "Læse tidslinjen", hint: "Begivenheder og datoer" },
       people: { label: "Læse om personer", hint: { family: "Fødselsdage, hvordan folk har det, hvem I ser", other: "Hvem folk er, hvordan du kender dem, hvornår I sidst talte sammen" } },
       reminders: { label: "Foreslå påmindelser", hint: "Spørger altid først" },
-      wiki_write: { label: "Foreslå wikinoter", hint: "Spørger altid først" },
+      wiki_write: { label: "Foreslå sider", hint: "Spørger altid først" },
       web: { label: "Slå ting op på nettet", hint: "Kun navne og emnet forlader grafen. Sider den læser, gemmes som kilder, og det den finder, venter på dig som et forslag" },
     },
     howItWrites: "Sådan skriver den",
@@ -217,18 +217,18 @@ const messages: MessageTree = {
     couldNotSave: "Kunne ikke gemme.",
     actions: {
       reminder_create: "Tilføje påmindelser", fact_add: "Tilføje fakta til grafen", node_merge: "Slå dubletter sammen",
-      memory_save: "Gemme ting, der skal huskes", rule_save: { family: "Gemme familieregler", other: "Gemme regler" }, wiki_edit: "Rette wikisider",
-      fact_create: "Tilføje fakta til grafen fra chatten", wiki_create: "Skrive wikinoter fra chatten",
+      memory_save: "Gemme ting, der skal huskes", rule_save: { family: "Gemme familieregler", other: "Gemme regler" }, wiki_edit: "Rette sider",
+      fact_create: "Tilføje fakta til grafen fra chatten", wiki_create: "Skrive sider fra chatten",
     },
   },
   suggestion: {
     kind: {
       reminder: "Ny påmindelse", fact: "Et faktum at tjekke", merge: "Mulig dublet", memory: "Noget at huske",
-      rule: "En regel at holde", wiki_edit: "Wikinote", nudge: "Til orientering",
+      rule: "En regel at holde", wiki_edit: "Side", nudge: "Til orientering",
     },
     always: {
       reminder: "Tillad altid nye påmindelser", memory: "Gem altid ting, der skal huskes", rule: "Gem altid regler som denne",
-      wiki_edit: "Tillad altid wikinoter", fact: "Tillad altid fakta som dette", merge: "Slå altid dubletter sammen",
+      wiki_edit: "Tillad altid sider", fact: "Tillad altid fakta som dette", merge: "Slå altid dubletter sammen",
     },
     origin: {
       heartbeat: "Fra tjekket, {when}",

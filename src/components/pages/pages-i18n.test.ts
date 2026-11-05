@@ -2,12 +2,12 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { lookup, makeT, type MessageTree } from "@/lib/i18n/core";
-import en from "@/lib/i18n/messages/en/wiki";
-import da from "@/lib/i18n/messages/da/wiki";
+import en from "@/lib/i18n/messages/en/pages";
+import da from "@/lib/i18n/messages/da/pages";
 import { cowriteExamples, cowriteWarning, visibilityBadge, visibilityHint, visibilityLabel, visibilitySentence } from "./copy";
 import { calendarDaysAgo, makeWhen } from "./when";
 
-const dict = { en: { wiki: en }, da: { wiki: da } };
+const dict = { en: { pages: en }, da: { pages: da } };
 const tEn = makeT("en", dict.en);
 const tDa = makeT("da", dict.da, dict.en);
 
@@ -27,16 +27,16 @@ function filesUnder(dir: string): string[] {
   });
 }
 
-describe("wiki messages", () => {
+describe("pages messages", () => {
   it("Danish has every English key, and nothing extra", () => {
     expect(leaves(da).sort()).toEqual(leaves(en).sort());
   });
 
-  it("every literal wiki.* key used in the wiki UI exists in English", () => {
+  it("every literal pages.* key used in the pages UI exists in English", () => {
     const root = process.cwd();
-    const files = [...filesUnder(join(root, "src/components/wiki")), ...filesUnder(join(root, "src/app/(app)/wiki"))];
+    const files = [...filesUnder(join(root, "src/components/pages")), ...filesUnder(join(root, "src/app/(app)/artifacts/pages"))];
     const used = new Set<string>();
-    for (const f of files) for (const m of readFileSync(f, "utf8").matchAll(/["`]wiki\.([a-zA-Z0-9.]+)["`]/g)) used.add(m[1]);
+    for (const f of files) for (const m of readFileSync(f, "utf8").matchAll(/["`]pages\.([a-zA-Z0-9.]+)["`]/g)) used.add(m[1]);
     expect(used.size).toBeGreaterThan(50);
     const missing = [...used].filter((k) => !k.endsWith(".") && lookup(en, k) === undefined);
     expect(missing).toEqual([]);

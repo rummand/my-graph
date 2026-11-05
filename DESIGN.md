@@ -1,7 +1,7 @@
 # My Graph design
 
 My Graph is where a family keeps its life: who the people are, what is coming, and where every fact came from.
-It is an app people work in (Operate mode) with one reading surface (wiki, Read mode). The old look, a grey
+It is an app people work in (Operate mode) with one reading surface (pages under Artifacts, Read mode). The old look, a grey
 admin kit of identical outlined white boxes, is gone. Do not bring any of it back.
 
 ## The idea
@@ -33,7 +33,7 @@ Everything else is quiet: one typeface, flat surfaces, structure from space and 
 `<Avatar>` and `<PersonChip>` from `src/components/ui`; never colour a person by hand. Tints stay pale; the
 saturated version is used only for a person's own lane line or dot.
 
-**Type.** One family: Schibsted Grotesk (`font-sans`), loaded with `next/font`. Wiki page bodies use Literata
+**Type.** One family: Schibsted Grotesk (`font-sans`), loaded with `next/font`. Page bodies use Literata
 (`font-read`) because they are read, not scanned. Five sizes, far apart:
 
 - `text-[28px]/[1.15] font-semibold tracking-[-0.02em]`: page title (one per page, about five words)

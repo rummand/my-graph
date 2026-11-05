@@ -10,7 +10,6 @@ const messages: MessageTree = {
     people: "People",
     timeline: "Timeline",
     library: "Library",
-    wiki: "Wiki",
     connections: "Connections",
     memory: "Memory",
     automations: "Automations",

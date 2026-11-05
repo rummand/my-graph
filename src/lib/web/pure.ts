@@ -32,7 +32,7 @@ const PUBLIC_THING = [
   /\b(firma\w*|virksomhed\w*|organisation\w*|produkt\w*|m[æa]rke|skole\w*|b[øo]rnehave\w*|klub\w*|forening\w*|restaurant\w*|museum|kommune\w*|forfatter\w*|politiker\w*|skuespiller\w*|bog|bogen|film\w*)\b/i,
 ];
 /** Searching the family's own things is not a web search. */
-const INSIDE = /\b(search|look|find|check|s[øo]g|find|kig|tjek)\w*\s+(in |through |i )?(my |our |the |mine |vores |min |mit )?(library|graph|notes|mail|inbox|wiki|timeline|memory|biblioteket?|grafen|noter(ne)?|mail(en)?|indbakke(n)?|wiki(en)?|tidslinjen?|hukommelse(n)?)\b/i;
+const INSIDE = /\b(search|look|find|check|s[øo]g|find|kig|tjek)\w*\s+(in |through |i )?(my |our |the |mine |vores |min |mit )?(library|graph|notes|mail|inbox|wiki|pages|timeline|memory|biblioteket?|grafen|noter(ne)?|mail(en)?|indbakke(n)?|wiki(en)?|sider(ne)?|tidslinjen?|hukommelse(n)?)\b/i;
 const WHO_WHAT = /^(who|what) (is|are|was|were)\b|^(hvem|hvad) (er|var)\b|^tell me about\b|^fort[æa]l (mig )?om\b/i;
 
 export type WebNeed = { use: boolean; why: "url" | "asked" | "current" | "public" | "unknown_to_graph" | "no"; urls: string[] };

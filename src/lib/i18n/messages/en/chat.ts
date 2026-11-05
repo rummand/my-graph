@@ -222,13 +222,13 @@ const messages: MessageTree = {
     skipHint: "Skip to let it continue with what it knows.",
   },
   proposal: {
-    kind: { propose_reminder: "Reminder", propose_fact: "Fact", propose_wiki_note: "Wiki page", propose_memory: "Memory" },
+    kind: { propose_reminder: "Reminder", propose_fact: "Fact", propose_wiki_note: "Page", propose_memory: "Memory" },
     title: {
-      propose_reminder: "Add this reminder?", propose_fact: "Save this to your graph?", propose_wiki_note: "Start this wiki page?",
+      propose_reminder: "Add this reminder?", propose_fact: "Save this to your graph?", propose_wiki_note: "Start this page?",
       memory: "Remember this?", rule: "Remember this rule?", familyRule: "Remember this family rule?", preference: "Remember this preference?",
     },
     always: {
-      propose_reminder: "Always allow reminders", propose_fact: "Always allow suggested facts", propose_wiki_note: "Always allow new wiki pages",
+      propose_reminder: "Always allow reminders", propose_fact: "Always allow suggested facts", propose_wiki_note: "Always allow new pages",
       propose_memory: "Always save what I tell it",
     },
     due: "Due {when}",
@@ -264,7 +264,7 @@ const messages: MessageTree = {
     alreadyRemembered: "Already remembered: {text}",
     keptByKeeper: "Kept by the Brain Keeper",
     reminder: "Reminder added for {day}: {title}",
-    wiki: "Wiki page created: {title}",
+    wiki: "Page created: {title}",
     guess: "Added as a guess: {text}",
   },
   composer: {
@@ -349,7 +349,7 @@ const messages: MessageTree = {
     suggestion: {
       reminder: "Add reminder: {title}",
       fact: "Save fact: {from} {relation} {to}",
-      wiki: "Start wiki page: {title}",
+      wiki: "Start page: {title}",
       memory: "Remember: {text}",
       rule: "Remember this rule: {text}",
       ruleFamily: "Remember this family rule: {text}",
@@ -357,14 +357,14 @@ const messages: MessageTree = {
     describe: {
       reminder: "Reminder: {title}",
       fact: "Fact: {from} {relation} {to}",
-      wiki: "Wiki note: {title}",
+      wiki: "Page: {title}",
       memory: "Remember: {text}",
     },
     skipped: {
       waiting: "{what}: waiting for approval in Suggestions",
       notFiled: "{what}: not suggested, it was dismissed before or today's suggestion limit was reached",
       remindersOff: "{what}: not suggested, reminders are turned off",
-      wikiOff: "{what}: not suggested, wiki writing is turned off",
+      wikiOff: "{what}: not suggested, writing pages is turned off",
       noMemory: "{what}: not suggested, memory isn't available for this account",
     },
     widen: {

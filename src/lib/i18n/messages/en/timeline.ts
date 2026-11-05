@@ -26,7 +26,7 @@ const messages: MessageTree = {
     title: "Nothing on the timeline yet",
     body: "Letters, scans, mail and invitations put their dates here, in a lane for each person they involve. Mail shows as conversations between the people on it.",
     upload: "Upload a document",
-    wiki: "Write a wiki page",
+    wiki: "Write a page",
     showLibrary: "Show what's already in the library",
     noMatchTitle: "Nothing matches these filters",
     noMatchBody: "Try fewer people or topics.",

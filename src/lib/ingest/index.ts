@@ -20,7 +20,7 @@ import { enqueueSourceRead, waitForJob } from "@/lib/jobs/queue";
 export { IngestError };
 
 /** Save an upload and queue processing. Returns the new source id immediately. */
-export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "private" | "parents" | "household"; sensitive?: boolean }): Promise<{ sourceId: string; duplicate: boolean; sameAs?: string }> {
+export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "private" | "parents" | "household"; sensitive?: boolean; folderId?: string | null }): Promise<{ sourceId: string; duplicate: boolean; sameAs?: string }> {
   const name = (file.name || "Untitled").split(/[\\/]/).pop()!.slice(0, 250);
   if (file.size === 0) throw new IngestError(400, `"${name}" is empty.`);
   if (file.size > MAX_UPLOAD_BYTES) throw new IngestError(413, `"${name}" is ${(file.size / 1024 / 1024).toFixed(0)} MB. The limit is 50 MB per file.`);
@@ -64,6 +64,8 @@ export async function ingestFile(v: Viewer, file: File, opts?: { visibility?: "p
     status: "pending",
     visibility: opts?.visibility ?? "private",
     sensitive: (opts?.sensitive ?? false) || !!importer?.sensitive,
+    // The folder the person is looking at (checked by the caller: one they may see, in this graph).
+    folderId: opts?.folderId ?? null,
   }).returning({ id: sources.id });
 
   void audit(v, "library.upload", { type: "source", id: row.id }, { mime: type.mime, size: stored.size }).catch(() => {});

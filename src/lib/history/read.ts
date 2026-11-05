@@ -10,7 +10,7 @@ import type { Viewer } from "@/lib/auth";
 import { scopeOf } from "@/lib/graphs/pure";
 import { graphsOfUser } from "@/lib/graphs/store";
 import { readableSnapshots, readableState, wholeGraph } from "@/lib/gbrain/versioning";
-import { pageReadSql } from "@/lib/wiki/access";
+import { pageReadSql } from "@/lib/pages/access";
 import { localizeTitle, readerT, type HistoryEvent } from "@/lib/changes";
 import { diffStates, isActiveEdge, isLiveNode, rewind, type GraphState, type StateDiff, type StoredEvent } from "./pure";
 import { restoreOps } from "./read-pure";

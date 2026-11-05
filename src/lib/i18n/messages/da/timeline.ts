@@ -26,7 +26,7 @@ const messages: MessageTree = {
     title: "Intet på tidslinjen endnu",
     body: "Breve, scanninger, mails og invitationer sætter deres datoer her, i en bane for hver person, de handler om. Mails vises som samtaler mellem dem, der er på.",
     upload: "Upload et dokument",
-    wiki: "Skriv en wikiside",
+    wiki: "Skriv en side",
     showLibrary: "Vis det, der allerede er i biblioteket",
     noMatchTitle: "Intet passer til filtrene",
     noMatchBody: "Prøv med færre personer eller emner.",

@@ -4,7 +4,7 @@ import { authFile, setTheme, switchGraph } from "./helpers";
 
 test.use({ storageState: authFile("anna") });
 
-const PAGES = ["/", "/chat", "/people", "/timeline", "/library", "/wiki", "/artifacts", "/graph", "/connections", "/changes",
+const PAGES = ["/", "/chat", "/people", "/timeline", "/library", "/artifacts", "/artifacts/pages", "/graph", "/connections", "/changes",
   "/history", "/memory", "/automations", "/settings"];
 
 test.afterAll(async ({ browser }) => {

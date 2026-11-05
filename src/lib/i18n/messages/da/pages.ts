@@ -1,12 +1,12 @@
 import type { MessageTree } from "../../core";
 
-/** "wiki" namespace (da). Same keys as en/wiki.ts. */
+/** "pages" namespace (da). Same keys as en/pages.ts. */
 const messages: MessageTree = {
-  title: "Wiki",
+  title: "Sider",
   meta: {
-    index: "Wiki · My Graph",
-    newPage: "Ny side · Wiki · My Graph",
-    page: "{title} · Wiki · My Graph",
+    index: "Sider · My Graph",
+    newPage: "Ny side · My Graph",
+    page: "{title} · My Graph",
     history: "Historik for {title} · My Graph",
     notFound: "Ikke fundet · My Graph",
   },
@@ -84,12 +84,12 @@ const messages: MessageTree = {
     andMore: "og {count} mere",
   },
   newPage: {
-    back: "Wiki",
+    back: "Sider",
     cantAdd: "Du kan ikke tilføje sider her",
     guest: "Bed en anden i denne graf om at skrive den eller dele den med dig.",
     guestFamily: "Bed en i familien om at skrive den eller dele den med dig.",
     viewer: "Du kan læse denne graf, men ikke tilføje noget. Bed ejeren om at gøre dig til redaktør.",
-    backToWiki: "Tilbage til wikien",
+    backToPages: "Tilbage til sider",
     titleLabel: "Titel",
     untitled: "Side uden titel",
     example: "For eksempel: Projektstart, Sådan gennemgår vi design, Læseliste.",
@@ -106,7 +106,7 @@ const messages: MessageTree = {
     title: "Siden findes ikke her",
     body: "Den kan være slettet, ligge i en anden graf, eller den er ikke delt med dig.",
   },
-  loading: "Henter wikien…",
+  loading: "Henter sider…",
   page: {
     backlinksFailed: "Links til og fra siden kunne ikke hentes lige nu.",
     history: "Historik",

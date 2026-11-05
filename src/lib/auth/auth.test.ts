@@ -190,7 +190,7 @@ describe("webauthn config", () => {
 describe("audit wording", () => {
   it("labels known and unknown actions", () => {
     expect(auditActionLabel("auth.login")).toBe("Signed in");
-    expect(auditActionLabel("wiki.page_delete")).toBe("Page delete (wiki)");
+    expect(auditActionLabel("wiki.page_delete")).toBe("Page delete (pages)");
     expect(auditIsWarning("auth.login_failed")).toBe(true);
     expect(auditIsWarning("auth.login")).toBe(false);
   });

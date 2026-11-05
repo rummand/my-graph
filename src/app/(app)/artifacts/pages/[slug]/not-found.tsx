@@ -6,9 +6,9 @@ export default async function NotFound() {
   const t = await getT();
   return (
     <div className="max-w-3xl">
-      <EmptyState title={t("wiki.notFound.title")}>
-        <p>{t("wiki.notFound.body")}</p>
-        <Link href="/wiki" className="mt-3 inline-block font-medium text-accent hover:underline">{t("wiki.newPage.backToWiki")}</Link>
+      <EmptyState title={t("pages.notFound.title")}>
+        <p>{t("pages.notFound.body")}</p>
+        <Link href="/artifacts/pages" className="mt-3 inline-block font-medium text-accent hover:underline">{t("pages.newPage.backToPages")}</Link>
       </EmptyState>
     </div>
   );

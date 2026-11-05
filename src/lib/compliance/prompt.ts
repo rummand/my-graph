@@ -20,7 +20,7 @@ function ruleLines(rules: PromptRule[]): string {
 }
 
 const KIND: Record<string, string> = {
-  wiki: "a wiki page", artifact: "a document being written", message: "an assistant's answer in a chat", change_set: "proposed changes to a knowledge graph", node: "a description of something in a knowledge graph",
+  wiki: "a page written in a knowledge graph", artifact: "a document being written", message: "an assistant's answer in a chat", change_set: "proposed changes to a knowledge graph", node: "a description of something in a knowledge graph",
 };
 
 /** Per-paragraph verdicts: which rules a paragraph breaks, with the exact words that break them. */

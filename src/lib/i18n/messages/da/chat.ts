@@ -221,13 +221,13 @@ const messages: MessageTree = {
     skipHint: "Spring over for at lade den fortsætte med det, den ved.",
   },
   proposal: {
-    kind: { propose_reminder: "Påmindelse", propose_fact: "Faktum", propose_wiki_note: "Wikiside", propose_memory: "Hukommelse" },
+    kind: { propose_reminder: "Påmindelse", propose_fact: "Faktum", propose_wiki_note: "Side", propose_memory: "Hukommelse" },
     title: {
-      propose_reminder: "Tilføj denne påmindelse?", propose_fact: "Gem dette i din graf?", propose_wiki_note: "Start denne wikiside?",
+      propose_reminder: "Tilføj denne påmindelse?", propose_fact: "Gem dette i din graf?", propose_wiki_note: "Start denne side?",
       memory: "Husk dette?", rule: "Husk denne regel?", familyRule: "Husk denne familieregel?", preference: "Husk denne præference?",
     },
     always: {
-      propose_reminder: "Tillad altid påmindelser", propose_fact: "Tillad altid foreslåede fakta", propose_wiki_note: "Tillad altid nye wikisider",
+      propose_reminder: "Tillad altid påmindelser", propose_fact: "Tillad altid foreslåede fakta", propose_wiki_note: "Tillad altid nye sider",
       propose_memory: "Gem altid det, jeg fortæller",
     },
     due: "Senest {when}",
@@ -263,7 +263,7 @@ const messages: MessageTree = {
     alreadyRemembered: "Allerede husket: {text}",
     keptByKeeper: "Gemt af Hjernevogteren",
     reminder: "Påmindelse tilføjet til {day}: {title}",
-    wiki: "Wikiside oprettet: {title}",
+    wiki: "Side oprettet: {title}",
     guess: "Tilføjet som et gæt: {text}",
   },
   composer: {
@@ -348,7 +348,7 @@ const messages: MessageTree = {
     suggestion: {
       reminder: "Tilføj påmindelse: {title}",
       fact: "Gem fakta: {from} {relation} {to}",
-      wiki: "Start wikiside: {title}",
+      wiki: "Start side: {title}",
       memory: "Husk: {text}",
       rule: "Husk denne regel: {text}",
       ruleFamily: "Husk denne familieregel: {text}",
@@ -356,14 +356,14 @@ const messages: MessageTree = {
     describe: {
       reminder: "Påmindelse: {title}",
       fact: "Fakta: {from} {relation} {to}",
-      wiki: "Wikiside: {title}",
+      wiki: "Side: {title}",
       memory: "Husk: {text}",
     },
     skipped: {
       waiting: "{what}: venter på godkendelse under Forslag",
       notFiled: "{what}: ikke foreslået, den er afvist før, eller dagens grænse for forslag er nået",
       remindersOff: "{what}: ikke foreslået, påmindelser er slået fra",
-      wikiOff: "{what}: ikke foreslået, wikiskrivning er slået fra",
+      wikiOff: "{what}: ikke foreslået, at skrive sider er slået fra",
       noMemory: "{what}: ikke foreslået, hukommelse er ikke tilgængelig for denne konto",
     },
     widen: {

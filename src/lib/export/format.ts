@@ -213,7 +213,7 @@ This zip holds a copy of your data from My Graph, in open formats you can read w
   - \`sources.json\`: the documents, photos, recordings, emails and pages the facts came from, with their text.
     \`exportPath\` points to the original file in this zip when there is one.
   - \`files/<source id>/<file name>\`: the original files, unchanged.
-  - \`wiki.json\`: wiki pages (TipTap JSON in \`content\`, plain text in \`contentText\`) with every revision.
+  - \`wiki.json\`: pages (TipTap JSON in \`content\`, plain text in \`contentText\`) with every revision.
   - \`history.json\`: every change to the exported items: what moved, from what, to what, when and by whom.
   - \`referenced-nodes.json\` (only in \`mine\` mode): nodes someone else added that your facts point to (id and name).
   - \`reminders.json\`, \`conversations.json\` (with messages), \`memories.json\`, \`artifacts.json\`: yours, when there are any.

@@ -281,7 +281,7 @@ async function newContent(v: Viewer, since: Date): Promise<NewItem[]> {
     .where(and(visibleWhere(v, wikiPages), gt(wikiPages.updatedAt, since))).orderBy(desc(wikiPages.updatedAt)).limit(20);
   return [
     ...src.map((s) => ({ id: s.id, type: "source" as const, title: s.title, text: `${s.title}\n${(s.text ?? "").slice(0, 6000)}`, href: `/library/${s.id}`, sensitive: s.sensitive })),
-    ...pages.map((p) => ({ id: p.id, type: "wiki" as const, title: p.title, text: `${p.title}\n${p.text.slice(0, 6000)}`, href: `/wiki/${p.slug}`, sensitive: false })),
+    ...pages.map((p) => ({ id: p.id, type: "wiki" as const, title: p.title, text: `${p.title}\n${p.text.slice(0, 6000)}`, href: `/artifacts/pages/${p.slug}`, sensitive: false })),
   ];
 }
 

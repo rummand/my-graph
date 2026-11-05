@@ -50,7 +50,7 @@ const messages: MessageTree = {
     apply: "Show",
     about: "About",
     model: "The graph's model",
-    wikiPage: "Wiki page",
+    wikiPage: "Page",
     fact: "Connection",
     loadMore: "Show older changes",
     today: "Today",
@@ -98,7 +98,7 @@ const messages: MessageTree = {
     evidence: "Evidence",
     none: "Nothing recorded yet.",
   },
-  subject: { node: "", edge: "Connection", meta: "Model", wiki: "Wiki" },
+  subject: { node: "", edge: "Connection", meta: "Model", wiki: "Page" },
 
   whoSaid: {
     title: "Who said so",

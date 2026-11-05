@@ -1,0 +1,108 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "NSAppleEventsUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read your notes in Notes as plain text, only the folders you choose, so My Graph can suggest what to add. Nothing is added until you approve it."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Læs dine noter i Noter som ren tekst, kun fra de mapper, du vælger, så My Graph kan foreslå, hvad der skal tilføjes. Intet tilføjes, før du har godkendt det."
+          }
+        }
+      }
+    },
+    "NSCalendarsFullAccessUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send the events in your calendars (30 days back, 120 ahead) to My Graph for you to review, and keep a \"My Graph\" calendar with the events you approved."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send begivenhederne i dine kalendere (30 dage tilbage, 120 frem) til My Graph, så du kan gennemse dem, og hold en kalender, “My Graph”, med de begivenheder, du har godkendt."
+          }
+        }
+      }
+    },
+    "NSCalendarsWriteOnlyAccessUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keep a \"My Graph\" calendar with the events you approved in My Graph."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold en kalender, “My Graph”, med de begivenheder, du har godkendt i My Graph."
+          }
+        }
+      }
+    },
+    "NSContactsUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send your contacts (names, numbers, addresses, birthdays and related names) to My Graph, where you review what it finds before anything is added."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send dine kontakter (navne, numre, adresser, fødselsdage og relaterede navne) til My Graph, hvor du gennemser det, der findes, før noget tilføjes."
+          }
+        }
+      }
+    },
+    "NSPhotoLibraryUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send the details of your photos (when and where they were taken, albums, favourites), only if you turn this on in My Graph's settings."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send oplysninger om dine billeder (hvornår og hvor de blev taget, album, favoritter), kun hvis du slår det til i indstillingerne for My Graph."
+          }
+        }
+      }
+    },
+    "NSRemindersFullAccessUsageDescription": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send your reminders to My Graph for you to review, and keep a \"My Graph\" list with the reminders you approved there."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send dine påmindelser til My Graph, så du kan gennemse dem, og hold en liste, “My Graph”, med de påmindelser, du har godkendt der."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

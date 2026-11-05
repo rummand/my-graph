@@ -1,5 +1,5 @@
 import { getT } from "@/lib/i18n";
-import { collapseUnchanged, diffStats, wordDiff } from "@/lib/wiki/diff";
+import { collapseUnchanged, diffStats, wordDiff } from "@/lib/pages/diff";
 
 /**
  * A readable word diff set in the reading face: added words on a cobalt tint, removed words struck through in brick,
@@ -15,23 +15,23 @@ export async function DiffView({ before, after, beforeTitle, afterTitle }: { bef
   return (
     <div>
       <p className="mb-6 text-sm text-muted">
-        {nothing ? t("wiki.diff.nothing") : (
+        {nothing ? t("pages.diff.nothing") : (
           <>
-            {stats.added > 0 && <span className="font-medium text-accent">{t("wiki.history.wordsAdded", { count: stats.added })}</span>}
-            {stats.added > 0 && stats.removed > 0 && t("wiki.diff.and")}
-            {stats.removed > 0 && <span className="font-medium text-danger">{stats.added > 0 ? t("wiki.history.removedShort", { count: stats.removed }) : t("wiki.history.wordsRemoved", { count: stats.removed })}</span>}
+            {stats.added > 0 && <span className="font-medium text-accent">{t("pages.history.wordsAdded", { count: stats.added })}</span>}
+            {stats.added > 0 && stats.removed > 0 && t("pages.diff.and")}
+            {stats.removed > 0 && <span className="font-medium text-danger">{stats.added > 0 ? t("pages.history.removedShort", { count: stats.removed }) : t("pages.history.wordsRemoved", { count: stats.removed })}</span>}
             {(stats.added > 0 || stats.removed > 0) && "."}
-            {titleChanged && <> {t("wiki.diff.titleChanged", { from: beforeTitle ?? "", to: afterTitle ?? "" })}</>}
+            {titleChanged && <> {t("pages.diff.titleChanged", { from: beforeTitle ?? "", to: afterTitle ?? "" })}</>}
           </>
         )}
       </p>
       <div className="max-w-[68ch] whitespace-pre-wrap break-words font-read text-[17px] leading-[1.85]">
-        {shown.length === 0 && <span className="text-muted">{t("wiki.diff.empty")}</span>}
+        {shown.length === 0 && <span className="text-muted">{t("pages.diff.empty")}</span>}
         {shown.map((s, i) => {
           if (s.op === "gap") {
             return (
               <span key={i} className="my-3 block select-none font-sans text-xs text-muted">
-                <span className="rounded-full bg-surface-2 px-2.5 py-1">{t("wiki.diff.unchanged", { count: s.words })}</span>
+                <span className="rounded-full bg-surface-2 px-2.5 py-1">{t("pages.diff.unchanged", { count: s.words })}</span>
               </span>
             );
           }
@@ -41,8 +41,8 @@ export async function DiffView({ before, after, beforeTitle, afterTitle }: { bef
             ? <span key={j} className="rounded-[3px] bg-accent-tint px-0.5 text-fg [box-decoration-break:clone]">{t}</span>
             : <span key={j} className="rounded-[3px] bg-danger-tint px-0.5 text-danger [box-decoration-break:clone] line-through decoration-danger/70">{t}</span>);
           return s.op === "add"
-            ? <ins key={i} className="no-underline"><span className="sr-only">{t("wiki.diff.added")}</span>{parts}<span className="sr-only">]</span></ins>
-            : <del key={i} className="no-underline"><span className="sr-only">{t("wiki.diff.removed")}</span>{parts}<span className="sr-only">]</span></del>;
+            ? <ins key={i} className="no-underline"><span className="sr-only">{t("pages.diff.added")}</span>{parts}<span className="sr-only">]</span></ins>
+            : <del key={i} className="no-underline"><span className="sr-only">{t("pages.diff.removed")}</span>{parts}<span className="sr-only">]</span></del>;
         })}
       </div>
     </div>

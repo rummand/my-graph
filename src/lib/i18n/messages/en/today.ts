@@ -26,7 +26,7 @@ const messages: MessageTree = {
   quick: {
     label: "Quick actions",
     upload: "Upload",
-    newWiki: "New wiki page",
+    newWiki: "New page",
     tomorrow: "What do I need for tomorrow?",
     week: "What's coming up this week?",
   },
@@ -175,7 +175,7 @@ const messages: MessageTree = {
     rule: "Rule",
     ruleFamily: "Family rule",
     memory: "Something to remember",
-    wiki_edit: "Wiki change",
+    wiki_edit: "Page change",
     nudge: "Idea",
     other: "Suggestion",
   },
@@ -184,7 +184,7 @@ const messages: MessageTree = {
     memory: "Always save things like this",
     rule: "Always save rules like this",
     ruleFamily: "Always save family rules",
-    wiki_edit: "Always allow wiki changes",
+    wiki_edit: "Always allow page changes",
   },
   origin: {
     when: {
@@ -325,7 +325,7 @@ const messages: MessageTree = {
     automation: "Automation",
     chat: "In a chat",
     ingest: "Reading a file",
-    wiki: "Wiki",
+    wiki: "Pages",
     keeper: "Brain Keeper",
     other: "Assistant",
   },
@@ -337,8 +337,8 @@ const messages: MessageTree = {
     emptyLead: "Nothing yet.",
     emptyUpload: "Upload a document, photo or recording",
     emptyOr: "or",
-    emptyWiki: "start a wiki page",
-    kind: { file: "File", mail: "Email", wiki: "Wiki page" },
+    emptyWiki: "start a page",
+    kind: { file: "File", mail: "Email", wiki: "Page" },
   },
 
   error: {
@@ -351,7 +351,7 @@ const messages: MessageTree = {
       facts: "facts to check",
       uploads: "upload status",
       recentFiles: "recent files",
-      recentWiki: "recent wiki pages",
+      recentWiki: "recent pages",
       activity: "the assistant's activity",
       calendar: "the calendar",
       key: "key people and projects",

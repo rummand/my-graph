@@ -73,7 +73,7 @@ async function targets(): Promise<Target[]> {
     return (centers.find((c) => !c.isViewer) ?? centers[0])?.id;
   });
   const libraryId = await firstId("/api/library", (j) => (at(j, "items")[0] as { id?: string })?.id);
-  const wikiSlug = await firstId("/api/wiki", (j) => (at(j, "pages")[0] as { slug?: string })?.slug);
+  const wikiSlug = await firstId("/api/pages", (j) => (at(j, "pages")[0] as { slug?: string })?.slug);
   const changeId = await firstId("/api/changes", (j) => (at(j, "changeSets")[0] as { id?: string })?.id);
   const chatId = await firstId("/api/chat", (j) => (at(j, "conversations")[0] as { id?: string })?.id);
   const recordingId = await firstId("/api/recordings", (j) => (at(j, "recordings")[0] as { id?: string })?.id);
@@ -88,8 +88,8 @@ async function targets(): Promise<Target[]> {
     { name: "Timeline", path: "/timeline", kind: "page" },
     { name: "Library", path: "/library", kind: "page" },
     ...(libraryId ? [{ name: "Library item", path: `/library/${libraryId}`, kind: "page" as const }] : []),
-    { name: "Wiki", path: "/wiki", kind: "page" },
-    ...(wikiSlug ? [{ name: "Wiki page", path: `/wiki/${wikiSlug}`, kind: "page" as const }] : []),
+    { name: "Pages", path: "/artifacts/pages", kind: "page" },
+    ...(wikiSlug ? [{ name: "Page", path: `/artifacts/pages/${wikiSlug}`, kind: "page" as const }] : []),
     { name: "Graph", path: "/graph", kind: "page" },
     { name: "Changes", path: "/changes", kind: "page" },
     ...(changeId ? [{ name: "Change set", path: `/changes/${changeId}`, kind: "page" as const }] : []),
@@ -112,8 +112,8 @@ async function targets(): Promise<Target[]> {
     { name: "API timeline", path: "/api/timeline", kind: "api" },
     { name: "API library", path: "/api/library", kind: "api" },
     ...(libraryId ? [{ name: "API library item", path: `/api/library/${libraryId}`, kind: "api" as const }] : []),
-    { name: "API wiki", path: "/api/wiki", kind: "api" },
-    ...(wikiSlug ? [{ name: "API wiki page", path: `/api/wiki/${wikiSlug}`, kind: "api" as const }] : []),
+    { name: "API pages", path: "/api/pages", kind: "api" },
+    ...(wikiSlug ? [{ name: "API page", path: `/api/pages/${wikiSlug}`, kind: "api" as const }] : []),
     { name: "API graph", path: "/api/graph", kind: "api" },
     { name: "API changes", path: "/api/changes", kind: "api" },
     { name: "API history", path: "/api/history", kind: "api" },

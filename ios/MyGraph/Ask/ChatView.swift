@@ -254,7 +254,7 @@ struct ProposalCard: View {
         switch proposal.type {
         case "propose_reminder": return String(localized: "Add reminder")
         case "propose_fact": return String(localized: "Add fact")
-        case "propose_wiki_note": return String(localized: "Add wiki note")
+        case "propose_wiki_note": return String(localized: "Add page")
         case "propose_memory": return String(localized: "Remember this")
         default: return String(localized: "Suggestion")
         }

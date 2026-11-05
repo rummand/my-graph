@@ -17,7 +17,7 @@ export async function withViewer(fn: (v: Viewer) => Promise<Response>): Promise<
     return await fn(v);
   } catch (e) {
     if (e instanceof Response) return e; // requireUser's 401
-    if (e instanceof IngestError) return jsonError(e.status, e.message);
+    if (e instanceof IngestError) return jsonError(e.status, e.message, e.code ? { code: e.code } : {});
     if (e instanceof z.ZodError) return jsonError(400, e.issues[0]?.message ?? "Invalid request.", { issues: e.issues });
     console.error("[library api]", e);
     return jsonError(500, "Something went wrong on our side. Please try again.");

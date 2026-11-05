@@ -97,7 +97,7 @@ const guides: MessageTree = {
       },
       "05_mention": {
         "title": "Type @ to mention something.",
-        "text": "Type the at sign to mention something by name. The menu finds people, places and pages in this graph, and a mention links the question, the memory or the wiki page to them, so it shows up on their page too."
+        "text": "Type the at sign to mention something by name. The menu finds people, places and pages in this graph, and a mention links the question, the memory or the page to them, so it shows up on their page too."
       },
       "05_model": {
         "title": "How this graph sees the world.",
@@ -160,12 +160,12 @@ const guides: MessageTree = {
     }
   },
   "wiki": {
-    "title": "Wiki and co-writing",
+    "title": "Pages and co-writing",
     "sub": "The family's own pages, written together with the assistant.",
     "parts": {
       "09_wiki": {
         "title": "The family's own pages.",
-        "text": "The wiki is for the family's own pages: plans, how-tos, notes from school and the doctor. Pages are set in a reading type, because they're read, not scanned. Mention someone with the at sign, and the page shows up on their profile."
+        "text": "Pages, under Artifacts, are the family's own writing: plans, how-tos, notes from school and the doctor. Pages are set in a reading type, because they're read, not scanned. Mention someone with the at sign, and the page shows up on their profile."
       },
       "09_cowrite": {
         "title": "Ask the assistant to write.",
@@ -234,16 +234,16 @@ const guides: MessageTree = {
     }
   },
   "documents": {
-    "title": "Documents and design sets",
+    "title": "Documents, decks and styles",
     "sub": "Reports, slides and briefs drafted from the graph, with a source on every claim.",
     "parts": {
       "14_docs": {
         "title": "Documents from your graph.",
-        "text": "Documents are reports, one-pagers, slides, briefs and profiles that the assistant drafts from what's in the graph, with a source on every claim. Here is a slide deck about Emma's autumn: each line carries the number of its source, and the slides take shape on the right. Nothing is shared until you publish it."
+        "text": "Under Artifacts, documents are reports, one-pagers, briefs and profiles, and decks are slides, that the assistant drafts from what's in the graph, with a source on every claim. Here is a slide deck about Emma's autumn: each line carries the number of its source, and the slides take shape on the right. Nothing is shared until you publish it."
       },
       "14_design": {
-        "title": "Design sets decide how they look.",
-        "text": "A design set decides how documents look: the type, the colours and the layout. Use the built-in one, or make your own. Slides can be exported to PowerPoint, so a deck made here can go to a meeting."
+        "title": "Styles decide how they look.",
+        "text": "A style (a design set) decides how documents and decks look: the type, the colours and the layout. Use the built-in one, or make your own. Slides can be exported to PowerPoint, so a deck made here can go to a meeting."
       }
     }
   },

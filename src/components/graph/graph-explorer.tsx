@@ -102,7 +102,7 @@ export function GraphExplorer({ data, centerId, truncated }: { data: GraphData; 
           <>
             {rich(t("graph.explorer.emptyBody"), {
               library: <Link href="/library" className="text-accent hover:underline">{t("graph.explorer.emptyLibrary")}</Link>,
-              wiki: <Link href="/wiki" className="text-accent hover:underline">{t("graph.explorer.emptyWiki")}</Link>,
+              wiki: <Link href="/artifacts/pages" className="text-accent hover:underline">{t("graph.explorer.emptyWiki")}</Link>,
               assistant: <Link href="/chat" className="text-accent hover:underline">{t("graph.explorer.emptyAssistant")}</Link>,
             })}
           </>

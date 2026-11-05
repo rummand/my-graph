@@ -162,7 +162,7 @@ const messages: MessageTree = {
     lead: "Take a copy of what's yours, or delete your account.",
     export: "Make a download",
     exportTitle: "Download a copy",
-    exportLead: "A zip with the people, places, events and facts, where each fact came from, the original files, wiki pages with every version, and the history of changes. Open formats (JSON), described in the README inside.",
+    exportLead: "A zip with the people, places, events and facts, where each fact came from, the original files, pages with every version, and the history of changes. Open formats (JSON), described in the README inside.",
     exportHint: "It's made in the background and stays here for 24 hours.",
     whatAccount: "Everything of mine",
     whatAccountHint: "All of each graph you own; in graphs others own, only what you added. Plus your profile, chats, reminders and memories.",

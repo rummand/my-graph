@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { AlertTriangle, ArrowLeft, Bell, CalendarDays, CircleCheck, ExternalLink, GitPullRequestArrow, History, LoaderCircle, Lock, MapPin, MessagesSquare, Paperclip, ShieldAlert, Users, UsersRound } from "lucide-react";
+import { AlertTriangle, Bell, CalendarDays, CircleCheck, ExternalLink, GitPullRequestArrow, History, LoaderCircle, Lock, MapPin, MessagesSquare, Paperclip, ShieldAlert, Users, UsersRound } from "lucide-react";
 import { NodeChip, PersonChip } from "@/components/ui";
 import { AudioTranscript } from "@/components/library/audio-transcript";
 import { RecordingSection } from "@/components/recording/recording-section";
@@ -11,6 +11,8 @@ import { isStuck, StatusPill, stepText } from "@/components/library/source-meta"
 import { countsLine, dateOriginNote, extractionNote, formatBytes, formatDay, formatDocDate, formatMoment, kindWord, listJoin, senderName, timeOfDay, visibilityLabel, type Lx } from "@/components/library/i18n";
 import { libraryLx } from "@/components/library/server-lx";
 import { StatusWatcher } from "@/components/library/status-watcher";
+import { FileFolder } from "@/components/library/file-folder";
+import { listFolders } from "@/lib/ingest/folders";
 import { requireUser, type Viewer } from "@/lib/auth";
 import { getChangeSet } from "@/lib/changes";
 import { ChangeSetCard } from "@/components/changes";
@@ -54,8 +56,8 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
   // An upload that was the same as a file already here wasn't kept: show the file it was the same as.
   if (d.source.duplicateOf) redirect(`/library/${d.source.duplicateOf.id}`);
   const pendingId = d.proposal?.changeSetId && d.proposal.status !== "delivered" && d.proposal.status !== "abandoned" ? d.proposal.changeSetId : null;
-  const [label, reminders, L, pendingSet] = await Promise.all([relationLabeller(v), remindersFrom(v, id), libraryLx(v),
-    pendingId ? getChangeSet(v, pendingId).catch(() => null) : Promise.resolve(null)]);
+  const [label, reminders, L, pendingSet, folderTree] = await Promise.all([relationLabeller(v), remindersFrom(v, id), libraryLx(v),
+    pendingId ? getChangeSet(v, pendingId).catch(() => null) : Promise.resolve(null), listFolders(v).catch(() => null)]);
   const { t } = L;
   const s = d.source;
   const stuck = isStuck(s.status, s.startedAt, s.createdAt, s.job);
@@ -70,9 +72,8 @@ export default async function SourcePage({ params }: { params: Promise<{ id: str
   return (
     <ProvenanceProvider>
       <StatusWatcher active={busy} />
-      <Link href="/library" className="mb-5 inline-flex items-center gap-1 text-sm text-muted hover:text-fg">
-        <ArrowLeft aria-hidden className="size-4" />{t("library.detail.back")}
-      </Link>
+      <FileFolder family={L.family} sourceId={s.id} path={d.folder} folders={folderTree?.folders ?? []}
+        canMove={s.canEdit && !s.superseded && !!folderTree?.canCreate} />
 
       <header className="mb-8">
         <h1 className="break-words text-[28px]/[1.15] font-semibold tracking-[-0.02em]">{s.title}</h1>

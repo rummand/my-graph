@@ -19,7 +19,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui";
 import { graphMention } from "@/components/mention/tiptap";
-import { mentionChip, PROSE } from "@/components/wiki/prose";
+import { mentionChip, PROSE } from "@/components/pages/prose";
 import { useT } from "@/lib/i18n/client";
 import type { TFn } from "@/lib/i18n/core";
 import type { AnnotateResult } from "@/lib/mentions/annotate";

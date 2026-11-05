@@ -30,7 +30,7 @@ function proposalSentences(list: { type: string; [k: string]: unknown }[]): stri
     switch (p.type) {
       case "propose_reminder": return `Proposed reminder: ${s(p.title)}${p.dueAt ? ` (due ${s(p.dueAt)})` : ""}${p.detail ? `. ${s(p.detail)}` : ""}`;
       case "propose_fact": return `Proposed fact: ${s(p.from)} ${s(p.relation).replace(/_/g, " ")} ${s(p.to)}`;
-      case "propose_wiki_note": return `Proposed wiki note "${s(p.title)}":\n${s(p.text)}`;
+      case "propose_wiki_note": return `Proposed page "${s(p.title)}":\n${s(p.text)}`;
       case "propose_memory": return `Proposed rule to remember: ${s(p.text)}`;
       default: return "";
     }
@@ -43,7 +43,7 @@ export async function loadTarget(v: Viewer, type: TargetType, id: string): Promi
     case "wiki": {
       const [row] = await db.select({ slug: wikiPages.slug }).from(wikiPages).where(and(eq(wikiPages.id, id), eq(wikiPages.graphId, v.graphId))).limit(1);
       if (!row) throw gone();
-      const wiki = await import("@/lib/wiki");
+      const wiki = await import("@/lib/pages");
       const page = await wiki.getPage(v, row.slug);
       if (!page) throw gone();
       return { text: page.contentText ?? "", title: page.title, version: page.version, sensitive: false, context: { wikiSlug: row.slug }, canEdit: !!page.can.edit };

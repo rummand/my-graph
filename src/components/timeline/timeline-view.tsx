@@ -112,7 +112,7 @@ export function TimelineView({ initial, initialError, graphKind = null }: { init
             <div className="flex flex-col items-center gap-3">
               <div className="flex flex-wrap justify-center gap-2">
                 <Link href="/library" className={buttonClass("primary")}>{t("timeline.empty.upload")}</Link>
-                <Link href="/wiki" className={buttonClass("secondary")}>{t("timeline.empty.wiki")}</Link>
+                <Link href="/artifacts/pages" className={buttonClass("secondary")}>{t("timeline.empty.wiki")}</Link>
               </div>
               <button type="button" className="text-sm font-medium text-accent hover:underline" onClick={() => setFilters((f) => ({ ...f, uploads: true }))}>
                 {t("timeline.empty.showLibrary")}

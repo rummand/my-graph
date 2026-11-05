@@ -67,6 +67,7 @@ describe("page context", () => {
     expect(pageContextFrom("/clinical")).toBeNull();
     expect(pageContextFrom("/artifacts/a1")?.kind).toBe("document");
     expect(pageContextFrom("/changes/c1?x=1")).toMatchObject({ kind: "change_set", id: "c1", path: "/changes/c1" });
+    expect(pageContextFrom("/artifacts/pages/grandma%27s-recipes")).toMatchObject({ kind: "wiki", id: "grandma's-recipes" });
     expect(pageContextFrom("/wiki/grandma%27s-recipes")).toMatchObject({ kind: "wiki", id: "grandma's-recipes" });
     expect(pageContextFrom("/library/s1")?.kind).toBe("library");
     expect(pageContextFrom("/corpora/k1")?.kind).toBe("corpus");
@@ -77,6 +78,8 @@ describe("page context", () => {
     expect(pageContextFrom("/people")).toBeNull();
     expect(pageContextFrom("/settings/account")).toBeNull();
     expect(pageContextFrom("/wiki/new")).toBeNull();
+    expect(pageContextFrom("/artifacts/pages/new")).toBeNull();
+    for (const p of ["/artifacts", "/artifacts/pages", "/artifacts/documents", "/artifacts/decks", "/artifacts/styles", "/artifacts/styles/s1", "/artifacts/new"]) expect(pageContextFrom(p)).toBeNull();
     expect(pageContextFrom("/wiki/%E0%A4%A")).toBeNull();
   });
 

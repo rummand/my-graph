@@ -4,7 +4,7 @@
  *  - fact     → GBrain edge with status "inferred", provenance activity "inference", agent "mux:<model>", and the chat
  *               message as its source (a `sources` row of kind "chat");
  *  - reminder → a reminder created by the assistant (createdByKind "assistant");
- *  - wiki     → a wiki page + first revision authored by the assistant;
+ *  - wiki     → a page + first revision authored by the assistant;
  *  - memory   → a memory (origin "chat", or "upload" when it came from a document) via src/lib/memory.
  * Every applied proposal can be undone from the chat, and is logged to the assistant's activity log.
  */
@@ -23,7 +23,7 @@ import { describeProposal, parseProposals, type Proposal, type ProposalAuto, typ
 import { isSensitivity, memoryVisibilityFor, narrower, wideningWarning, type Sensitivity, type Visibility } from "./sensitivity";
 import { decisionKey, foldState } from "./state";
 import { addState, conversationRows, ownConversation } from "./store";
-import { wikiDocFromText, wikiSlug } from "./wiki-doc";
+import { wikiDocFromText, wikiSlug } from "./page-doc";
 
 export type { ProposalResult };
 
@@ -161,7 +161,7 @@ async function applyWiki(v: Viewer, p: Extract<Proposal, { type: "propose_wiki_n
     });
     return row;
   });
-  return { href: `/wiki/${page.slug}`, label: `Wiki page created: ${p.title}`, undo: { type: "wiki", id: page.id } };
+  return { href: `/artifacts/pages/${page.slug}`, label: `Page created: ${p.title}`, undo: { type: "wiki", id: page.id } };
 }
 
 async function applyMemory(v: Viewer, ctx: ApplyCtx, p: Extract<Proposal, { type: "propose_memory" }>, basis: "user" | "document"): Promise<ProposalResult> {
@@ -210,7 +210,7 @@ async function undoResult(v: Viewer, r: ProposalResult): Promise<void> {
   } else if (u.type === "wiki") {
     // Only while nobody has edited it since the assistant drafted it.
     const del = await db.delete(wikiPages).where(and(eq(wikiPages.id, u.id), eq(wikiPages.ownerId, v.id), eq(wikiPages.graphId, v.graphId), eq(wikiPages.version, 1))).returning({ id: wikiPages.id });
-    if (!del.length) throw new ProposalError(409, "The page has been edited since, so it wasn't removed. Delete it from the wiki if you want it gone.");
+    if (!del.length) throw new ProposalError(409, "The page has been edited since, so it wasn't removed. Delete it from Pages if you want it gone.");
   } else if (u.type === "edge") {
     try { await gbrain.setEdgeStatus(v, u.id, "rejected", "Undone in chat"); } catch (e) {
       if (e instanceof gbrain.GBrainError) throw new ProposalError(409, e.message);

@@ -1,0 +1,1866 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%@: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: %2$@"
+          }
+        }
+      }
+    },
+    "%lld conversations chosen": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld samtaler valgt"
+          }
+        }
+      }
+    },
+    "%lld conversations chosen in My Graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld samtaler valgt i My Graph."
+          }
+        }
+      }
+    },
+    "%lld more next time": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld mere næste gang"
+          }
+        }
+      }
+    },
+    "%lld proposals are waiting for you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld forslag venter på dig"
+          }
+        }
+      }
+    },
+    "%lld sent %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$lld sendt %2$@"
+          }
+        }
+      }
+    },
+    "%lld sources": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld kilder"
+          }
+        }
+      }
+    },
+    "%lld suggestions waiting for your approval": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld forslag venter på din godkendelse"
+          }
+        }
+      }
+    },
+    "1 proposal is waiting for you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 forslag venter på dig"
+          }
+        }
+      }
+    },
+    "A parent needs to approve this Mac before you can use My Graph here.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En forælder skal godkende denne Mac, før du kan bruge My Graph her."
+          }
+        }
+      }
+    },
+    "Account": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto"
+          }
+        }
+      }
+    },
+    "Add a folder to watch in Settings, Sources, Folders.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføj en mappe under Indstillinger, Kilder, Mapper."
+          }
+        }
+      }
+    },
+    "Add folder…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføj mappe …"
+          }
+        }
+      }
+    },
+    "Add note": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføj note"
+          }
+        }
+      }
+    },
+    "Add note to My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilføj note til My Graph"
+          }
+        }
+      }
+    },
+    "Allow My Graph in System Settings, Privacy & Security, to read this.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Giv My Graph lov under Systemindstillinger, Anonymitet og sikkerhed, til at læse dette."
+          }
+        }
+      }
+    },
+    "Allow My Graph under Login Items in System Settings.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Giv My Graph lov under Login-emner i Systemindstillinger."
+          }
+        }
+      }
+    },
+    "Allowed": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tilladt"
+          }
+        }
+      }
+    },
+    "Allow…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tillad …"
+          }
+        }
+      }
+    },
+    "Another app already uses one of these shortcuts. Click it and type a different one.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En anden app bruger allerede en af disse genveje. Klik på den, og tast en anden."
+          }
+        }
+      }
+    },
+    "Ask My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørg My Graph"
+          }
+        }
+      }
+    },
+    "Ask My Graph…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørg My Graph …"
+          }
+        }
+      }
+    },
+    "Ask about your people, plans and documents": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørg om dine folk, planer og dokumenter"
+          }
+        }
+      }
+    },
+    "Ask anything about your graph. Answers cite where each fact came from.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørg om alt i din graf. Svarene viser, hvor hver oplysning kommer fra."
+          }
+        }
+      }
+    },
+    "Calendar": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kalender"
+          }
+        }
+      }
+    },
+    "Calls": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opkald"
+          }
+        }
+      }
+    },
+    "Can't find %@. Choose the folder again in Settings.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kan ikke finde %@. Vælg mappen igen i Indstillinger."
+          }
+        }
+      }
+    },
+    "Check again": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tjek igen"
+          }
+        }
+      }
+    },
+    "Checking with My Graph…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørger My Graph …"
+          }
+        }
+      }
+    },
+    "Choose conversations…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vælg samtaler …"
+          }
+        }
+      }
+    },
+    "Choose folders…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vælg mapper …"
+          }
+        }
+      }
+    },
+    "Choose the conversations to send in My Graph on the web (Connections, My Graph for Mac).": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vælg de samtaler, der skal sendes, i My Graph på nettet (Forbindelser, My Graph til Mac)."
+          }
+        }
+      }
+    },
+    "Connect this Mac": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forbind denne Mac"
+          }
+        }
+      }
+    },
+    "Connected as “%@”": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forbundet som “%@”"
+          }
+        }
+      }
+    },
+    "Contacts": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontakter"
+          }
+        }
+      }
+    },
+    "Current graph: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nuværende graf: %@"
+          }
+        }
+      }
+    },
+    "Details of every photo": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Oplysninger om alle billeder"
+          }
+        }
+      }
+    },
+    "Each source is off until you turn it on. What this Mac sends arrives in My Graph as proposals, and nothing is added to your graph until you approve it.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hver kilde er slået fra, til du slår den til. Det, denne Mac sender, kommer ind i My Graph som forslag, og intet føjes til din graf, før du har godkendt det."
+          }
+        }
+      }
+    },
+    "Email": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "E-mail"
+          }
+        }
+      }
+    },
+    "Event": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Begivenhed"
+          }
+        }
+      }
+    },
+    "Everyone in the graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle i grafen"
+          }
+        }
+      }
+    },
+    "Folders": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mapper"
+          }
+        }
+      }
+    },
+    "General": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generelt"
+          }
+        }
+      }
+    },
+    "Give My Graph Full Disk Access in System Settings to read this.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Giv My Graph fuld diskadgang i Systemindstillinger for at læse dette."
+          }
+        }
+      }
+    },
+    "Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Graf"
+          }
+        }
+      }
+    },
+    "Keep your My Graph reminders in a “My Graph” list": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold dine påmindelser fra My Graph i en liste, “My Graph”"
+          }
+        }
+      }
+    },
+    "Kept on this Mac": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemt på denne Mac"
+          }
+        }
+      }
+    },
+    "Keyboard shortcuts": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tastaturgenveje"
+          }
+        }
+      }
+    },
+    "Messages": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beskeder"
+          }
+        }
+      }
+    },
+    "My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph"
+          }
+        }
+      }
+    },
+    "My Graph Settings": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indstillinger for My Graph"
+          }
+        }
+      }
+    },
+    "My Graph asked to slow down. The app tries again by itself.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph bad om at sætte farten ned. Appen prøver igen af sig selv."
+          }
+        }
+      }
+    },
+    "My Graph needs you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph har brug for dig"
+          }
+        }
+      }
+    },
+    "My Graph sends new and changed files from these folders. Nothing is added to your graph until you approve it.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph sender nye og ændrede filer fra disse mapper. Intet føjes til din graf, før du har godkendt det."
+          }
+        }
+      }
+    },
+    "My Graph sends what you turned on every 15 minutes, and soon after files, calendars or reminders change.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph sender det, du har slået til, hvert kvarter og kort efter, at filer, kalendere eller påmindelser ændrer sig."
+          }
+        }
+      }
+    },
+    "My Graph tells you when proposals are waiting for you, and when a source needs you (a permission, a sign-in).": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph giver besked, når forslag venter på dig, og når en kilde har brug for dig (en tilladelse, et login)."
+          }
+        }
+      }
+    },
+    "My Graph, %lld waiting for you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph, %lld venter på dig"
+          }
+        }
+      }
+    },
+    "Needs Full Disk Access": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kræver fuld diskadgang"
+          }
+        }
+      }
+    },
+    "Needs permission to read Notes": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kræver tilladelse til at læse Noter"
+          }
+        }
+      }
+    },
+    "New conversation": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ny samtale"
+          }
+        }
+      }
+    },
+    "No conversations chosen yet.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen samtaler valgt endnu."
+          }
+        }
+      }
+    },
+    "No permission needed": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kræver ingen tilladelse"
+          }
+        }
+      }
+    },
+    "None": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ingen"
+          }
+        }
+      }
+    },
+    "Not allowed": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikke tilladt"
+          }
+        }
+      }
+    },
+    "Not asked yet": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikke spurgt endnu"
+          }
+        }
+      }
+    },
+    "Not found on this Mac": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Findes ikke på denne Mac"
+          }
+        }
+      }
+    },
+    "Not sent yet": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ikke sendt endnu"
+          }
+        }
+      }
+    },
+    "Note": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note"
+          }
+        }
+      }
+    },
+    "Note to %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note til %@"
+          }
+        }
+      }
+    },
+    "Notes": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noter"
+          }
+        }
+      }
+    },
+    "Notes couldn't be read: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noter kunne ikke læses: %@"
+          }
+        }
+      }
+    },
+    "Nothing is added to your graph until you approve it in My Graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet føjes til din graf, før du har godkendt det i My Graph."
+          }
+        }
+      }
+    },
+    "Nothing is added to your graph until you approve it.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet føjes til din graf, før du har godkendt det."
+          }
+        }
+      }
+    },
+    "Nothing is turned on yet. Choose what to send in Settings.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet er slået til endnu. Vælg, hvad der skal sendes, i Indstillinger."
+          }
+        }
+      }
+    },
+    "Nothing waiting for you": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet venter på dig"
+          }
+        }
+      }
+    },
+    "Notification settings…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indstillinger for notifikationer …"
+          }
+        }
+      }
+    },
+    "Notifications": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifikationer"
+          }
+        }
+      }
+    },
+    "Only me": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kun mig"
+          }
+        }
+      }
+    },
+    "Only photos you pick are sent": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kun billeder, du vælger, sendes"
+          }
+        }
+      }
+    },
+    "Open": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn"
+          }
+        }
+      }
+    },
+    "Open My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn My Graph"
+          }
+        }
+      }
+    },
+    "Open My Graph when you log in": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn My Graph, når du logger ind"
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn Indstillinger"
+          }
+        }
+      }
+    },
+    "Open System Settings": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn Systemindstillinger"
+          }
+        }
+      }
+    },
+    "Open in My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn i My Graph"
+          }
+        }
+      }
+    },
+    "Open in My Graph: %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn i My Graph: %@"
+          }
+        }
+      }
+    },
+    "Opens My Graph's Ask panel with your question.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbner Spørg i My Graph med dit spørgsmål."
+          }
+        }
+      }
+    },
+    "Parents": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Forældre"
+          }
+        }
+      }
+    },
+    "Password": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Adgangskode"
+          }
+        }
+      }
+    },
+    "Pause syncing": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sæt synkronisering på pause"
+          }
+        }
+      }
+    },
+    "Paused. Nothing is sent until you resume.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "På pause. Intet sendes, før du fortsætter."
+          }
+        }
+      }
+    },
+    "Photos": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Billeder"
+          }
+        }
+      }
+    },
+    "Please sign in again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ind igen."
+          }
+        }
+      }
+    },
+    "Question": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spørgsmål"
+          }
+        }
+      }
+    },
+    "Quick note": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hurtig note"
+          }
+        }
+      }
+    },
+    "Quick note…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hurtig note …"
+          }
+        }
+      }
+    },
+    "Quit My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Afslut My Graph"
+          }
+        }
+      }
+    },
+    "Reads the conversations you choose from Messages on this Mac: who wrote what, and when. Attachments are named, not sent. Other conversations are never read.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Læser de samtaler, du vælger, fra Beskeder på denne Mac: hvem skrev hvad og hvornår. Vedhæftninger nævnes ved navn, men sendes ikke. Andre samtaler læses aldrig."
+          }
+        }
+      }
+    },
+    "Reads your notes as plain text from the folders you choose. Locked notes and Recently Deleted are never read.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Læser dine noter som ren tekst fra de mapper, du vælger. Låste noter og Senest slettet læses aldrig."
+          }
+        }
+      }
+    },
+    "Reminder": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Påmindelse"
+          }
+        }
+      }
+    },
+    "Reminders": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Påmindelser"
+          }
+        }
+      }
+    },
+    "Remove shortcut": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fjern genvej"
+          }
+        }
+      }
+    },
+    "Resume syncing": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortsæt synkronisering"
+          }
+        }
+      }
+    },
+    "Review": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gennemse"
+          }
+        }
+      }
+    },
+    "Save note": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gem note"
+          }
+        }
+      }
+    },
+    "Saved": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemt"
+          }
+        }
+      }
+    },
+    "Saved to My Graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemt i My Graph."
+          }
+        }
+      }
+    },
+    "Saved to the library. Anything My Graph finds in it is proposed for you to approve.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemmes i biblioteket. Det, My Graph finder i den, bliver foreslået dig til godkendelse."
+          }
+        }
+      }
+    },
+    "Saves a note to the library of your current graph. Only you can see it until you share it.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemmer en note i biblioteket i din nuværende graf. Kun du kan se den, til du deler den."
+          }
+        }
+      }
+    },
+    "Send %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send %@"
+          }
+        }
+      }
+    },
+    "Send now": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send nu"
+          }
+        }
+      }
+    },
+    "Send photos…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send billeder …"
+          }
+        }
+      }
+    },
+    "Sending from this Mac": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendes fra denne Mac"
+          }
+        }
+      }
+    },
+    "Sending…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender …"
+          }
+        }
+      }
+    },
+    "Sends events from the last 30 days and the next 120 days. Events you approve in My Graph appear in a “My Graph” calendar here; your own calendars are never changed.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender begivenheder fra de sidste 30 dage og de næste 120 dage. Begivenheder, du godkender i My Graph, vises i en kalender, “My Graph”, her; dine egne kalendere ændres aldrig."
+          }
+        }
+      }
+    },
+    "Sends names, numbers, email addresses, addresses, birthdays and related names from Contacts. Only cards that changed are sent again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender navne, numre, e-mailadresser, adresser, fødselsdage og relaterede navne fra Kontakter. Kun kort, der er ændret, sendes igen."
+          }
+        }
+      }
+    },
+    "Sends new and changed files from the folders you pick. Each change becomes a new version of the same document. Hidden files, temporary files and files over 50 MB are skipped.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender nye og ændrede filer fra de mapper, du vælger. Hver ændring bliver en ny version af det samme dokument. Skjulte filer, midlertidige filer og filer over 50 MB springes over."
+          }
+        }
+      }
+    },
+    "Sends the list of Notes folders (names only) and opens My Graph, where you choose.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender listen over mapper i Noter (kun navne) og åbner My Graph, hvor du vælger."
+          }
+        }
+      }
+    },
+    "Sends the list of conversations (names only) and opens My Graph, where you tick the ones to send.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender listen over samtaler (kun navne) og åbner My Graph, hvor du sætter flueben ved dem, der skal sendes."
+          }
+        }
+      }
+    },
+    "Sends the photos you pick, with when and where they were taken. Sending the details of every photo (no images) is a separate choice.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender de billeder, du vælger, med hvornår og hvor de blev taget. At sende oplysninger om alle billeder (uden selve billederne) er et særskilt valg."
+          }
+        }
+      }
+    },
+    "Sends who you called and who called you, when, and for how long, from this Mac's call history. Never any audio.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender, hvem du ringede til, og hvem der ringede til dig, hvornår og hvor længe, fra denne Macs opkaldshistorik. Aldrig lyd."
+          }
+        }
+      }
+    },
+    "Sends your Voice Memos recordings, so they can be transcribed in My Graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender dine optagelser fra Memoer, så de kan skrives ud i My Graph."
+          }
+        }
+      }
+    },
+    "Sends your reminders. Reminders you approve in My Graph appear in a “My Graph” list; when you tick one off there, My Graph hears about it.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender dine påmindelser. Påmindelser, du godkender i My Graph, vises i en liste, “My Graph”; når du krydser en af der, får My Graph besked."
+          }
+        }
+      }
+    },
+    "Server": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
+          }
+        }
+      }
+    },
+    "Settings…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indstillinger …"
+          }
+        }
+      }
+    },
+    "Shortcuts work in every app. Also in the Shortcuts app: “Ask My Graph” and “Add note to My Graph”.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Genvejene virker i alle apps. Også i appen Genveje: “Spørg My Graph” og “Tilføj note til My Graph”."
+          }
+        }
+      }
+    },
+    "Show approved events in a “My Graph” calendar": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vis godkendte begivenheder i en kalender, “My Graph”"
+          }
+        }
+      }
+    },
+    "Show in Finder": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vis i Finder"
+          }
+        }
+      }
+    },
+    "Sign in": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ind"
+          }
+        }
+      }
+    },
+    "Sign in to My Graph": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ind på My Graph"
+          }
+        }
+      }
+    },
+    "Sign in to My Graph on this Mac first.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log først ind på My Graph på denne Mac."
+          }
+        }
+      }
+    },
+    "Sign in to ask.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ind for at spørge."
+          }
+        }
+      }
+    },
+    "Sign in to send what you choose from this Mac to your graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ind for at sende det, du vælger, fra denne Mac til din graf."
+          }
+        }
+      }
+    },
+    "Sign in under Account first.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log først ind under Konto."
+          }
+        }
+      }
+    },
+    "Sign in with a passkey": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ind med en adgangsnøgle"
+          }
+        }
+      }
+    },
+    "Sign in…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ind …"
+          }
+        }
+      }
+    },
+    "Sign out": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log ud"
+          }
+        }
+      }
+    },
+    "Signed in as": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logget ind som"
+          }
+        }
+      }
+    },
+    "Signed in on this Mac": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Logget ind på denne Mac"
+          }
+        }
+      }
+    },
+    "Some photos only": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kun nogle billeder"
+          }
+        }
+      }
+    },
+    "Something went wrong on the server. The app tries again later.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noget gik galt på serveren. Appen prøver igen senere."
+          }
+        }
+      }
+    },
+    "Sources": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kilder"
+          }
+        }
+      }
+    },
+    "Space": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mellemrum"
+          }
+        }
+      }
+    },
+    "Stop": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop"
+          }
+        }
+      }
+    },
+    "Stop watching this folder": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold op med at følge denne mappe"
+          }
+        }
+      }
+    },
+    "Switch": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skift"
+          }
+        }
+      }
+    },
+    "Switch graph: Ask, notes and what this Mac sends go to the graph you pick.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skift graf: Spørg, noter og det, denne Mac sender, går til den graf, du vælger."
+          }
+        }
+      }
+    },
+    "That batch was too large for My Graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den portion var for stor til My Graph."
+          }
+        }
+      }
+    },
+    "That doesn't look like a web address.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det ligner ikke en webadresse."
+          }
+        }
+      }
+    },
+    "The folder “%@” can't be opened. Choose it again in Settings.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mappen “%@” kan ikke åbnes. Vælg den igen i Indstillinger."
+          }
+        }
+      }
+    },
+    "The note couldn't be saved.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noten kunne ikke gemmes."
+          }
+        }
+      }
+    },
+    "The server can't be reached. The app tries again when you're online.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serveren kan ikke nås. Appen prøver igen, når du er online."
+          }
+        }
+      }
+    },
+    "The server sent something this app doesn't understand. Try updating the app.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serveren sendte noget, appen ikke forstår. Prøv at opdatere appen."
+          }
+        }
+      }
+    },
+    "There is no calendar account on this Mac to keep the My Graph calendar in.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der er ingen kalenderkonto på denne Mac at gemme kalenderen My Graph i."
+          }
+        }
+      }
+    },
+    "There is nothing to read on this Mac.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der er intet at læse på denne Mac."
+          }
+        }
+      }
+    },
+    "This Mac": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denne Mac"
+          }
+        }
+      }
+    },
+    "This Mac can't use a passkey for this server yet (a signed build is needed). Sign in with your password.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denne Mac kan ikke bruge en adgangsnøgle til denne server endnu (det kræver en signeret version). Log ind med din adgangskode."
+          }
+        }
+      }
+    },
+    "This Mac is paused in My Graph. Resume it on the web (Connections, My Graph for Mac).": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denne Mac er sat på pause i My Graph. Fortsæt på nettet (Forbindelser, My Graph til Mac)."
+          }
+        }
+      }
+    },
+    "This Mac isn't signed in to My Graph any more. Sign in again in Settings.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denne Mac er ikke længere logget ind på My Graph. Log ind igen i Indstillinger."
+          }
+        }
+      }
+    },
+    "This Mac sends only what you turn on under Sources, to the graph shown here. Nothing is added to your graph until you approve it in My Graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denne Mac sender kun det, du slår til under Kilder, til den graf, der vises her. Intet føjes til din graf, før du har godkendt det i My Graph."
+          }
+        }
+      }
+    },
+    "This Mac was signed out of My Graph (maybe it was signed in again elsewhere, or the helper was paired). Sign in again in Settings.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denne Mac blev logget ud af My Graph (måske blev der logget ind igen et andet sted, eller hjælperen blev parret). Log ind igen i Indstillinger."
+          }
+        }
+      }
+    },
+    "This event has no start time.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Begivenheden har intet starttidspunkt."
+          }
+        }
+      }
+    },
+    "This folder isn't chosen in My Graph any more. Add it again in Settings.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mappen er ikke længere valgt i My Graph. Tilføj den igen i Indstillinger."
+          }
+        }
+      }
+    },
+    "This server doesn't have My Graph for Mac yet. Update My Graph on the server.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denne server har ikke My Graph til Mac endnu. Opdater My Graph på serveren."
+          }
+        }
+      }
+    },
+    "This source is turned off in My Graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denne kilde er slået fra i My Graph."
+          }
+        }
+      }
+    },
+    "This source was turned off in My Graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denne kilde blev slået fra i My Graph."
+          }
+        }
+      }
+    },
+    "Tick one off in Reminders and it is done in My Graph too. Your other lists are never changed.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kryds en af i Påmindelser, så er den også klaret i My Graph. Dine andre lister ændres aldrig."
+          }
+        }
+      }
+    },
+    "Turn this on again to let macOS ask for permission.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slå dette til igen, så macOS kan spørge om tilladelse."
+          }
+        }
+      }
+    },
+    "Type the shortcut…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tast genvejen …"
+          }
+        }
+      }
+    },
+    "Up to date, checked %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opdateret, tjekket %@"
+          }
+        }
+      }
+    },
+    "Upcoming events from My Graph, read-only. Your other calendars are never changed.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kommende begivenheder fra My Graph, kun til visning. Dine andre kalendere ændres aldrig."
+          }
+        }
+      }
+    },
+    "Use the same email and password as on the web. Signing in connects this Mac; you choose what it sends under Sources.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brug samme e-mail og adgangskode som på nettet. Når du logger ind, forbindes denne Mac; du vælger under Kilder, hvad den sender."
+          }
+        }
+      }
+    },
+    "Version": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        }
+      }
+    },
+    "Voice Memos": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Memoer"
+          }
+        }
+      }
+    },
+    "Waiting for you: %lld": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venter på dig: %lld"
+          }
+        }
+      }
+    },
+    "Waiting for your permission": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Venter på din tilladelse"
+          }
+        }
+      }
+    },
+    "Watch folder": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Følg mappe"
+          }
+        }
+      }
+    },
+    "Who can see it": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvem kan se det"
+          }
+        }
+      }
+    },
+    "Writing back to this Mac is turned off.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skrivning tilbage til denne Mac er slået fra."
+          }
+        }
+      }
+    },
+    "You can only look at this graph now, so nothing can be added to it from this Mac.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kan kun se denne graf nu, så intet kan føjes til den fra denne Mac."
+          }
+        }
+      }
+    },
+    "You can only look at this graph, so nothing can be added to it from this Mac.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du kan kun se denne graf, så intet kan føjes til den fra denne Mac."
+          }
+        }
+      }
+    },
+    "You're no longer a member of the graph this Mac sends to. Sign in again and choose another graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du er ikke længere medlem af den graf, denne Mac sender til. Log ind igen, og vælg en anden graf."
+          }
+        }
+      }
+    },
+    "You're signed out. Nothing is sent from this Mac until you sign in again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Du er logget ud. Intet sendes fra denne Mac, før du logger ind igen."
+          }
+        }
+      }
+    },
+    "Your session has ended. Syncing goes on, but Ask and Quick note need you to sign in again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din session er udløbet. Synkroniseringen fortsætter, men Spørg og Hurtig note kræver, at du logger ind igen."
+          }
+        }
+      }
+    },
+    "Your session on this Mac has ended. Syncing goes on in the background.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din session på denne Mac er udløbet. Synkroniseringen fortsætter i baggrunden."
+          }
+        }
+      }
+    },
+    "just now": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "lige nu"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

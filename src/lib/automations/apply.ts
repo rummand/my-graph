@@ -16,7 +16,7 @@ import { voiceOf } from "@/lib/assistant/locale";
 import * as gbrain from "@/lib/gbrain";
 import { createReminder, ReminderInputError } from "@/lib/briefs";
 import { addMemory, updateMemory, type MemoryOrigin } from "@/lib/memory";
-import { createPage, getPage, updatePage, WikiError } from "@/lib/wiki";
+import { createPage, getPage, updatePage, PageError } from "@/lib/pages";
 import type { Suggestion } from "./index";
 import {
   factPayload, memoryPayload, mergePayload, nudgePayload, reminderPayload, safeInternalHref, wikiEditPayload,
@@ -65,7 +65,7 @@ export async function applySuggestion(v: Viewer, s: Suggestion): Promise<ApplyRe
   } catch (e) {
     if (e instanceof AutomationError) throw e;
     if (e instanceof gbrain.GBrainError) throw new AutomationError(e.status === 409 ? 409 : e.status === 400 ? 422 : e.status, e.message);
-    if (e instanceof WikiError) throw new AutomationError(e.status === 413 ? 422 : e.status, e.message);
+    if (e instanceof PageError) throw new AutomationError(e.status === 413 ? 422 : e.status, e.message);
     if (e instanceof ReminderInputError) throw new AutomationError(422, e.message);
     throw e;
   }
@@ -159,7 +159,7 @@ async function applyInner(v: Viewer, s: Suggestion): Promise<ApplyResult> {
       const p = parse(wikiEditPayload, s.payload);
       if (await viaChangeSet(v, s, [{ op: "editWiki", slug: p.slug ?? "", title: p.title, markdown: p.text, ...(p.visibility ? { visibility: p.visibility } : {}) } as ChangeInput])) {
         const page = p.slug ? await getPage(v, p.slug) : null;
-        return { href: page ? `/wiki/${page.slug}` : "/wiki", label: page ? `Added to ${page.title}` : `Page created: ${p.title}` };
+        return { href: page ? `/artifacts/pages/${page.slug}` : "/artifacts/pages", label: page ? `Added to ${page.title}` : `Page created: ${p.title}` };
       }
       const blocks = paragraphsDoc(p.text);
       if (p.slug) {
@@ -167,11 +167,11 @@ async function applyInner(v: Viewer, s: Suggestion): Promise<ApplyResult> {
         if (page) {
           const content = { ...page.content, content: [...(page.content.content ?? []), ...blocks] };
           const r = await updatePage(v, page.slug, { version: page.version, content });
-          return { href: `/wiki/${r.page.slug}`, label: `Added to ${r.page.title}` };
+          return { href: `/artifacts/pages/${r.page.slug}`, label: `Added to ${r.page.title}` };
         }
       }
       const page = await createPage(v, { title: p.title, visibility: p.visibility ?? "private", content: { type: "doc", content: blocks } });
-      return { href: `/wiki/${page.slug}`, label: `Page created: ${page.title}` };
+      return { href: `/artifacts/pages/${page.slug}`, label: `Page created: ${page.title}` };
     }
   }
 }

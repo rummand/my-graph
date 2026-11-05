@@ -26,7 +26,7 @@ const messages: MessageTree = {
   quick: {
     label: "Genveje",
     upload: "Upload",
-    newWiki: "Ny wikiside",
+    newWiki: "Ny side",
     tomorrow: "Hvad skal jeg huske til i morgen?",
     week: "Hvad sker der i denne uge?",
   },
@@ -175,7 +175,7 @@ const messages: MessageTree = {
     rule: "Regel",
     ruleFamily: "Familieregel",
     memory: "Noget at huske",
-    wiki_edit: "Ændring i wikien",
+    wiki_edit: "Ændring i en side",
     nudge: "Idé",
     other: "Forslag",
   },
@@ -184,7 +184,7 @@ const messages: MessageTree = {
     memory: "Gem altid den slags",
     rule: "Gem altid regler som denne",
     ruleFamily: "Gem altid familieregler",
-    wiki_edit: "Tillad altid ændringer i wikien",
+    wiki_edit: "Tillad altid ændringer i sider",
   },
   origin: {
     when: {
@@ -325,7 +325,7 @@ const messages: MessageTree = {
     automation: "Automatisering",
     chat: "I en chat",
     ingest: "Læste en fil",
-    wiki: "Wiki",
+    wiki: "Sider",
     keeper: "Brain Keeper",
     other: "Assistent",
   },
@@ -337,8 +337,8 @@ const messages: MessageTree = {
     emptyLead: "Intet endnu.",
     emptyUpload: "Upload et dokument, et billede eller en optagelse",
     emptyOr: "eller",
-    emptyWiki: "start en wikiside",
-    kind: { file: "Fil", mail: "Mail", wiki: "Wikiside" },
+    emptyWiki: "start en side",
+    kind: { file: "Fil", mail: "Mail", wiki: "Side" },
   },
 
   error: {
@@ -351,7 +351,7 @@ const messages: MessageTree = {
       facts: "Oplysningerne til tjek",
       uploads: "Status på uploads",
       recentFiles: "De seneste filer",
-      recentWiki: "De seneste wikisider",
+      recentWiki: "De seneste sider",
       activity: "Assistentens aktivitet",
       calendar: "Kalenderen",
       key: "De vigtige personer og projekter",

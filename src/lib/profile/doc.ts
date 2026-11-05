@@ -9,7 +9,7 @@
  * Blocks beyond the wiki's: toggle { summary, open } (content: blocks), table/tableRow/tableHeader/tableCell,
  * libraryImage { sourceId, alt } (served by /api/files/:id, so the viewer's access is checked on every load).
  */
-import { safeHref } from "@/lib/wiki/doc";
+import { safeHref } from "@/lib/pages/doc";
 
 export type DocMark = { type: string; attrs?: Record<string, unknown> };
 export type DocNode = { type: string; attrs?: Record<string, unknown>; content?: DocNode[]; text?: string; marks?: DocMark[] };
@@ -102,7 +102,7 @@ function cleanNode(raw: unknown, depth: number): DocNode | null {
 /** The stored form of a doc from the browser. Throws ProfileDocError when it isn't a doc or is far too large. */
 export function sanitizeProfileDoc(raw: unknown): ProfileDoc {
   if (!raw || typeof raw !== "object" || (raw as DocNode).type !== "doc") throw new ProfileDocError("That isn't a profile document.");
-  if (JSON.stringify(raw).length > MAX_PROFILE_DOC_BYTES) throw new ProfileDocError("This profile text is too long to save. Split it up or move some of it to a wiki page.");
+  if (JSON.stringify(raw).length > MAX_PROFILE_DOC_BYTES) throw new ProfileDocError("This profile text is too long to save. Split it up or move some of it to a page.");
   const content = ((raw as DocNode).content ?? []).map((c) => cleanNode(c, 1)).filter((c): c is DocNode => !!c && BLOCKS.has(c.type));
   return { type: "doc", content: content.length ? content : [{ type: "paragraph" }] };
 }

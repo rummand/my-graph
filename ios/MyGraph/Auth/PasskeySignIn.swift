@@ -1,6 +1,10 @@
 import Foundation
 import AuthenticationServices
+#if os(iOS)
 import UIKit
+#else
+import AppKit
+#endif
 
 /// Passkey sign-in against the server's WebAuthn routes:
 /// POST /api/auth/passkey/login/options → { challengeId, options } and POST /api/auth/passkey/login/verify.
@@ -78,8 +82,13 @@ final class PasskeySignIn: NSObject, ASAuthorizationControllerDelegate, ASAuthor
 
     nonisolated func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
         MainActor.assumeIsolated {
+            #if os(iOS)
             let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             return scenes.flatMap(\.windows).first(where: \.isKeyWindow) ?? ASPresentationAnchor()
+            #else
+            // My Graph for Mac (mac/) shares this file: its Settings window is the anchor.
+            return NSApp.keyWindow ?? NSApp.windows.first(where: \.isVisible) ?? ASPresentationAnchor()
+            #endif
         }
     }
 }

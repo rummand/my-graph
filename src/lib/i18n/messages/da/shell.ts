@@ -9,7 +9,6 @@ const messages: MessageTree = {
     people: "Personer",
     timeline: "Tidslinje",
     library: "Bibliotek",
-    wiki: "Wiki",
     connections: "Forbindelser",
     memory: "Hukommelse",
     automations: "Automatiseringer",

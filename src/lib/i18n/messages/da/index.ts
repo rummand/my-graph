@@ -9,7 +9,7 @@ import people from "./people";
 import timeline from "./timeline";
 import chat from "./chat";
 import library from "./library";
-import wiki from "./wiki";
+import pages from "./pages";
 import graph from "./graph";
 import changes from "./changes";
 import history from "./history";
@@ -38,6 +38,6 @@ import push from "./push";
 import stored from "./stored";
 import security from "./security";
 
-const da: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, wiki, graph, changes, history, memory, automations, connections, aula, mac, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance, profile, clinical, mcp, apps, mcpServer, recordings, providers, push, stored, security };
+const da: Dictionary = { common, shell, settings, auth, today, people, timeline, chat, library, pages, graph, changes, history, memory, automations, connections, aula, mac, graphs, onboarding, model, mention, links, artifacts, docs, corpus, compliance, profile, clinical, mcp, apps, mcpServer, recordings, providers, push, stored, security };
 
 export default da;

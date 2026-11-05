@@ -190,7 +190,7 @@ const messages: MessageTree = {
   op: {
     addNode: "Add", updateNode: "Change", retireNode: "Retire", mergeNodes: "Merge", addEdge: "Connect", updateEdge: "Change a connection",
     removeEdge: "Remove a connection", addKind: "New kind", addRelationType: "New relation", addAttribute: "New detail",
-    addReminder: "Reminder", editWiki: "Wiki page",
+    addReminder: "Reminder", editWiki: "Page",
   },
   sentence: {
     addNode: "Add {type} {label}",
@@ -206,7 +206,7 @@ const messages: MessageTree = {
     addRelationTypeBoth: "A new relation: {label} (the other way: {inverse})",
     addAttribute: "A new detail for {type}: {label}",
     addReminder: "Remind on {date}: {title}",
-    editWiki: "Add to the wiki page {title}",
+    editWiki: "Add to the page {title}",
     other: "{op}",
   },
   type: {

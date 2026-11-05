@@ -31,7 +31,7 @@ export { degradedAnswer, type DegradedReason };
 import { longDay, timeZone } from "./dates";
 import { autoApplyDecision, inferBasis } from "./policy";
 import { buildMessages, cleanTitle, fallbackTitle, titleMessages, type HistoryTurn, type Tone } from "./prompt";
-import * as wiki from "@/lib/wiki";
+import * as wiki from "@/lib/pages";
 import { parseProposals, ProposalStreamFilter, type ProposalView } from "./proposals";
 import { flagsFrom, offWords, plainQuestion, retrieve, type Retrieval } from "./retrieve";
 import { chooseRoute } from "./route";
@@ -393,7 +393,7 @@ export function runTurn(v: Viewer, turn: PreparedTurn, question: string, signal:
   });
 }
 
-/** A wiki title reduced to what it is about: "EAM Platform Project notes" and "EAM platform" both become "eam platform". */
+/** A page title reduced to what it is about: "EAM Platform Project notes" and "EAM platform" both become "eam platform". */
 export function wikiTitleKey(title: string): string {
   const stop = new Set(["project", "projects", "page", "notes", "note", "wiki", "the", "a", "an", "about", "on", "om", "noter", "side", "projektet", "projekt"]);
   return title.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").split(/\s+/).filter((w) => w && !stop.has(w)).join(" ");

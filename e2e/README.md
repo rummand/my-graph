@@ -21,7 +21,7 @@ E2E_BASE_URL=http://localhost:3000 npm run test:e2e
 | --- | --- |
 | `auth.spec.ts` | sign-in form, wrong password, sign-out, graph switcher |
 | `pages.spec.ts` | every main page in Family and Work: loads, no 5xx, no page errors, no raw message keys or `{placeholders}`, no family wording in Work |
-| `flows.spec.ts` | Today, chat answer with steps, approving a chat proposal, live highlights + Send in Work, library upload → proposal → partial deliver → drop the rest, Changes filters, History compare, add a person, wiki create + edit, Brain Keeper Run now, Automations Run now, Connections, a one-pager document, theme switch |
+| `flows.spec.ts` | Today, chat answer with steps, approving a chat proposal, live highlights + Send in Work, library upload → proposal → partial deliver → drop the rest, Changes filters, History compare, add a person, page create (Artifacts → New → Page) + edit, Brain Keeper Run now, Automations Run now, Connections, a one-pager document, theme switch |
 | `roles.spec.ts` | Emma (child): device approval by a parent in Settings → Family, no Memory/Automations, parents-only people hidden, cannot deliver; Sara cannot open Anna's ids, cannot switch into her graph, and a cross-site write is refused |
 | `language.spec.ts` | switch to Danish in Settings, then every main page in Family and Work: no English in the app's own words, no raw keys |
 | `a11y.spec.ts` | axe (WCAG 2.1 A/AA) on the main pages and sign-in, light and dark; fails on serious or critical issues |

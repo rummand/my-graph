@@ -517,12 +517,12 @@
         }
       }
     },
-    "Add wiki note": {
+    "Add page": {
       "localizations": {
         "da": {
           "stringUnit": {
             "state": "translated",
-            "value": "Tilføj wikinote"
+            "value": "Tilføj side"
           }
         }
       }
@@ -4957,12 +4957,12 @@
         }
       }
     },
-    "Wiki note": {
+    "Page": {
       "localizations": {
         "da": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wikinote"
+            "value": "Side"
           }
         }
       }

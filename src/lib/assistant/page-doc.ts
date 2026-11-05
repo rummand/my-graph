@@ -1,4 +1,4 @@
-/** Plain text → TipTap JSON for assistant-drafted wiki pages (pure). */
+/** Plain text → TipTap JSON for assistant-drafted pages (pure). */
 
 type TNode = { type: string; content?: TNode[]; text?: string; attrs?: Record<string, unknown> };
 

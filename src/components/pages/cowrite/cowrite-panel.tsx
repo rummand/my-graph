@@ -14,11 +14,11 @@ import { AnimatePresence, motion } from "motion/react";
 import { clsx } from "clsx";
 import { AlertTriangle, Sparkles, Square, X } from "lucide-react";
 import { Badge, Button, CitationChip, IconButton } from "@/components/ui";
-import { extractMentions, extractPageLinks, type Doc, type DocNode } from "@/lib/wiki/doc";
-import type { Visibility } from "@/lib/wiki/labels";
-import { citeHref, docToMarkdown, markdownToBlocks, newTerms, wordCount, type KnownRefs } from "@/lib/wiki/cowrite/markdown";
-import { beginEdit, blocksToFragment, docWithoutEdit, renderInto, revertEdit } from "@/lib/wiki/cowrite/pending";
-import type { CowriteEvent, CowriteMode, CowriteSourceOut } from "@/lib/wiki/cowrite/prompt";
+import { extractMentions, extractPageLinks, type Doc, type DocNode } from "@/lib/pages/doc";
+import type { Visibility } from "@/lib/pages/labels";
+import { citeHref, docToMarkdown, markdownToBlocks, newTerms, wordCount, type KnownRefs } from "@/lib/pages/cowrite/markdown";
+import { beginEdit, blocksToFragment, docWithoutEdit, renderInto, revertEdit } from "@/lib/pages/cowrite/pending";
+import type { CowriteEvent, CowriteMode, CowriteSourceOut } from "@/lib/pages/cowrite/prompt";
 import { useT } from "@/lib/i18n/client";
 import { cowriteExamples, cowriteWarning } from "../copy";
 import { asAssistant, getCowrite } from "./extension";
@@ -192,10 +192,10 @@ export function CowritePanel({ editor, slug, pageVisibility, family = false, ope
   const start = async (e?: React.FormEvent) => {
     e?.preventDefault();
     const ask = instruction.trim();
-    if (ask.length < 3) { setError(t("wiki.cowrite.tellWhat")); inputRef.current?.focus(); return; }
+    if (ask.length < 3) { setError(t("pages.cowrite.tellWhat")); inputRef.current?.focus(); return; }
     const { state } = editor;
     const sel = state.selection;
-    if (mode === "rewrite" && sel.to <= sel.from) { setError(t("wiki.cowrite.selectRewrite")); return; }
+    if (mode === "rewrite" && sel.to <= sel.from) { setError(t("pages.cowrite.selectRewrite")); return; }
 
     const edit = beginEdit(state.doc, mode, { from: sel.from, to: sel.to });
     const pageJson = state.doc.toJSON() as DocNode;
@@ -215,13 +215,13 @@ export function CowritePanel({ editor, slug, pageVisibility, family = false, ope
     abort.current = ac;
     let failed: string | null = null;
     try {
-      const res = await fetch(`/api/wiki/${encodeURIComponent(slug)}/cowrite`, {
+      const res = await fetch(`/api/pages/${encodeURIComponent(slug)}/cowrite`, {
         method: "POST", headers: { "content-type": "application/json" }, signal: ac.signal,
         body: JSON.stringify({ instruction: ask, mode, pageMarkdown: pageMd.current, selectionMarkdown }),
       });
       if (!res.ok || !res.body) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data.error ?? t(res.status === 401 ? "wiki.cowrite.signedOut" : "wiki.cowrite.failed"));
+        throw new Error(data.error ?? t(res.status === 401 ? "pages.cowrite.signedOut" : "pages.cowrite.failed"));
       }
       const reader = res.body.getReader();
       const dec = new TextDecoder();
@@ -243,7 +243,7 @@ export function CowritePanel({ editor, slug, pageVisibility, family = false, ope
         }
       }
     } catch (err) {
-      if ((err as Error)?.name !== "AbortError") failed = err instanceof Error ? err.message : t("wiki.cowrite.failed");
+      if ((err as Error)?.name !== "AbortError") failed = err instanceof Error ? err.message : t("pages.cowrite.failed");
     } finally {
       abort.current = null;
       if (renderTimer.current) { clearTimeout(renderTimer.current); renderTimer.current = null; }
@@ -251,7 +251,7 @@ export function CowritePanel({ editor, slug, pageVisibility, family = false, ope
 
     if (!md.current.trim()) {
       undoDraft();
-      setError(failed ?? t("wiki.cowrite.stoppedEmpty"));
+      setError(failed ?? t("pages.cowrite.stoppedEmpty"));
       setPhase("composing");
       return;
     }
@@ -275,14 +275,14 @@ export function CowritePanel({ editor, slug, pageVisibility, family = false, ope
     setBusy(false);
     if (!res.ok) { setError(res.error); return; }
     editor.view.dispatch(asAssistant(editor.state.tr, { edit: null, streaming: false }));
-    setNotice(t("wiki.cowrite.kept"));
+    setNotice(t("pages.cowrite.kept"));
     setInstruction("");
     setPhase("closed");
   };
 
   const undo = () => {
     undoDraft();
-    setNotice(t("wiki.cowrite.undone"));
+    setNotice(t("pages.cowrite.undone"));
     setPhase("closed");
   };
 
@@ -314,14 +314,14 @@ export function CowritePanel({ editor, slug, pageVisibility, family = false, ope
             {phase === "composing" && (
               <form onSubmit={(e) => void start(e)} onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); close(); editor.commands.focus(); } }}>
                 <div className="flex items-center justify-between gap-3">
-                  <h2 id={`${id}-h`} className="flex items-center gap-2 text-sm font-semibold"><Sparkles aria-hidden className="size-4 text-accent" />{t("wiki.cowrite.title")}</h2>
-                  <IconButton type="button" label={t("wiki.cowrite.close")} onClick={close}><X aria-hidden className="size-4" /></IconButton>
+                  <h2 id={`${id}-h`} className="flex items-center gap-2 text-sm font-semibold"><Sparkles aria-hidden className="size-4 text-accent" />{t("pages.cowrite.title")}</h2>
+                  <IconButton type="button" label={t("pages.cowrite.close")} onClick={close}><X aria-hidden className="size-4" /></IconButton>
                 </div>
-                <label htmlFor={`${id}-ask`} className="sr-only">{t("wiki.cowrite.what")}</label>
+                <label htmlFor={`${id}-ask`} className="sr-only">{t("pages.cowrite.what")}</label>
                 <textarea id={`${id}-ask`} ref={inputRef} rows={2} value={instruction} maxLength={2000}
                   onChange={(e) => { setInstruction(e.target.value); if (error) setError(null); }}
                   onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey || !e.shiftKey)) { e.preventDefault(); void start(); } }}
-                  placeholder={t("wiki.cowrite.forExample", { example: examples[0] })}
+                  placeholder={t("pages.cowrite.forExample", { example: examples[0] })}
                   // The UI kit's Textarea look; a plain element because the composer needs a ref for focus.
                   className="mt-2 w-full resize-none rounded-md bg-surface px-3 py-2 text-[15px] leading-relaxed text-fg ring-1 ring-inset ring-line transition-shadow placeholder:text-muted/80 hover:ring-muted/40 focus:outline-none focus:ring-2 focus:ring-accent" />
                 {!instruction.trim() && (
@@ -333,13 +333,13 @@ export function CowritePanel({ editor, slug, pageVisibility, family = false, ope
                   </div>
                 )}
                 <fieldset className="mt-3">
-                  <legend className="sr-only">{t("wiki.cowrite.where")}</legend>
+                  <legend className="sr-only">{t("pages.cowrite.where")}</legend>
                   <div className="grid grid-cols-3 gap-0.5 rounded-md bg-surface-2 p-0.5 sm:inline-flex">
                     {MODES.map((m) => {
-                      const o = { mode: m, label: t(`wiki.cowrite.modes.${m}`), short: t(`wiki.cowrite.modes.${m}Short`) };
+                      const o = { mode: m, label: t(`pages.cowrite.modes.${m}`), short: t(`pages.cowrite.modes.${m}Short`) };
                       const disabled = o.mode === "rewrite" && !hasSelection;
                       return (
-                        <label key={o.mode} title={disabled ? t("wiki.cowrite.selectFirst") : undefined}
+                        <label key={o.mode} title={disabled ? t("pages.cowrite.selectFirst") : undefined}
                           className={clsx("relative cursor-pointer whitespace-nowrap rounded-[5px] px-2.5 py-1 text-center text-sm transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-accent",
                             mode === o.mode && !disabled ? "bg-surface text-fg shadow-[0_1px_0_var(--line)]" : "text-muted hover:text-fg", disabled && "cursor-not-allowed opacity-45 hover:text-muted")}>
                           <input type="radio" name={`${id}-mode`} value={o.mode} checked={mode === o.mode} disabled={disabled} onChange={() => setMode(o.mode)} className="sr-only" />
@@ -350,8 +350,8 @@ export function CowritePanel({ editor, slug, pageVisibility, family = false, ope
                   </div>
                 </fieldset>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                  <p className="min-w-0 flex-1 text-xs text-muted">{t("wiki.cowrite.readsOnly")}</p>
-                  <Button type="submit" size="sm"><Sparkles aria-hidden className="size-3.5" />{t("wiki.cowrite.write")}</Button>
+                  <p className="min-w-0 flex-1 text-xs text-muted">{t("pages.cowrite.readsOnly")}</p>
+                  <Button type="submit" size="sm"><Sparkles aria-hidden className="size-3.5" />{t("pages.cowrite.write")}</Button>
                 </div>
                 {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
               </form>
@@ -360,28 +360,28 @@ export function CowritePanel({ editor, slug, pageVisibility, family = false, ope
             {phase === "writing" && (
               <div className="flex flex-wrap items-center justify-between gap-3" aria-live="polite">
                 <div className="flex min-w-0 items-center gap-3">
-                  <Badge tone="accent"><span aria-hidden className="size-1.5 rounded-full bg-accent" />{t("wiki.cowrite.writing")}</Badge>
-                  <h2 id={`${id}-h`} className="sr-only">{t("wiki.cowrite.writingSr")}</h2>
+                  <Badge tone="accent"><span aria-hidden className="size-1.5 rounded-full bg-accent" />{t("pages.cowrite.writing")}</Badge>
+                  <h2 id={`${id}-h`} className="sr-only">{t("pages.cowrite.writingSr")}</h2>
                   <p className="min-w-0 truncate text-sm text-muted">
-                    {words > 0 ? t("wiki.cowrite.wordsSoFar", { count: words }) : sources.length ? t("wiki.cowrite.readItems", { count: sources.length }) : t("wiki.cowrite.looking")}
-                    <span className="hidden sm:inline">{t("wiki.cowrite.keepEditing")}</span>
+                    {words > 0 ? t("pages.cowrite.wordsSoFar", { count: words }) : sources.length ? t("pages.cowrite.readItems", { count: sources.length }) : t("pages.cowrite.looking")}
+                    <span className="hidden sm:inline">{t("pages.cowrite.keepEditing")}</span>
                   </p>
                 </div>
-                <Button size="sm" variant="secondary" onClick={stop}><Square aria-hidden className="size-3 fill-current" />{t("wiki.cowrite.stop")}</Button>
+                <Button size="sm" variant="secondary" onClick={stop}><Square aria-hidden className="size-3 fill-current" />{t("pages.cowrite.stop")}</Button>
               </div>
             )}
 
             {phase === "review" && (
               <div>
-                <h2 id={`${id}-h`} className="text-sm font-semibold">{t("wiki.cowrite.keepTitle")}</h2>
+                <h2 id={`${id}-h`} className="text-sm font-semibold">{t("pages.cowrite.keepTitle")}</h2>
                 <p className="mt-0.5 text-sm text-muted">
-                  {t("wiki.cowrite.wrote", { count: words })}{citedSources.length ? t("wiki.cowrite.fromSources", { count: citedSources.length }) : sources.length ? t("wiki.cowrite.noCite") : t("wiki.cowrite.nothingToGoOn")}{t("wiki.cowrite.onlyDraft")}
-                  {touched && t("wiki.cowrite.touched")}
+                  {t("pages.cowrite.wrote", { count: words })}{citedSources.length ? t("pages.cowrite.fromSources", { count: citedSources.length }) : sources.length ? t("pages.cowrite.noCite") : t("pages.cowrite.nothingToGoOn")}{t("pages.cowrite.onlyDraft")}
+                  {touched && t("pages.cowrite.touched")}
                 </p>
                 {citedSources.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {citedSources.slice(0, 5).map((s) => <CitationChip key={s.n} n={s.n} title={s.title} detail={s.what} href={citeHref(s)} />)}
-                    {citedSources.length > 5 && <span className="self-center text-xs text-muted">{t("wiki.cowrite.andMore", { count: citedSources.length - 5 })}</span>}
+                    {citedSources.length > 5 && <span className="self-center text-xs text-muted">{t("pages.cowrite.andMore", { count: citedSources.length - 5 })}</span>}
                   </div>
                 )}
                 {warning && (
@@ -391,9 +391,9 @@ export function CowritePanel({ editor, slug, pageVisibility, family = false, ope
                 )}
                 {error && <p role="alert" className="mt-2 text-sm text-danger">{error}</p>}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Button size="sm" onClick={() => void accept()} disabled={busy}>{busy ? t("wiki.cowrite.saving") : t("wiki.cowrite.accept")}</Button>
-                  <Button size="sm" variant="secondary" onClick={undo} disabled={busy}>{t("wiki.cowrite.undo")}</Button>
-                  <Button size="sm" variant="ghost" onClick={tryAgain} disabled={busy}>{t("wiki.cowrite.askDifferently")}</Button>
+                  <Button size="sm" onClick={() => void accept()} disabled={busy}>{busy ? t("pages.cowrite.saving") : t("pages.cowrite.accept")}</Button>
+                  <Button size="sm" variant="secondary" onClick={undo} disabled={busy}>{t("pages.cowrite.undo")}</Button>
+                  <Button size="sm" variant="ghost" onClick={tryAgain} disabled={busy}>{t("pages.cowrite.askDifferently")}</Button>
                 </div>
               </div>
             )}

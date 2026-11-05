@@ -1,7 +1,7 @@
-import { listRevisions } from "@/lib/wiki";
-import { route, slugParam } from "@/lib/wiki/http";
+import { listRevisions } from "@/lib/pages";
+import { route, slugParam } from "@/lib/pages/http";
 
-/** GET /api/wiki/[slug]/revisions — newest first: version, title, author ("Assistant" for the assistant), time, summary. */
+/** GET /api/pages/[slug]/revisions — newest first: version, title, author ("Assistant" for the assistant), time, summary. */
 export const GET = route<{ slug: string }>(async (_req, v, params) => {
   const { slug } = slugParam.parse(params);
   return { revisions: await listRevisions(v, slug) };

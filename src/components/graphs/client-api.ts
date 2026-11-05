@@ -21,9 +21,11 @@ export async function graphApi<T = Record<string, unknown>>(url: string, method:
 
 export const switchGraph = (graphId: string) => graphApi("/api/graphs/switch", "POST", { graphId });
 
-/** Detail pages (/node/<id>, /wiki/<slug>, …) belong to one graph; after a switch, go back to their section's list. */
+/** Detail pages (/node/<id>, /artifacts/pages/<slug>, …) belong to one graph; after a switch, go back to their section's list. */
 export function pathAfterSwitch(path: string): string | null {
   const parts = path.split("/").filter(Boolean);
+  // The Artifacts hub's tabs are lists themselves: a page or a style goes back to its own tab.
+  if (parts[0] === "artifacts" && ["pages", "documents", "decks", "styles"].includes(parts[1] ?? "")) return parts.length > 2 ? `/artifacts/${parts[1]}` : null;
   if (parts.length > 1 && parts[0] !== "settings" && parts[0] !== "graphs") return `/${parts[0]}`;
   return null;
 }

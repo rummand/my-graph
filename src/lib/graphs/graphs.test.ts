@@ -2,7 +2,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import { describe, expect, it } from "vitest";
 import { canEditItem, canReadEdgeItem, canReadItem, ctxFor, nodeEditSql, nodeReadSql, sourceReadSql, type AccessItem } from "@/lib/gbrain/access";
 import { canSee, canModify } from "@/lib/people/access";
-import { canReadPage, canEditPage } from "@/lib/wiki/access";
+import { canReadPage, canEditPage } from "@/lib/pages/access";
 import { canSeeItem, canManageReminder, visibleChildren } from "@/lib/briefs/access";
 import { canReadSourceRow, canEditSourceRow } from "@/lib/ingest/access";
 import {

@@ -6,7 +6,7 @@ const messages: MessageTree = {
   title: "How the assistant works in {graph}",
   tryTitle: "Try asking",
   step: "Step {step} of {total}",
-  introFamily: "It reads the family's calendar, letters, people and wiki here, and only what you are allowed to see. It suggests; you decide.",
+  introFamily: "It reads the family's calendar, letters, people and pages here, and only what you are allowed to see. It suggests; you decide.",
   intro: "Only what is in {graph} is used. Nothing from your other graphs comes in, and nothing from here goes out. It suggests; you decide.",
   canDo: "What it can do",
   canAnswer: "Answer questions, with a link to where each answer came from",

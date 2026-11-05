@@ -416,7 +416,7 @@ struct SuggestionCard: View {
         case "reminder": return String(localized: "Reminder")
         case "fact": return String(localized: "Fact")
         case "memory": return String(localized: "Memory")
-        case "wiki": return String(localized: "Wiki note")
+        case "wiki": return String(localized: "Page")
         default: return String(localized: "Suggestion")
         }
     }

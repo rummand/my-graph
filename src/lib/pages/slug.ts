@@ -1,6 +1,6 @@
 /** Page slugs: readable, URL-safe, unique per household. Pure — no DB. */
 
-/** Slugs that collide with routes under /wiki. */
+/** Slugs that collide with routes under /artifacts/pages. */
 export const RESERVED_SLUGS = new Set(["new", "history", "api", "edit"]);
 
 const MAX_SLUG = 80;

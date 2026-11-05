@@ -36,6 +36,7 @@ import { CONTAINER_KINDS, detectFileType, kindFromMime, MAX_UPLOAD_BYTES, MBOX_M
 import { buildProposalOps, correspondentOps, describeCounts, edgeKey, type KnownNode } from "./proposals";
 import { readZip } from "./zip";
 import { rememberName, settleRevision } from "./revisions-store";
+import { alignLineageFolder, suggestFolderAfterRead } from "./folders";
 import { photoCoords, photoPlaceOps, takenAtFallback } from "./formats/image-place";
 import { importerById, importerForArchive } from "@/lib/importers/registry";
 import type { ImportKnown, ImportPlan, Importer } from "@/lib/importers/types";
@@ -212,6 +213,8 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       meta.revisionSettled = true;
       if (settled.outcome === "revision") {
         meta.revisionOf = settled.of.id; meta.revision = settled.revision;
+        // Every version of a document lives in one folder.
+        await alignLineageFolder(src, settled.lineageId, settled.of.id).catch((e) => console.warn("[ingest] folder of the new version", e));
         // What the older versions proposed and nobody decided on gives way to what this version proposes.
         const older = await db.select({ meta: sources.meta }).from(sources)
           .where(and(eq(sources.graphId, src.graphId), sql`coalesce(${sources.lineageId}, ${sources.id}) = ${settled.lineageId}`, sql`${sources.id} <> ${src.id}`));
@@ -318,6 +321,8 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     meta.warnings = warnings;
     meta.finishedAt = new Date().toISOString();
     await db.update(sources).set({ status: "ready", error: null, meta }).where(eq(sources.id, sourceId));
+    // Where it could be filed (cheap rules, no model): a suggestion the person accepts or dismisses in the library.
+    await suggestFolderAfterRead(v, sourceId);
   } catch (e) {
     if (isStop(e)) return; // the server is stopping; the queue reads it again when it is back
     console.error(`[ingest] source ${sourceId} failed while ${step}`, e);

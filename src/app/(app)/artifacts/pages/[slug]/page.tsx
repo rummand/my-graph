@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { BacklinksPanel } from "@/components/wiki/backlinks-panel";
-import { WikiPageClient } from "@/components/wiki/page-client";
+import { BacklinksPanel } from "@/components/pages/backlinks-panel";
+import { PageClient } from "@/components/pages/page-client";
 import { requireUser } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
-import { getBacklinks, getPage, type Backlinks } from "@/lib/wiki";
+import { getBacklinks, getPage, type Backlinks } from "@/lib/pages";
 
 export const dynamic = "force-dynamic";
 
@@ -15,13 +15,13 @@ const SLUG = /^[a-z0-9-]{1,120}$/;
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const t = await getT();
-  if (!SLUG.test(slug)) return { title: t("wiki.meta.notFound") };
+  if (!SLUG.test(slug)) return { title: t("pages.meta.notFound") };
   const v = await requireUser();
   const page = await getPage(v, slug);
-  return { title: page ? t("wiki.meta.page", { title: page.title }) : t("wiki.meta.notFound") };
+  return { title: page ? t("pages.meta.page", { title: page.title }) : t("pages.meta.notFound") };
 }
 
-export default async function WikiPageRoute({ params, searchParams }: Props) {
+export default async function PageRoute({ params, searchParams }: Props) {
   const { slug } = await params;
   if (!SLUG.test(slug)) notFound();
   const v = await requireUser();
@@ -34,11 +34,11 @@ export default async function WikiPageRoute({ params, searchParams }: Props) {
   try {
     backlinks = await getBacklinks(v, page);
   } catch (e) {
-    console.warn("[wiki] backlinks failed", e);
+    console.warn("[pages] backlinks failed", e);
   }
 
   return (
-    <WikiPageClient
+    <PageClient
       key={`${page.id}:${page.version}`}
       startEditing={sp.edit === "1" || sp.assist === "1"}
       startAsking={sp.assist === "1"}
@@ -51,7 +51,7 @@ export default async function WikiPageRoute({ params, searchParams }: Props) {
       }}>
       {backlinks
         ? <BacklinksPanel backlinks={backlinks} />
-        : <p className="text-muted">{t("wiki.page.backlinksFailed")}</p>}
-    </WikiPageClient>
+        : <p className="text-muted">{t("pages.page.backlinksFailed")}</p>}
+    </PageClient>
   );
 }

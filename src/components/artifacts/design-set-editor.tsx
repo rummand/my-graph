@@ -114,7 +114,7 @@ export function DesignSetEditor({ initial, canEdit, openSite, graphName }: { ini
     const body = await res?.json().catch(() => ({}));
     setBusy(false);
     if (!res?.ok) { setError(body?.error ?? t("artifacts.error")); return; }
-    if (isNew) { router.push(`/artifacts/design-sets/${body.designSet.id}`); router.refresh(); return; }
+    if (isNew) { router.push(`/artifacts/styles/${body.designSet.id}`); router.refresh(); return; }
     setMsg(t("artifacts.setEditor.savedVersion", { n: body.designSet.version }));
     router.refresh();
   }
@@ -123,7 +123,7 @@ export function DesignSetEditor({ initial, canEdit, openSite, graphName }: { ini
 
   return (
     <div className="mx-auto max-w-[1400px]">
-      <Link href="/artifacts/design-sets" className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-fg"><ChevronLeft className="size-4" aria-hidden />{t("artifacts.sets.title")}</Link>
+      <Link href="/artifacts/styles" className="mb-4 inline-flex items-center gap-1 text-sm text-muted hover:text-fg"><ChevronLeft className="size-4" aria-hidden />{t("artifacts.sets.title")}</Link>
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <h1 className="text-[28px]/[1.15] font-semibold tracking-[-0.02em]">{isNew ? t("artifacts.setEditor.newTitle") : initial.name}</h1>
         <div className="flex flex-wrap items-center gap-2">
