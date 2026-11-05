@@ -224,6 +224,8 @@ export async function deliver(v: Viewer, id: string, opts: { onlyChangeIds?: str
               id: c.nodeId ?? undefined, type: type as gbrain.NodeType, kind, label: String(p.label ?? ""), aliases: Array.isArray(p.aliases) ? (p.aliases as string[]) : undefined,
               summary: str(p.summary), props: (p.props as Record<string, unknown>) ?? {}, startAt: date(p.startAt) ?? null, endAt: date(p.endAt) ?? null,
               visibility: p.visibility === "private" || p.visibility === "parents" || p.visibility === "household" ? p.visibility : undefined,
+              // Health and the like: kept sensitive, so it never goes to a model without no-fallback.
+              ...(p.sensitive === true ? { sensitive: true } : {}),
             }, prov);
             break;
           }

@@ -11,6 +11,7 @@ import { useT } from "@/lib/i18n/client";
 import type { ConnectionDTO } from "@/lib/connectors";
 import { api, type Person } from "./bits";
 import { openDrivePicker } from "./google-picker";
+import { GooglePhotosPicks } from "./google-photos-picker";
 import { startSignIn, useProviders } from "./oauth-connect";
 
 type Option = { id: string; name: string; path?: string; hasChildren?: boolean; hint?: string };
@@ -175,6 +176,7 @@ export function OAuthSettings({ c, people, family, onDone }: { c: ConnectionDTO;
   const [mailFolders, setMailFolders] = useState<Ref[]>(() => arr("mailFolders", [{ id: "inbox", name: "Inbox" }]));
   const [driveFolders, setDriveFolders] = useState<Ref[]>(() => arr("driveFolders", []));
   const [folders, setFolders] = useState<Ref[]>(() => arr("folders", []));
+  const [channels, setChannels] = useState<string[]>(() => arr("channels", []));
   const [since, setSince] = useState(typeof cfg.since === "string" ? cfg.since : "");
   const [person, setPerson] = useState(typeof cfg.personNodeId === "string" ? cfg.personNodeId : "");
   const [visibility, setVisibility] = useState(typeof cfg.visibility === "string" ? cfg.visibility : "private");
@@ -196,6 +198,7 @@ export function OAuthSettings({ c, people, family, onDone }: { c: ConnectionDTO;
     if (c.connector === "google_drive") Object.assign(config, { picked });
     if (c.connector === "microsoft") Object.assign(config, { mail, calendar, mailFolders, driveFolders, personNodeId: person || null, ...(since ? { since } : {}) });
     if (c.connector === "dropbox") Object.assign(config, { folders });
+    if (c.connector === "slack") Object.assign(config, { channels, directMessages: cfg.directMessages === true, ...(since ? { since } : {}) });
     try {
       const r = await api<{ connection: ConnectionDTO }>(`/api/connections/${c.id}`, { method: "PATCH", json: { config, everyMinutes: every, label: label.trim() || undefined } });
       setSaved(true); setDirty(false);
@@ -236,6 +239,11 @@ export function OAuthSettings({ c, people, family, onDone }: { c: ConnectionDTO;
               <DrivePicks c={c} value={picked} onChange={touch(setPicked)} />
             </Field>
           )}
+          {c.connector === "google_photos" && (
+            <Field label={t("connections.googlePhotos.title")}>
+              <GooglePhotosPicks c={c} />
+            </Field>
+          )}
           {c.connector === "microsoft" && (
             <>
               <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={mail} onChange={(e) => touch(setMail)(e.target.checked)} />{t("providers.settings.mailOn")}</label>
@@ -250,6 +258,12 @@ export function OAuthSettings({ c, people, family, onDone }: { c: ConnectionDTO;
               </Field>
             </>
           )}
+          {c.connector === "slack" && (
+            <Field label={t("providers.settings.slackChannels")} hint={t("providers.settings.slackChannelsHint")}>
+              <Checklist id={c.id} what="slackChannels" value={channels} onChange={touch(setChannels)} />
+            </Field>
+          )}
+          {c.connector === "notion" && <p className="max-w-[65ch] text-sm text-muted">{t("providers.settings.notionPick")}</p>}
           {c.connector === "dropbox" && (
             <Field label={t("providers.settings.dropboxFolders")}>
               <FolderPicker id={c.id} what="dropboxFolders" value={folders} onChange={touch(setFolders)} keyOf={(r) => r.path ?? r.id} />

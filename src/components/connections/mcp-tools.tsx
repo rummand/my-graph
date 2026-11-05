@@ -7,12 +7,13 @@
 import { useEffect, useState } from "react";
 import { Button, Section } from "@/components/ui";
 import { formatAgo, useLocale, useT } from "@/lib/i18n/client";
+import type { DirectoryApp } from "@/lib/connectors/mcp/directory";
 import { api } from "./bits";
 
 type Tool = { name: string; title: string | null; description: string | null; writes: boolean };
 type Catalog = { serverName: string | null; catalogAt: string | null; chosen: boolean; tools: Tool[]; resources: unknown[]; enabled: string[] };
 
-export function McpTools({ connectionId, refreshKey }: { connectionId: string; refreshKey?: string | null }) {
+export function McpTools({ connectionId, refreshKey, app }: { connectionId: string; refreshKey?: string | null; app?: DirectoryApp | null }) {
   const t = useT();
   const locale = useLocale();
   const [cat, setCat] = useState<Catalog | null>(null);
@@ -42,7 +43,8 @@ export function McpTools({ connectionId, refreshKey }: { connectionId: string; r
 
   return (
     <Section title={t("mcp.tools.title")}>
-      <p className="mb-4 max-w-[65ch] text-sm text-muted">{t("mcp.tools.lead")}</p>
+      <p className="mb-4 max-w-[65ch] text-sm text-muted">{app ? t("apps.tools.lead", { app: app.name }) : t("mcp.tools.lead")}</p>
+      {app?.notes.includes("moneyMoves") && <p className="mb-4 max-w-[65ch] text-sm text-warn">{t("apps.notes.moneyMoves", { vendor: app.vendor })}</p>}
       {!cat || cat.tools.length === 0 ? <p className="text-sm text-muted">{t("mcp.tools.none")}</p> : (
         <>
           <ul className="divide-y divide-line rounded-lg bg-surface">

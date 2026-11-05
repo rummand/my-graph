@@ -3,8 +3,38 @@
  * the same file; the more specific one goes first. Add yours with one import and one line.
  */
 import type { Importer } from "./types";
+import { imessageImporter, messengerImporter, whatsappImporter } from "./chats";
+import { appleNotesImporter, notionImporter, obsidianImporter } from "./notes";
+import { contactsImporter, vcardImporter } from "./contacts";
+import { gedcomImporter } from "./gedcom";
+import { photosImporter } from "./photos";
+import { placesImporter } from "./places";
+import { githubImporter } from "./github";
+import { jiraImporter } from "./jira";
+import { linearImporter } from "./linear";
+import { healthImporter } from "./health";
+import { slackImporter } from "./slack";
+import { notionApiImporter } from "./notion";
+import { homeAssistantImporter } from "./home_assistant";
+import { schoolworkImporter } from "@/lib/connectors/dk/minuddannelse/importer";
 
 export const IMPORTERS: Importer[] = [
+  // Chats (chats/): each claims only its own export.
+  whatsappImporter, messengerImporter, imessageImporter, appleNotesImporter,
+  vcardImporter, contactsImporter,
+  gedcomImporter,
+  photosImporter,
+  placesImporter,
+  // Work batches from the GitHub, Linear and Jira connectors (see github/work.ts).
+  githubImporter, linearImporter, jiraImporter,
+  // Weekly plans and homework from the MinUddannelse/Meebook connector (never claims an upload).
+  schoolworkImporter,
+  // Apple Health from the iPhone app (JSON batches only; always sensitive and private).
+  healthImporter,
+  // Batches from the Slack, Notion (API) and Home Assistant connectors (never claim an upload).
+  slackImporter, notionApiImporter, homeAssistantImporter,
+  // Notes vaults (notes/), last: a zip of Markdown is theirs only when nothing more specific claimed it.
+  notionImporter, obsidianImporter,
 ];
 
 export function importerById(id: string | null | undefined): Importer | null {

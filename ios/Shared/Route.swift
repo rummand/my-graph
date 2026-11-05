@@ -15,6 +15,8 @@ enum Route: Hashable {
     /// Everything recorded about one person or thing.
     case history(String, String)
     case documents
+    /// "Bring in from this iPhone": contacts, photos, places and health.
+    case fromPhone
     case settings
     case timeline
     /// Every saved chat (the Ask tab itself opens the active one).

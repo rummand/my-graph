@@ -23,13 +23,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Choose photos to add to your library."
+            "value": "Send the details of your photos (when and where they were taken, albums, favourites) to My Graph, only if you turn this on under From this iPhone."
           }
         },
         "da": {
           "stringUnit": {
             "state": "translated",
-            "value": "Vælg billeder, der skal føjes til dit bibliotek."
+            "value": "Send oplysninger om dine billeder (hvornår og hvor de er taget, album, favoritter) til My Graph, kun hvis du slår det til under Fra denne iPhone."
           }
         }
       }
@@ -62,6 +62,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gør det, du siger i Spørg, til tekst. Når iPhonen kan, sker det på selve iPhonen."
+          }
+        }
+      }
+    },
+    "NSContactsUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send your contacts (names, numbers, addresses, birthdays and related names) to My Graph, where you review what it finds before anything is added."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send dine kontakter (navne, numre, adresser, fødselsdage og relationer) til My Graph, hvor du gennemser, hvad den finder, før noget bliver tilføjet."
+          }
+        }
+      }
+    },
+    "NSLocationWhenInUseUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notice the places you visit, only if you turn on Places under From this iPhone."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrér de steder, du besøger, kun hvis du slår Steder til under Fra denne iPhone."
+          }
+        }
+      }
+    },
+    "NSLocationAlwaysAndWhenInUseUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notice places where you stay a while, also while My Graph is closed, so they can be added to your graph after you review them. Turn it off at any time under From this iPhone."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrér steder, hvor du opholder dig et stykke tid, også mens My Graph er lukket, så de kan føjes til din graf, når du har gennemset dem. Slå det fra når som helst under Fra denne iPhone."
+          }
+        }
+      }
+    },
+    "NSHealthShareUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send the health information you choose (like height, weight and vaccinations) to My Graph, where only you can see it."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send de helbredsoplysninger, du vælger (som højde, vægt og vaccinationer), til My Graph, hvor kun du kan se dem."
+          }
+        }
+      }
+    },
+    "NSHealthClinicalHealthRecordsShareUsageDescription": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send the health records you choose (vaccinations, conditions, medications, allergies and lab results) to My Graph, where only you can see them."
+          }
+        },
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send de helbredsjournaler, du vælger (vaccinationer, sygdomme, medicin, allergier og prøvesvar), til My Graph, hvor kun du kan se dem."
           }
         }
       }

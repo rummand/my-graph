@@ -37,6 +37,7 @@ enum DebugHooks {
         case "memory": return .memory
         case "changes": return id.map { .changeSet($0) } ?? .changes
         case "documents": return .documents
+        case "phone": return .fromPhone
         case "history": return id.map { .history($0, "") }
         case "settings": return .settings
         case "widget": return .debugWidget
@@ -47,6 +48,8 @@ enum DebugHooks {
     static var ask: String? { arg("-MGAsk") }
     static var graphs: Bool { ProcessInfo.processInfo.arguments.contains("-MGGraphs") }
     static var signOut: Bool { ProcessInfo.processInfo.arguments.contains("-MGSignOut") }
+    /// "From this iPhone": turn a source on and send it right away (`contacts`, `health`, `places`).
+    static var phoneSend: String? { arg("-MGPhoneSend") }
     #else
     static let server: URL? = nil
     static let login: (String, String)? = nil
@@ -55,5 +58,6 @@ enum DebugHooks {
     static let ask: String? = nil
     static let graphs = false
     static let signOut = false
+    static let phoneSend: String? = nil
     #endif
 }

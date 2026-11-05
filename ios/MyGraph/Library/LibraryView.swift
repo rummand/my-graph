@@ -42,6 +42,9 @@ struct LibraryView: View {
                 }
                 .listRowBackground(Color.clear)
                 .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+                if FromPhoneCard.shouldShow {
+                    FromPhoneCard().listRowBackground(Color.mgSurface)
+                }
                 if let u = uploading {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack(spacing: 10) { ProgressView(); Text(u).mgFont(.secondary) }
@@ -112,6 +115,7 @@ struct LibraryView: View {
                     }
                     Button { showScanner = true } label: { Label("Scan a document", systemImage: "doc.viewfinder") }
                         .disabled(!VNDocumentCameraViewController.isSupported)
+                    Button { router.push(.fromPhone) } label: { Label("From this iPhone…", systemImage: "iphone.and.arrow.forward") }
                     Section("Who can see it") {
                         Picker("Who can see it", selection: $visibility) {
                             Text("Only you").tag("private")

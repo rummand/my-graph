@@ -1,0 +1,128 @@
+import type { MessageTree } from "../../core";
+
+/** "mac" namespace (en): /connections/mac, sending Messages and Notes with the My Graph for Mac helper. */
+const messages: MessageTree = {
+  metaTitle: "My Graph for Mac",
+  title: "My Graph for Mac",
+  lead: "Bring the Messages conversations and Notes you choose into this graph. A small helper on your Mac reads them and sends them here; what they add waits for you to approve.",
+  unofficial: "Unofficial: may stop working",
+  unofficialWhy: "Apple has no way for other apps to read Messages or Notes. The helper reads the Messages database on your Mac and asks Notes for your notes, so a macOS update may break it until My Graph is updated.",
+  readOnly: "You can look at this graph but not connect a Mac to it.",
+  back: "All connections",
+
+  status: {
+    title: "Your Mac",
+    waiting: "Waiting for the helper on your Mac to pair.",
+    paired: "Paired with {device}.",
+    pairedNoName: "Paired with your Mac.",
+    lastSeen: "Last heard from it {ago}.",
+    lastSend: "Last send {ago}: {what}.",
+    nothingYet: "Nothing has been sent yet.",
+    messages: { one: "{count} message", other: "{count} messages" },
+    notes: { one: "{count} note", other: "{count} notes" },
+    paused: "Paused: the helper's sends are refused until you resume it.",
+    open: "See what it brought in",
+    signOut: "Sign the helper out",
+    signOutConfirm: "Sign the helper out? Its key stops working at once. What it already brought stays.",
+    signedOut: "The helper is signed out. Make a new pairing code to use it again.",
+    justPaired: "Your Mac is paired. Now choose what it may send.",
+  },
+
+  steps: {
+    title: "Set it up, step by step",
+    lead: "On your Mac, with Node 18 or newer (nodejs.org, or brew install node). It takes about five minutes.",
+    one: {
+      title: "Get a pairing code",
+      body: "The code is used once and runs out after 15 minutes. It ties the helper to you and to this graph.",
+      action: "Get a pairing code",
+      again: "Get a new code",
+      code: "Your pairing code",
+      copy: "Copy",
+      copied: "Copied",
+      expires: "Valid until {time}.",
+      expired: "That code has run out. Get a new one.",
+    },
+    two: {
+      title: "Download the helper",
+      body: "One file, no installation. It talks only to this My Graph. You can read it first: it is plain JavaScript with comments.",
+      download: "Download my-graph-mac.mjs",
+    },
+    three: {
+      title: "Let Terminal read Messages",
+      body: "macOS keeps Messages private to Messages. To let the helper read it, open System Settings, Privacy & Security, Full Disk Access, and switch on Terminal (or the terminal app you use). Quit and reopen Terminal afterwards.",
+      notes: "If you send Notes, macOS asks once whether Terminal may control Notes. Say OK.",
+      skip: "Only sending Notes? Then you can skip Full Disk Access.",
+    },
+    four: {
+      title: "Run it",
+      body: "Open Terminal, go to where you saved the file (usually Downloads) and run:",
+      first: "The first run pairs and tells My Graph which conversations and folders your Mac has (names only, no messages). Nothing else is sent until you choose below.",
+      watching: "Waiting for your Mac…",
+    },
+  },
+
+  choose: {
+    title: "What your Mac may send",
+    lead: "Nothing is sent until you turn it on. You can change this any time; the helper asks before each send.",
+    noCatalog: "Run the helper once and your conversations and Notes folders appear here to choose from.",
+    catalogAt: "Your Mac listed these {ago}.",
+    save: "Save",
+    saved: "Saved. The helper uses this from its next run.",
+    messages: {
+      label: "Messages (iMessage and SMS)",
+      hint: "Texts, who wrote them and when, and the names of attachments (the files themselves stay on your Mac).",
+      cantRead: "The helper couldn't read Messages last time. Give Terminal Full Disk Access (step 3) and run it again.",
+      scope: "Which conversations",
+      chosen: "Only the conversations I choose",
+      known: "Conversations with people already in this graph",
+      knownCount: { zero: "None of your conversations match someone in this graph yet.", one: "Right now that is {count} conversation.", other: "Right now that is {count} conversations." },
+      since: "How far back",
+      since3m: "The last 3 months",
+      since1y: "The last year",
+      sinceAll: "Everything",
+      filter: "Find a conversation",
+      selected: { zero: "No conversations chosen", one: "{count} conversation chosen", other: "{count} conversations chosen" },
+      inGraph: "In this graph",
+      count: { one: "{count} message", other: "{count} messages" },
+      group: "Group",
+      none: "No conversations match.",
+    },
+    notes: {
+      label: "Notes",
+      hint: "The text of your notes, their folder and dates. Locked notes and Recently Deleted are never read.",
+      cantRead: "The helper couldn't read Notes last time. Allow Terminal to control Notes in System Settings, Privacy & Security, Automation.",
+      all: "All folders",
+      folders: "Only these folders",
+      noFolders: "Turn Notes on and run the helper once; your folders then appear here.",
+      count: { one: "{count} note", other: "{count} notes" },
+    },
+    visibility: { label: "Who can see what it brings in", hint: "Chats and notes are private to you unless you choose otherwise." },
+    resend: {
+      title: "Send again",
+      body: "Forget where the helper got to, so its next run sends everything you chose again. What is already here isn't doubled.",
+      messages: "Messages again",
+      notes: "Notes again",
+      done: "Done. The next run sends everything you chose again.",
+    },
+  },
+
+  schedule: {
+    title: "Send by itself (optional)",
+    body: "Run this once and the helper runs every hour while you're signed in to your Mac (a launchd agent, like any background app). For this, macOS needs Full Disk Access for node itself; the helper prints where it is.",
+    stop: "To stop it:",
+  },
+
+  how: {
+    title: "How it works",
+    only: "The helper only sends what you chose here. It never sends, changes or deletes anything in Messages or Notes.",
+    list: "To let you choose, it tells My Graph the names of your conversations, who is in them, and your Notes folder names. No messages or notes until you choose.",
+    key: "Pairing gives the helper its own key, kept in your Mac's Keychain. My Graph keeps only a fingerprint of it. Signing it out or disconnecting ends it at once.",
+    private: "Chats are stored as sensitive and private to you by default, so reading them never falls back to another AI provider.",
+    proposals: "People, dates and plans found in them are proposals: nothing is added to the graph until you approve it in Changes.",
+    cursor: "It remembers where it got to, on your Mac and here, so each run sends only what is new.",
+  },
+
+  errors: { generic: "That didn't go through. Try again." },
+};
+
+export default messages;

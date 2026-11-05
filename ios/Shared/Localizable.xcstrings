@@ -114,6 +114,16 @@
         }
       }
     },
+    "%@ to %@": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ til %2$@"
+          }
+        }
+      }
+    },
     "%@ unlinked it from another graph": {
       "localizations": {
         "da": {
@@ -197,6 +207,16 @@
         }
       }
     },
+    "%lld photos couldn't be read and were left out.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld billeder kunne ikke læses og blev sprunget over."
+          }
+        }
+      }
+    },
     "%lld possible duplicates to check on the web": {
       "localizations": {
         "da": {
@@ -217,6 +237,16 @@
         }
       }
     },
+    "%lld still to send": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld mangler at blive sendt"
+          }
+        }
+      }
+    },
     "%lld to review": {
       "localizations": {
         "da": {
@@ -233,6 +263,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld uploads kunne ikke læses"
+          }
+        }
+      }
+    },
+    "%lld visits": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld besøg"
+          }
+        }
+      }
+    },
+    "%lld visits, %lld not sent": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld besøg, %lld ikke sendt"
           }
         }
       }
@@ -587,6 +637,16 @@
         }
       }
     },
+    "Also send details of every photo": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send også oplysninger om alle billeder"
+          }
+        }
+      }
+    },
     "Always allow": {
       "localizations": {
         "da": {
@@ -603,6 +663,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "En import"
+          }
+        }
+      }
+    },
+    "Apple Health couldn't be opened from this build of the app. Health access may not be set up for it yet.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Sundhed kunne ikke åbnes fra denne udgave af appen. Adgang til Sundhed er måske ikke sat op endnu."
+          }
+        }
+      }
+    },
+    "Apple Health isn't available on this device.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Sundhed er ikke tilgængelig på denne enhed."
           }
         }
       }
@@ -737,6 +817,26 @@
         }
       }
     },
+    "Bring in from this iPhone": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hent ind fra denne iPhone"
+          }
+        }
+      }
+    },
+    "Bring in what's already on this iPhone. Nothing is read until you turn a source on, and you can turn it off at any time.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hent det ind, der allerede ligger på denne iPhone. Intet bliver læst, før du slår en kilde til, og du kan slå den fra når som helst."
+          }
+        }
+      }
+    },
     "Bringing back an earlier version": {
       "localizations": {
         "da": {
@@ -793,6 +893,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Pleje og sundhed"
+          }
+        }
+      }
+    },
+    "Change": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Skift"
           }
         }
       }
@@ -867,6 +977,16 @@
         }
       }
     },
+    "Choose photos to add": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vælg billeder at tilføje"
+          }
+        }
+      }
+    },
     "Close": {
       "localizations": {
         "da": {
@@ -913,6 +1033,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Forbindelser, der har brug for dig"
+          }
+        }
+      }
+    },
+    "Contacts": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontakter"
+          }
+        }
+      }
+    },
+    "Contacts from this iPhone": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontakter fra denne iPhone"
+          }
+        }
+      }
+    },
+    "Contacts, photos, places and health. You choose each one.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kontakter, billeder, steder og helbred. Du vælger hver enkelt."
           }
         }
       }
@@ -973,6 +1123,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Slet"
+          }
+        }
+      }
+    },
+    "Delete stored visits": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slet gemte besøg"
+          }
+        }
+      }
+    },
+    "Delete the visits stored on this iPhone?": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slet de besøg, der er gemt på denne iPhone?"
           }
         }
       }
@@ -1517,6 +1687,26 @@
         }
       }
     },
+    "From this iPhone": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra denne iPhone"
+          }
+        }
+      }
+    },
+    "From this iPhone…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fra denne iPhone…"
+          }
+        }
+      }
+    },
     "From web research": {
       "localizations": {
         "da": {
@@ -1637,6 +1827,26 @@
         }
       }
     },
+    "Health Records (vaccinations, conditions, medications) aren't available on this iPhone or in your country, so only the measurements are sent.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helbredsjournaler (vaccinationer, sygdomme, medicin) er ikke tilgængelige på denne iPhone eller i dit land, så kun målingerne sendes."
+          }
+        }
+      }
+    },
+    "Health from this iPhone": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Helbred fra denne iPhone"
+          }
+        }
+      }
+    },
     "Hello": {
       "localizations": {
         "da": {
@@ -1683,6 +1893,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hvordan det går"
+          }
+        }
+      }
+    },
+    "If nothing arrives, check Health → Sharing → Apps → My Graph.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvis intet kommer frem, så tjek Sundhed → Deling → Apps → My Graph."
           }
         }
       }
@@ -1763,6 +1983,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Det er første gang, du logger ind på denne iPhone, så en forælder skal lige sige god for det."
+          }
+        }
+      }
+    },
+    "Just now": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lige nu"
           }
         }
       }
@@ -1877,6 +2107,26 @@
         }
       }
     },
+    "Look up place names": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slå stednavne op"
+          }
+        }
+      }
+    },
+    "Looking up place names…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Slår stednavne op…"
+          }
+        }
+      }
+    },
     "Low": {
       "localizations": {
         "da": {
@@ -1913,6 +2163,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hukommelse"
+          }
+        }
+      }
+    },
+    "Memory, changes, documents, from this iPhone, settings and sign out": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hukommelse, ændringer, dokumenter, fra denne iPhone, indstillinger og log ud"
           }
         }
       }
@@ -1997,12 +2257,42 @@
         }
       }
     },
+    "My Graph isn't allowed to read this. You can change that in iOS Settings.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph har ikke lov til at læse dette. Det kan du ændre i iOS-indstillinger."
+          }
+        }
+      }
+    },
     "My Graph isn't answering right now. Try again in a moment.": {
       "localizations": {
         "da": {
           "stringUnit": {
             "state": "translated",
             "value": "My Graph svarer ikke lige nu. Prøv igen om lidt."
+          }
+        }
+      }
+    },
+    "My Graph sees only the contacts you shared with it.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph ser kun de kontakter, du har delt med den."
+          }
+        }
+      }
+    },
+    "My Graph sees only the photos you shared with it.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Graph ser kun de billeder, du har delt med den."
           }
         }
       }
@@ -2033,6 +2323,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Navn"
+          }
+        }
+      }
+    },
+    "Names come from Apple Maps: the visit's position is sent to Apple to find the place's name.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navnene kommer fra Apple Kort: besøgets position sendes til Apple for at finde stedets navn."
+          }
+        }
+      }
+    },
+    "Names, phone numbers, email and postal addresses, birthdays, workplaces and related names (like “mother”) from your contact cards. Later sends carry only cards that changed.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Navne, telefonnumre, mail- og postadresser, fødselsdage, arbejdspladser og relationer (som “mor”) fra dine kontaktkort. Senere sendes kun de kort, der er ændret."
           }
         }
       }
@@ -2267,6 +2577,16 @@
         }
       }
     },
+    "Nothing new since the last send.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Intet nyt siden sidst."
+          }
+        }
+      }
+    },
     "Nothing on the calendar for the next seven days.": {
       "localizations": {
         "da": {
@@ -2333,6 +2653,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Intet blev tilføjet. Prøv igen."
+          }
+        }
+      }
+    },
+    "Notices places where you stay a while (home, school, the doctor) and sends those visits when the app opens, every few hours. Needs location access set to “Always”, so visits are noticed while the app is closed. Visits wait on this iPhone until they're sent. Turning Places off deletes them.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Registrerer steder, hvor du opholder dig et stykke tid (hjemme, skolen, lægen), og sender besøgene, når appen åbnes, med nogle timers mellemrum. Kræver adgang til lokalitet sat til “Altid”, så besøg registreres, mens appen er lukket. Besøgene venter på denne iPhone, til de er sendt. Når du slår Steder fra, slettes de."
           }
         }
       }
@@ -2463,6 +2793,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Åbn My Graph for at logge ind."
+          }
+        }
+      }
+    },
+    "Open iOS Settings": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Åbn iOS-indstillinger"
           }
         }
       }
@@ -2647,6 +2987,16 @@
         }
       }
     },
+    "Pause noticing visits": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold pause med at registrere besøg"
+          }
+        }
+      }
+    },
     "Paused": {
       "localizations": {
         "da": {
@@ -2677,6 +3027,16 @@
         }
       }
     },
+    "Photo details from this iPhone": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Billedoplysninger fra denne iPhone"
+          }
+        }
+      }
+    },
     "Photo: %@": {
       "localizations": {
         "da": {
@@ -2693,6 +3053,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Billeder"
+          }
+        }
+      }
+    },
+    "Photos from this iPhone": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Billeder fra denne iPhone"
+          }
+        }
+      }
+    },
+    "Pick photos to add them to the library, with when and where they were taken. Faces and people's names are never read; the iPhone doesn't share them with apps.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vælg billeder for at føje dem til biblioteket, med hvornår og hvor de er taget. Ansigter og personers navne bliver aldrig læst; dem deler iPhone ikke med apps."
           }
         }
       }
@@ -2727,6 +3107,26 @@
         }
       }
     },
+    "Places": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steder"
+          }
+        }
+      }
+    },
+    "Places from this iPhone": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steder fra denne iPhone"
+          }
+        }
+      }
+    },
     "Please sign in again.": {
       "localizations": {
         "da": {
@@ -2753,6 +3153,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Præferencer"
+          }
+        }
+      }
+    },
+    "Preparing %lld photos…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gør %lld billeder klar…"
           }
         }
       }
@@ -2863,6 +3273,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Læser %@…"
+          }
+        }
+      }
+    },
+    "Reading Apple Health…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Læser Apple Sundhed…"
+          }
+        }
+      }
+    },
+    "Reading your contacts…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Læser dine kontakter…"
+          }
+        }
+      }
+    },
+    "Reading your photo library…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Læser dit fotobibliotek…"
           }
         }
       }
@@ -2983,6 +3423,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Se det under Ændringer"
+          }
+        }
+      }
+    },
+    "Review what it found": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gennemse hvad den fandt"
           }
         }
       }
@@ -3157,6 +3607,26 @@
         }
       }
     },
+    "Send now": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send nu"
+          }
+        }
+      }
+    },
+    "Send photo details now": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send billedoplysninger nu"
+          }
+        }
+      }
+    },
     "Send to My Graph": {
       "localizations": {
         "da": {
@@ -3167,12 +3637,62 @@
         }
       }
     },
+    "Sending %lld contacts…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender %lld kontakter…"
+          }
+        }
+      }
+    },
     "Sending %lld files…": {
       "localizations": {
         "da": {
           "stringUnit": {
             "state": "translated",
             "value": "Sender %lld filer…"
+          }
+        }
+      }
+    },
+    "Sending %lld health records…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender %lld helbredsoplysninger…"
+          }
+        }
+      }
+    },
+    "Sending the details of %lld photos…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender oplysninger om %lld billeder…"
+          }
+        }
+      }
+    },
+    "Sending their details…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender deres oplysninger…"
+          }
+        }
+      }
+    },
+    "Sending visits…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sender besøg…"
           }
         }
       }
@@ -3193,6 +3713,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Sender…"
+          }
+        }
+      }
+    },
+    "Sent %lld contacts": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendte %lld kontakter"
+          }
+        }
+      }
+    },
+    "Sent %lld health records": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendte %lld helbredsoplysninger"
+          }
+        }
+      }
+    },
+    "Sent %lld photos": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendte %lld billeder"
+          }
+        }
+      }
+    },
+    "Sent %lld visits": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendte %lld besøg"
+          }
+        }
+      }
+    },
+    "Sent as much as the server takes for now. The rest goes in a few minutes.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendt så meget, som serveren tager imod lige nu. Resten sendes om et par minutter."
           }
         }
       }
@@ -3557,6 +4127,16 @@
         }
       }
     },
+    "Stored on this iPhone": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemt på denne iPhone"
+          }
+        }
+      }
+    },
     "Struggling": {
       "localizations": {
         "da": {
@@ -3817,6 +4397,16 @@
         }
       }
     },
+    "This server can't take imports from the iPhone yet. Update My Graph on the server and try again.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denne server kan endnu ikke tage imod data fra iPhone. Opdatér My Graph på serveren, og prøv igen."
+          }
+        }
+      }
+    },
     "This week": {
       "localizations": {
         "da": {
@@ -4047,6 +4637,26 @@
         }
       }
     },
+    "Uploading %lld photos…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uploader %lld billeder…"
+          }
+        }
+      }
+    },
+    "Uploading photos (%lld of %lld)…": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uploader billeder (%1$lld af %2$lld)…"
+          }
+        }
+      }
+    },
     "Uploading “%@”…": {
       "localizations": {
         "da": {
@@ -4083,6 +4693,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version"
+          }
+        }
+      }
+    },
+    "Visits already sent stay in My Graph; you can remove them there.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besøg, der allerede er sendt, bliver i My Graph; dér kan du fjerne dem."
+          }
+        }
+      }
+    },
+    "Visits are noticed only with location access set to “Always”.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besøg registreres kun, når adgang til lokalitet står til “Altid”."
+          }
+        }
+      }
+    },
+    "Visits go to %@. Switch to it to send them.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Besøg sendes til %@. Skift til den for at sende dem."
           }
         }
       }
@@ -4157,6 +4797,16 @@
         }
       }
     },
+    "What arrives is proposed to you as changes. Nothing is added to %@ until you review and deliver it.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Det, der kommer ind, bliver foreslået dig som ændringer. Intet føjes til %@, før du har gennemset og godkendt det."
+          }
+        }
+      }
+    },
     "What changed": {
       "localizations": {
         "da": {
@@ -4203,6 +4853,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hvad sker der i denne uge?"
+          }
+        }
+      }
+    },
+    "When and where each photo was taken, its albums and whether it's a favourite. Only these details, not the images. Needs access to your photo library.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hvornår og hvor hvert billede er taget, dets album, og om det er en favorit. Kun disse oplysninger, ikke selve billederne. Kræver adgang til dit fotobibliotek."
           }
         }
       }
@@ -4507,6 +5167,16 @@
         }
       }
     },
+    "Your latest height, weight and resting heart rate, and where Health Records are available: vaccinations, conditions, medications, allergies, lab results and procedures. Always private: only you can see them. You choose each kind in Apple Health's own screen.": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Din seneste højde, vægt og hvilepuls, og hvor helbredsjournaler findes: vaccinationer, sygdomme, medicin, allergier, prøvesvar og behandlinger. Altid privat: kun du kan se dem. Du vælger hver slags i Apple Sundheds eget vindue."
+          }
+        }
+      }
+    },
     "Your saved conversations": {
       "localizations": {
         "da": {
@@ -4590,6 +5260,16 @@
         }
       }
     },
+    "related": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "relation"
+          }
+        }
+      }
+    },
     "sensitivity": {
       "localizations": {
         "da": {
@@ -4626,6 +5306,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "slutdatoen"
+          }
+        }
+      }
+    },
+    "the graph you turned Places on in": {
+      "localizations": {
+        "da": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "den graf, du slog Steder til i"
           }
         }
       }

@@ -21,7 +21,7 @@ export const contactsPayload = z.object({
     emails: z.array(labelled).max(20).default([]),
     phones: z.array(labelled).max(20).default([]),
     /** "YYYY-MM-DD", or "--MM-DD" when the year isn't known. */
-    birthday: z.string().regex(/^(\d{4}|--)-\d{2}-\d{2}$/).optional(),
+    birthday: z.string().regex(/^(\d{4}-|--)\d{2}-\d{2}$/).optional(),
     addresses: z.array(z.object({
       label: text(60).optional(), street: text(200).optional(), city: text(100).optional(), postalCode: text(20).optional(), country: text(100).optional(),
     })).max(10).default([]),

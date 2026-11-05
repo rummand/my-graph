@@ -42,6 +42,8 @@ export type ImportContext = {
   mint(): string;
   /** The reader's language, for the few words an importer writes itself (summaries). Stored labels stay as found. */
   locale: "en" | "da";
+  /** The importing person's own person node in this graph (Viewer.personNodeId), for imports about themself (health). */
+  selfNodeId?: string | null;
 };
 
 export type ImportPlan = {
@@ -80,6 +82,8 @@ export type Importer = {
   json?: z.ZodType;
   /** Health, chats and the like: the source is stored as sensitive (never leaves for a model without no-fallback). */
   sensitive?: boolean;
+  /** Health: the source is always kept private to the person who sent it, whatever visibility was asked for. */
+  privateOnly?: boolean;
   /** Only in these graph kinds (empty = everywhere). */
   graphKinds?: string[];
   read(input: ImportInput, ctx: ImportContext): Promise<ImportPlan> | ImportPlan;

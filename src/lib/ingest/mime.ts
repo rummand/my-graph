@@ -26,11 +26,11 @@ export type DetectResult =
   | { ok: false; reason: string };
 
 /** Plain-English list of what the library accepts, for error messages and the upload zone. */
-export const ACCEPTED_DESCRIPTION = "PDF, Word (.docx), PowerPoint (.pptx), spreadsheets (.xlsx, .xls, .ods, .csv), text (.txt, .md), email (.eml, a mailbox .mbox, or a .zip of .eml files), photos (JPG, PNG, HEIC, WebP) and audio (MP3, M4A, WAV, OGG, WebM)";
+export const ACCEPTED_DESCRIPTION = "PDF, Word (.docx), PowerPoint (.pptx), spreadsheets (.xlsx, .xls, .ods, .csv), text (.txt, .md), email (.eml, a mailbox .mbox, or a .zip of .eml files), photos (JPG, PNG, HEIC, WebP), audio (MP3, M4A, WAV, OGG, WebM), and exports: family trees (.ged), contacts (.vcf), location history (Google Takeout .json or .zip), WhatsApp chats (.txt or .zip), Messenger and Instagram chats (.json or the .zip), Obsidian vaults and Notion exports (.zip)";
 
 /** The `accept` attribute for the file picker. */
 export const ACCEPT_ATTR = [
-  ".pdf", ".docx", ".pptx", ".xlsx", ".xlsm", ".xls", ".ods", ".txt", ".md", ".markdown", ".csv", ".eml", ".mbox", ".zip",
+  ".pdf", ".docx", ".pptx", ".xlsx", ".xlsm", ".xls", ".ods", ".txt", ".md", ".markdown", ".csv", ".eml", ".mbox", ".zip", ".json", ".ged", ".vcf",
   ".jpg", ".jpeg", ".png", ".heic", ".heif", ".webp",
   ".mp3", ".m4a", ".wav", ".ogg", ".oga", ".opus", ".webm",
   "application/pdf", "image/*", "audio/*", "text/plain", "text/markdown", "text/csv", "message/rfc822", "application/mbox", "application/zip",

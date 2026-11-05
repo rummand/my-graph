@@ -13,11 +13,12 @@ import { ConnectionError } from "../store";
 import { bodyOf, type Api } from "./client";
 import { apiBase } from "./providers";
 import { apiFor } from "./session";
+import { listSlackChannels } from "../slack";
 
 export type Option = { id: string; name: string; path?: string; hasChildren?: boolean; hint?: string };
-export type OptionKind = "labels" | "calendars" | "mailFolders" | "driveFolders" | "dropboxFolders";
+export type OptionKind = "labels" | "calendars" | "mailFolders" | "driveFolders" | "dropboxFolders" | "slackChannels";
 
-const FOR: Record<OptionKind, string> = { labels: "gmail", calendars: "google_calendar", mailFolders: "microsoft", driveFolders: "microsoft", dropboxFolders: "dropbox" };
+const FOR: Record<OptionKind, string> = { labels: "gmail", calendars: "google_calendar", mailFolders: "microsoft", driveFolders: "microsoft", dropboxFolders: "dropbox", slackChannels: "slack" };
 
 /** Gmail's system labels, in plain words (the rest keep the name the person gave them). */
 const SYSTEM_LABELS: Record<string, string> = { INBOX: "Inbox", SENT: "Sent", IMPORTANT: "Important", STARRED: "Starred", CATEGORY_PERSONAL: "Primary", CATEGORY_UPDATES: "Updates", CATEGORY_FORUMS: "Forums", CATEGORY_PROMOTIONS: "Promotions", CATEGORY_SOCIAL: "Social" };
@@ -30,6 +31,8 @@ export async function listOptions(v: Viewer, id: string, what: OptionKind, paren
   try { secrets = decryptSecrets(row.secrets, row.id); } catch { throw new ConnectionError(400, "Sign in again first.", "signInAgain"); }
   const api = apiFor(row, secrets);
   try {
+    // Slack: the channels (and, with the opt-in, direct messages) this sign-in can read.
+    if (what === "slackChannels") return await listSlackChannels(api, row.config?.directMessages === true);
     return await load(api, what, parent);
   } catch (e) {
     if (e instanceof ConnectorError) throw new ConnectionError(e.kind === "needs_you" ? 400 : 503, e.message, e.code);

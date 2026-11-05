@@ -46,14 +46,27 @@ describe("manifests", () => {
   });
 
   it("offers Aula only in a family graph, as unofficial, and plugins only to the platform admin", () => {
-    const PROVIDERS = ["gmail", "google_calendar", "google_drive", "microsoft", "dropbox"];
-    expect(offeredIn("family").map((c) => c.manifest.id)).toEqual(["aula_calendar", "aula", "record", "imap", ...PROVIDERS, "ics", "mcp"]);
-    expect(offeredIn("work").map((c) => c.manifest.id)).toEqual(["record", "imap", ...PROVIDERS, "ics", "mcp"]);
-    expect(offeredIn("work", true).map((c) => c.manifest.id)).toEqual(["record", "imap", ...PROVIDERS, "ics", "mcp", "plugin"]);
+    const ids = (kind: string, admin = false) => offeredIn(kind, admin).map((c) => c.manifest.id);
+    for (const kind of ["family", "personal", "work", "shared"]) {
+      expect(ids(kind)).not.toContain("plugin");
+      expect(ids(kind, true)).toContain("plugin");
+      expect(ids(kind)).toEqual(expect.arrayContaining(["record", "imap", "ics", "mcp", "gmail", "microsoft", "dropbox"]));
+    }
+    expect(ids("family")).toEqual(expect.arrayContaining(["aula_calendar", "aula"]));
+    for (const kind of ["personal", "work", "shared", "practice"]) expect(ids(kind)).not.toContain("aula");
+    // Every connector in a graph kind's list is offered there by its own manifest.
+    for (const c of offeredIn("work")) expect(!c.manifest.graphKinds?.length || c.manifest.graphKinds.includes("work")).toBe(true);
     const aula = connectorInfo(connectorById("aula")!);
     expect(aula.status).toBe("unofficial");
     expect(aula.authType).toBe("mitid_session");
+    expect(aula.region).toBe("dk");
     expect(typeof connectorById("aula")!.sync).toBe("function");
+  });
+
+  it("keeps Danish-only connectors in the Denmark group, and only them", () => {
+    for (const c of offeredIn("family", true)) {
+      if (c.manifest.region === "dk") expect(["aula", "aula_calendar", "holdsport", "minuddannelse", "digital_post", "sundhed"]).toContain(c.manifest.id);
+    }
   });
 
   it("validates config and secrets with the manifest's schemas", () => {

@@ -13,17 +13,20 @@ import { api } from "./bits";
 
 type Mode = "oauth" | "key" | "none";
 
-export function McpConnectForm({ info, family, existing, onDone, onCancel }: {
-  info: ConnectorInfo; family: boolean; existing?: ConnectionDTO; onDone: (c: ConnectionDTO) => void; onCancel?: () => void;
+/** A prefilled connection from the Apps directory: its address, sign-in, name, and what to say above the form. */
+export type McpPreset = { serverUrl: string; authMode: Mode; label: string; directoryId: string; help?: string; keyHint?: string; urlPlaceholder?: string };
+
+export function McpConnectForm({ info, family, existing, preset, onDone, onCancel }: {
+  info: ConnectorInfo; family: boolean; existing?: ConnectionDTO; preset?: McpPreset; onDone: (c: ConnectionDTO) => void; onCancel?: () => void;
 }) {
   const t = useT();
   const record = info.id === "record";
   const cfg = existing?.config ?? {};
-  const [serverUrl, setServerUrl] = useState(typeof cfg.serverUrl === "string" ? cfg.serverUrl : record ? RECORD_MCP_URL : "");
-  const [mode, setMode] = useState<Mode>((cfg.authMode as Mode) ?? (record ? "oauth" : "oauth"));
+  const [serverUrl, setServerUrl] = useState(typeof cfg.serverUrl === "string" ? cfg.serverUrl : record ? RECORD_MCP_URL : preset?.serverUrl ?? "");
+  const [mode, setMode] = useState<Mode>((cfg.authMode as Mode) ?? preset?.authMode ?? "oauth");
   const [apiKey, setApiKey] = useState("");
   const [visibility, setVisibility] = useState(typeof cfg.visibility === "string" ? cfg.visibility : "private");
-  const [label, setLabel] = useState(existing?.label ?? "");
+  const [label, setLabel] = useState(existing?.label ?? preset?.label ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -39,7 +42,7 @@ export function McpConnectForm({ info, family, existing, onDone, onCancel }: {
         method: "POST",
         json: existing
           ? { connectionId: existing.id, config: { serverUrl, visibility } }
-          : { connector: info.id, label: label.trim() || undefined, config: { serverUrl, visibility } },
+          : { connector: info.id, label: label.trim() || undefined, config: { serverUrl, visibility, ...(preset ? { directoryId: preset.directoryId } : {}) } },
       });
       window.location.assign(r.authorizeUrl);
     } catch (e) {
@@ -52,7 +55,7 @@ export function McpConnectForm({ info, family, existing, onDone, onCancel }: {
     e.preventDefault();
     if (mode === "oauth") return void signIn();
     setBusy(true); setError(null); setSaved(false);
-    const config = { serverUrl: serverUrl.trim(), authMode: mode, visibility };
+    const config = { serverUrl: serverUrl.trim(), authMode: mode, visibility, ...(preset && !existing ? { directoryId: preset.directoryId } : {}) };
     const secrets = mode === "key" && apiKey.trim() ? { apiKey: apiKey.trim() } : {};
     try {
       const res = existing
@@ -70,11 +73,11 @@ export function McpConnectForm({ info, family, existing, onDone, onCancel }: {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      {!existing && <p className="max-w-[65ch] text-sm text-muted">{t(`connections.connectors.${info.id}.help`)}</p>}
+      {!existing && <p className="max-w-[65ch] text-sm text-muted">{preset?.help ?? t(`connections.connectors.${info.id}.help`)}</p>}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label={t("mcp.auth.serverUrl")} hint={t("mcp.auth.serverUrlHint")} className="sm:col-span-2">
           <Input id={id("url")} value={serverUrl} onChange={(e) => { setServerUrl(e.target.value); setSaved(false); }} inputMode="url" spellCheck={false}
-            autoComplete="off" placeholder={record ? RECORD_MCP_URL : "https://…/mcp"} required disabled={busy} />
+            autoComplete="off" placeholder={record ? RECORD_MCP_URL : preset?.urlPlaceholder ?? "https://…/mcp"} required disabled={busy} />
         </Field>
         <fieldset className="sm:col-span-2">
           <legend className="mb-1.5 text-sm font-medium">{t("mcp.auth.label")}</legend>
@@ -84,7 +87,7 @@ export function McpConnectForm({ info, family, existing, onDone, onCancel }: {
                 <input type="radio" name={id("mode")} value={m} checked={mode === m} onChange={() => { setMode(m); setSaved(false); }} className="mt-1 accent-[var(--accent)]" disabled={busy} />
                 <span>
                   <span className="block text-[15px]">{t(`mcp.auth.${m}`)}</span>
-                  {m !== "none" && <span className="block text-sm text-muted">{t(`mcp.auth.${m}Hint`)}</span>}
+                  {m !== "none" && <span className="block text-sm text-muted">{m === "key" && preset?.keyHint ? preset.keyHint : t(`mcp.auth.${m}Hint`)}</span>}
                 </span>
               </label>
             ))}

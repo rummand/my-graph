@@ -49,7 +49,9 @@ export type FileItem = {
   /** What changes when the file changes (md5, cTag, rev): an unchanged version is never read again. */
   version: string;
   path?: string | null;
-  provider: "google_drive" | "onedrive" | "dropbox";
+  provider: "google_drive" | "google_photos" | "onedrive" | "dropbox";
+  /** Extra facts the provider knows about the item, kept in the source's meta (Google Photos: takenAt, width …). */
+  extraMeta?: Record<string, unknown>;
 };
 
 export type EventItem = IcsEvent & { providerId: string };
@@ -162,6 +164,7 @@ async function storeFile(ctx: RunContext, stream: string, item: FileItem, visibi
   const meta = {
     originalName: item.name, kind: type.kind, provider: item.provider, version: item.version, path: item.path ?? null,
     modifiedAt: item.modifiedAt?.toISOString() ?? null, connector: ctx.connection.connector,
+    ...(item.extraMeta ?? {}),
   };
   let id: string;
   const cursor = ctx.state().streams?.[stream]?.cursor ?? null;

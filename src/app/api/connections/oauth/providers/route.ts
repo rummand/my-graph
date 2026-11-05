@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  * and the exact redirect address to register in each provider's console.
  */
 export const GET = route(async (req) => {
-  const ids: ProviderId[] = ["google", "microsoft", "dropbox"];
+  const ids: ProviderId[] = ["google", "microsoft", "dropbox", "github", "linear", "slack", "notion"];
   const providers = Object.fromEntries(ids.map((id) => {
     const p = providerInfo(id);
     return [id, { configured: p.missing.length === 0, missing: p.missing, settings: p.envNames }];

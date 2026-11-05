@@ -36,8 +36,20 @@ export function ConnectorIcon({ icon, className }: { icon: ConnectorInfo["icon"]
 export function iconFor(connector: string): ConnectorInfo["icon"] {
   if (connector === "record") return "mic";
   if (connector === "mcp") return "plug";
+  if (connector === "spond" || connector === "holdsport") return "trophy";
   if (connector === "gmail" || connector === "microsoft") return "mail";
   if (connector === "google_drive" || connector === "dropbox") return "folder";
+  if (connector === "google_photos") return "photo";
+  if (connector === "google_contacts" || connector === "carddav") return "contacts";
+  if (connector === "digital_post") return "letter";
+  if (connector === "sundhed") return "health";
+  if (connector === "minuddannelse") return "school";
+  if (connector === "famly") return "baby";
+  if (connector === "mac") return "chat";
+  if (connector === "slack") return "work";
+  if (connector === "notion") return "note";
+  if (connector === "home_assistant") return "home";
+  if (["github", "github_oauth", "linear", "linear_oauth", "jira"].includes(connector)) return "work";
   return connector === "imap" ? "mail" : connector === "aula_calendar" || connector === "aula" ? "school" : "calendar";
 }
 

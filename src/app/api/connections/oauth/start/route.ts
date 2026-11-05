@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 
 const body = z.object({
   connectionId: z.uuid().optional(),
-  connector: z.enum(["gmail", "google_calendar", "google_drive", "microsoft", "dropbox"]).optional(),
+  connector: z.enum(["gmail", "google_calendar", "google_drive", "google_contacts", "microsoft", "dropbox", "slack", "notion"]).optional(),
   label: z.string().max(120).optional(),
   autoLabel: z.boolean().optional(),
   config: z.record(z.string().max(40), z.unknown()).optional(),

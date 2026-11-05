@@ -22,7 +22,7 @@ export const dbSecretStore: SecretStore = {
   },
 };
 
-export const WHO: Record<ProviderId, string> = { google: "Google", microsoft: "Microsoft", dropbox: "Dropbox" };
+export const WHO: Record<ProviderId, string> = { google: "Google", microsoft: "Microsoft", dropbox: "Dropbox", slack: "Slack", notion: "Notion", github: "GitHub", linear: "Linear" };
 
 /** An authorised API for one connection. `secrets` is the decrypted map; refreshed tokens are merged into it. */
 export function apiFor(conn: { id: string; connector: string }, secrets: Record<string, string>, opts: { signal?: AbortSignal; throttle?: () => Promise<void>; transport?: Transport; store?: SecretStore } = {}): Api {

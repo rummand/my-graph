@@ -57,10 +57,20 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo of a letter or note to add it to your library.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Send your contacts (names, numbers, addresses, birthdays and related names) to My Graph, where you review what it finds before anything is added.</string>
+	<key>NSHealthClinicalHealthRecordsShareUsageDescription</key>
+	<string>Send the health records you choose (vaccinations, conditions, medications, allergies and lab results) to My Graph, where only you can see them.</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Send the health information you choose (like height, weight and vaccinations) to My Graph, where only you can see it.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Notice places where you stay a while, also while My Graph is closed, so they can be added to your graph after you review them. Turn it off at any time under From this iPhone.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Notice the places you visit, only if you turn on Places under From this iPhone.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Speak your question in Ask instead of typing it.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Choose photos to add to your library.</string>
+	<string>Send the details of your photos (when and where they were taken, albums, favourites) to My Graph, only if you turn this on under From this iPhone.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Turn what you say in Ask into text. When the iPhone can, this happens on the iPhone itself.</string>
 	<key>UIApplicationSceneManifest</key>

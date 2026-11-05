@@ -34,6 +34,8 @@ export const mcpConfig = z.object({
   catalogAt: z.string().max(40).optional(),
   /** Record: only meetings on or after this day the first time. */
   since: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  /** Connected from the Apps directory: the entry's id (see ./directory). Only a label; it grants nothing. */
+  directoryId: z.string().regex(/^[a-z0-9-]{1,40}$/).optional(),
 });
 export type McpConfig = z.infer<typeof mcpConfig>;
 

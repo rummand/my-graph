@@ -11,6 +11,7 @@ import { api, ConnectorIcon, CountsLine, StatusDot, useStatusText, type Person }
 import { ConnectForm } from "./connect-form";
 import { McpConnectForm } from "./mcp-form";
 import { McpTools } from "./mcp-tools";
+import { appById } from "@/lib/connectors/mcp/directory";
 import { isOAuthConnector, SignInAgain } from "./oauth-connect";
 import { OAuthSettings } from "./oauth-settings";
 
@@ -106,7 +107,7 @@ export function ConnectionDetail({ initial, runs: initialRuns, info, people, fam
         )}
       </div>
 
-      {mcp && <McpTools connectionId={c.id} refreshKey={c.lastRunAt} />}
+      {mcp && <McpTools connectionId={c.id} refreshKey={c.lastRunAt} app={appById(c.config.directoryId)} />}
 
       <Section title={t("connections.detail.runsTitle")}>
         {runs.length === 0 ? <p className="text-sm text-muted">{t("connections.detail.noRuns")}</p> : (

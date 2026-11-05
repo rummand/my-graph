@@ -11,6 +11,7 @@ const body = z.object({
   config: z.object({
     serverUrl: z.string().trim().min(8).max(2000).optional(),
     visibility: z.enum(["private", "parents", "household"]).optional(),
+    directoryId: z.string().regex(/^[a-z0-9-]{1,40}$/).optional(),
   }).optional(),
   everyMinutes: z.number().int().min(15).max(10080).optional(),
 }).refine((b) => !!b.connectionId || !!b.connector, "Say which connection to sign in for.");

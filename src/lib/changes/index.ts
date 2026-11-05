@@ -21,7 +21,7 @@ export { readerT } from "./store";
 export type { OpVerdict, ReasonCode, ReasonDetails, ReasonGroup, RemapEntry, Resolution, SetSummary, Verdict } from "./rebase";
 
 export type ChangeOp =
-  | { op: "addNode"; nodeId?: string; type: string; kind?: string | null; label: string; summary?: string; props?: Record<string, unknown>; aliases?: string[]; startAt?: string | null; endAt?: string | null; visibility?: "private" | "parents" | "household" }
+  | { op: "addNode"; nodeId?: string; type: string; kind?: string | null; label: string; summary?: string; props?: Record<string, unknown>; aliases?: string[]; startAt?: string | null; endAt?: string | null; visibility?: "private" | "parents" | "household"; sensitive?: boolean }
   | { op: "updateNode"; nodeId: string; set: Record<string, unknown> }
   | { op: "retireNode"; nodeId: string }
   | { op: "mergeNodes"; keepId: string; dropId: string }

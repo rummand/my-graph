@@ -11,10 +11,10 @@ import { useT } from "@/lib/i18n/client";
 import type { ConnectionDTO, ConnectorInfo } from "@/lib/connectors";
 import { api, type Person } from "./bits";
 
-export type ProviderId = "google" | "microsoft" | "dropbox";
-export const OAUTH_CONNECTORS: Record<string, ProviderId> = { gmail: "google", google_calendar: "google", google_drive: "google", microsoft: "microsoft", dropbox: "dropbox" };
+export type ProviderId = "google" | "microsoft" | "dropbox" | "github" | "linear" | "slack" | "notion";
+export const OAUTH_CONNECTORS: Record<string, ProviderId> = { gmail: "google", google_calendar: "google", google_drive: "google", google_contacts: "google", google_photos: "google", microsoft: "microsoft", dropbox: "dropbox", github_oauth: "github", linear_oauth: "linear", slack: "slack", notion: "notion" };
 export const isOAuthConnector = (id: string) => Object.prototype.hasOwnProperty.call(OAUTH_CONNECTORS, id);
-const PROVIDER_NAME: Record<ProviderId, string> = { google: "Google", microsoft: "Microsoft", dropbox: "Dropbox" };
+const PROVIDER_NAME: Record<ProviderId, string> = { google: "Google", microsoft: "Microsoft", dropbox: "Dropbox", github: "GitHub", linear: "Linear", slack: "Slack", notion: "Notion" };
 
 export type ProvidersInfo = {
   providers: Record<ProviderId, { configured: boolean; missing: string[]; settings: string[] }>;
@@ -54,6 +54,7 @@ export function OAuthConnectForm({ info, people, family, onCancel }: {
   const [person, setPerson] = useState("");
   const [mail, setMail] = useState(true);
   const [calendar, setCalendar] = useState(true);
+  const [directMessages, setDirectMessages] = useState(false);
   const [label, setLabel] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +84,7 @@ export function OAuthConnectForm({ info, people, family, onCancel }: {
     if (info.id === "gmail" || info.id === "microsoft") config.since = since;
     if ((info.id === "google_calendar" || info.id === "microsoft") && person) config.personNodeId = person;
     if (info.id === "microsoft") Object.assign(config, { mail, calendar });
+    if (info.id === "slack") config.directMessages = directMessages;
     try {
       // A new connection without a name gets one in the reader's language; the account is added after the sign-in.
       await startSignIn({ connector: info.id, label: label.trim() || t(`connections.connectors.${info.id}.title`), autoLabel: !label.trim(), config });
@@ -101,6 +103,12 @@ export function OAuthConnectForm({ info, people, family, onCancel }: {
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={mail} onChange={(e) => setMail(e.target.checked)} disabled={busy} />{t("providers.settings.mailOn")}</label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={calendar} onChange={(e) => setCalendar(e.target.checked)} disabled={busy} />{t("providers.settings.calendarOn")}</label>
           </fieldset>
+        )}
+        {info.id === "slack" && (
+          <label className="flex items-start gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" className="mt-1" checked={directMessages} onChange={(e) => setDirectMessages(e.target.checked)} disabled={busy} />
+            <span>{t("providers.settings.slackDms")}<span className="block text-muted">{t("providers.settings.slackDmsHint")}</span></span>
+          </label>
         )}
         {(info.id === "gmail" || (info.id === "microsoft" && mail)) && (
           <Field label={t("connections.fields.since.label")} hint={t("connections.fields.since.hint")}>
@@ -144,7 +152,7 @@ function UnverifiedNote() {
   );
 }
 
-const STEPS: Record<ProviderId, number> = { google: 8, microsoft: 7, dropbox: 5 };
+const STEPS: Record<ProviderId, number> = { google: 8, microsoft: 7, dropbox: 5, github: 7, linear: 5, slack: 6, notion: 6 };
 
 /** The step-by-step guide for whoever runs My Graph: register the household's own app, then set the server settings. */
 export function SetupGuide({ provider, setup, startOpen = false }: { provider: ProviderId; setup: ProvidersInfo; startOpen?: boolean }) {

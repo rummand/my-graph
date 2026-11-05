@@ -6,6 +6,8 @@
  *               refresh token ends every access token made from it; Google also drops the app from the account.
  *   Dropbox     POST https://api.dropboxapi.com/2/auth/token/revoke with the access token as Bearer. It ends that
  *               token and its refresh token. An expired access token is refreshed once first, then revoked.
+ *   Slack       POST https://slack.com/api/auth.revoke with the user token as Bearer.
+ *   Notion      has no revoke endpoint for a public integration: the token is deleted and the person told where to finish.
  *   Microsoft   has no endpoint for an app to hand back one sign-in (revokeSignInSessions would sign the person out
  *               everywhere). My Graph deletes its tokens and tells the person where to remove the app's consent.
  *   MCP servers that advertise a revocation_endpoint (RFC 7009 / RFC 8414 metadata): the refresh token, then the access
@@ -52,6 +54,8 @@ export const MANAGE_URLS = {
   microsoftPersonal: "https://account.live.com/consent/Manage",
   microsoftWork: "https://myapps.microsoft.com",
   dropbox: "https://www.dropbox.com/account/connected_apps",
+  slack: "https://slack.com/apps/manage",
+  notion: "https://www.notion.so/profile/integrations",
 } as const;
 
 const NONE: Revocation = { status: "none", provider: null, code: "none", params: {}, message: "There was no sign-in to hand back." };
@@ -121,6 +125,31 @@ async function revokeDropbox(p: ProviderInfo, secrets: Record<string, string>, t
   }
 }
 
+/** Slack: auth.revoke with the user token as Bearer (answers 200 + ok, or ok:false when it is already gone). */
+async function revokeSlack(p: ProviderInfo, secrets: Record<string, string>, transport: Transport): Promise<Revocation> {
+  const t = readTokens(secrets);
+  if (!t?.accessToken || !p.revokeUrl) return NONE;
+  const all = [t.refreshToken, t.accessToken].filter((x): x is string => !!x);
+  try {
+    const res = await post(transport, p.revokeUrl, null, { authorization: `Bearer ${t.accessToken}` });
+    const body = res.body.toString("utf8");
+    if (res.status === 200 && (/"ok"\s*:\s*true/.test(body) || /invalid_auth|token_revoked|token_expired|account_inactive/.test(body))) return ok("Slack");
+    return failed("Slack", says(res), MANAGE_URLS.slack, all);
+  } catch (e) {
+    return failed("Slack", e instanceof Error ? e.message : String(e), MANAGE_URLS.slack, all);
+  }
+}
+
+/** Notion has no endpoint for handing back an integration's token: it is deleted here, and the person told where to remove it. */
+function dropNotion(secrets: Record<string, string>): Revocation {
+  const t = readTokens(secrets);
+  if (!t?.accessToken && !t?.refreshToken) return NONE;
+  return {
+    status: "dropped", provider: "Notion", code: "noEndpoint", params: { provider: "Notion" }, manageUrl: MANAGE_URLS.notion,
+    message: `Notion has no way to hand access back, so My Graph deleted its sign-in. To end it at Notion too, open Settings, Connections in Notion and disconnect My Graph.`,
+  };
+}
+
 function dropMicrosoft(secrets: Record<string, string>): Revocation {
   const t = readTokens(secrets);
   if (!t?.accessToken && !t?.refreshToken) return NONE;
@@ -171,6 +200,8 @@ export async function revokeConnection(
   if (provider === "google") return revokeGoogle(providerInfo("google", env), secrets, transport);
   if (provider === "dropbox") return revokeDropbox(providerInfo("dropbox", env), secrets, transport, now);
   if (provider === "microsoft") return dropMicrosoft(secrets);
+  if (provider === "slack") return revokeSlack(providerInfo("slack", env), secrets, transport);
+  if (provider === "notion") return dropNotion(secrets);
   if (MCP_CONNECTORS.has(row.connector) && (row.config?.authMode ?? "key") === "oauth") {
     const name = typeof row.config?.serverName === "string" && row.config.serverName ? row.config.serverName : row.label;
     return revokeMcp(name, secrets, transport);

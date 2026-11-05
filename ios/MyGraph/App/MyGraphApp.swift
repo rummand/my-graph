@@ -28,6 +28,7 @@ struct MyGraphApp: App {
                 await PushRegistration.registerIfAllowed()
                 await ReminderNotifications.refresh()
                 BackgroundRefresh.schedule()
+                await PlacesSync.sendIfDue(currentGraphId: app.currentGraphId, graphName: app.currentGraph?.name)
             }
         }
         .backgroundTask(.appRefresh(BackgroundRefresh.identifier)) {

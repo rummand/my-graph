@@ -13,7 +13,7 @@ import { needsYou, willRetry } from "../errors";
 
 export type ApiRequest = {
   url: string;
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "DELETE";
   headers?: Record<string, string>;
   body?: string;
   maxBytes?: number;

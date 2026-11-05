@@ -9,6 +9,7 @@ import type { ConnectionDTO, ConnectorInfo } from "@/lib/connectors";
 import { api, ConnectorIcon, CountsLine, iconFor, StatusBadge, StatusDot, useStatusText, type Person } from "./bits";
 import { ConnectForm } from "./connect-form";
 import { McpConnectForm } from "./mcp-form";
+import { AppsDirectory } from "./apps-directory";
 import { isOAuthConnector, OAuthConnectForm } from "./oauth-connect";
 
 const MCP = new Set(["mcp", "record"]);
@@ -17,8 +18,8 @@ import { DisconnectDialog } from "./disconnect-dialog";
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 /** /connections: my connections in this graph with their status and actions, then the gallery to add one. */
-export function ConnectionsApp({ initial, connectors, people, family, graphName }: {
-  initial: ConnectionDTO[]; connectors: ConnectorInfo[]; people: Person[]; family: boolean; graphName: string;
+export function ConnectionsApp({ initial, connectors, people, family, graphName, graphKind }: {
+  initial: ConnectionDTO[]; connectors: ConnectorInfo[]; people: Person[]; family: boolean; graphName: string; graphKind?: string;
 }) {
   const t = useT();
   const [list, setList] = useState(initial);
@@ -26,6 +27,7 @@ export function ConnectionsApp({ initial, connectors, people, family, graphName 
   const [leaving, setLeaving] = useState<ConnectionDTO | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const galleryRef = useRef<HTMLDivElement>(null);
+  const mcpInfo = connectors.find((c) => c.id === "mcp" && c.status !== "coming_soon");
   // A country's own services (Aula, Digital Post …) under their own heading, the rest after them.
   const danish = connectors.filter((c) => c.region === "dk");
   const groups = [
@@ -106,6 +108,12 @@ export function ConnectionsApp({ initial, connectors, people, family, graphName 
         </Section>
       </div>
 
+      {/* Apps: vendors' own MCP servers, as presets for the MCP connection (only where MCP is offered). */}
+      {mcpInfo && (
+        <AppsDirectory mcp={mcpInfo} family={family} graphKind={graphKind} connections={list}
+          onDone={(c) => { patch(c); setNotice(null); window.scrollTo({ top: 0, behavior: "smooth" }); }} />
+      )}
+
       <Section title={t("connections.byHandTitle")}>
         <p className="max-w-[65ch] text-muted">{t("connections.byHand")}</p>
         <Link href="/library" className={clsx(buttonClass("secondary", "sm"), "mt-3")}>{t("connections.toLibrary")}</Link>
@@ -154,7 +162,7 @@ function ConnectionRow({ c, onChanged, onDisconnect, onError }: { c: ConnectionD
       </div>
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 pl-7 sm:pl-0">
         {c.status === "needs_you"
-          ? <Link href={c.connector === "aula" ? "/connections/aula" : `/connections/${c.id}#settings`} className={buttonClass("primary", "sm")}>{t("connections.actions.fix")}</Link>
+          ? <Link href={c.connector === "aula" || c.connector === "mac" ? `/connections/${c.connector}` : `/connections/${c.id}#settings`} className={buttonClass("primary", "sm")}>{t("connections.actions.fix")}</Link>
           : c.status !== "paused" && <Button size="sm" variant="secondary" disabled={busy || c.status === "running"} onClick={runNow}>{t("connections.actions.runNow")}</Button>}
         {c.status === "paused"
           ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => setPaused(false)}>{t("connections.actions.resume")}</Button>
@@ -187,9 +195,9 @@ function GalleryItem({ info, open, onToggle, children }: { info: ConnectorInfo; 
             {soon && <p className="mt-2 max-w-[65ch] text-sm text-muted">{t(`connections.connectors.${info.id}.soon`)}</p>}
           </div>
         </div>
-        {!soon && !open && (info.id === "aula"
-          // Aula signs in with MitID through the Connect Aula helper, not the generic form.
-          ? <Link href="/connections/aula" className={clsx(buttonClass("secondary", "sm"), "ml-7 self-start sm:ml-0")}>{t("connections.connectors.aula.open")}</Link>
+        {!soon && !open && (info.id === "aula" || info.id === "mac"
+          // Aula signs in with MitID through the Connect Aula helper, the Mac pairs its helper: not the generic form.
+          ? <Link href={`/connections/${info.id}`} className={clsx(buttonClass("secondary", "sm"), "ml-7 self-start sm:ml-0")}>{t(`connections.connectors.${info.id}.open`)}</Link>
           : <Button size="sm" variant="secondary" className="ml-7 self-start sm:ml-0" onClick={onToggle} aria-expanded={open}>{t("connections.connect")}</Button>)}
       </div>
       <AnimatePresence initial={false}>

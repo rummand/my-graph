@@ -7,11 +7,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const query = z.object({
-  what: z.enum(["labels", "calendars", "mailFolders", "driveFolders", "dropboxFolders"]),
+  what: z.enum(["labels", "calendars", "mailFolders", "driveFolders", "dropboxFolders", "slackChannels"]),
   parent: z.string().max(1000).optional(),
 });
 
-/** GET ?what=labels|calendars|mailFolders|driveFolders|dropboxFolders[&parent=] → { options } for the settings pickers. */
+/** GET ?what=labels|calendars|mailFolders|driveFolders|dropboxFolders|slackChannels[&parent=] → { options } for the settings pickers. */
 export const GET = route<{ params: Promise<{ id: string }> }>(async (req, v, { params }) => {
   const id = parseId((await params).id);
   const u = new URL(req.url);

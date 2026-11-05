@@ -89,5 +89,7 @@ enum BackgroundRefresh {
         await ReminderNotifications.refresh()
         _ = try? await NextUp.fetch()
         WidgetCenter.shared.reloadAllTimelines()
+        // Places: send visits noticed since the last send, into the graph Places was turned on in.
+        await PlacesSync.sendIfDue(currentGraphId: CookieVault.value(CookieVault.graph), graphName: nil)
     }
 }

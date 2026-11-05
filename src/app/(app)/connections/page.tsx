@@ -31,7 +31,7 @@ export default async function ConnectionsPage() {
       <PageHeader title={t("connections.title")} lead={t("connections.lead", { graph: v.graphName })} />
       <ConnectionsApp initial={connections} connectors={offeredIn(v.graphKind, isPlatformAdmin(v)).map(connectorInfo)}
         people={people.map((p) => ({ id: p.id, label: p.label })).sort((a, b) => a.label.localeCompare(b.label))}
-        family={v.graphKind === "family"} graphName={v.graphName} />
+        family={v.graphKind === "family"} graphName={v.graphName} graphKind={v.graphKind} />
     </div>
   );
 }

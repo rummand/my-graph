@@ -11,17 +11,44 @@ import type { ExtractedText, ReadContext } from "./types";
 /** The marker classify.ts counts from to tell a scanned letter from a photo. */
 export const TEXT_MARKER = "Text in the image:";
 
-async function readExif(bytes: Buffer): Promise<{ takenAt?: Date; lat?: number; lon?: number; camera?: string } | null> {
+/**
+ * When a photo was taken, as a real moment. EXIF writes the camera's local clock without a zone; exifr turns it into a
+ * Date in the server's zone. The clock reading is taken back out and placed with the photo's own offset
+ * (OffsetTimeOriginal), else the GPS clock (always UTC), else read as UTC, so the day never depends on the server.
+ */
+export function exifMoment(x: { DateTimeOriginal?: unknown; CreateDate?: unknown; OffsetTimeOriginal?: unknown; OffsetTime?: unknown; GPSDateStamp?: unknown; GPSTimeStamp?: unknown }): Date | undefined {
+  const when = x.DateTimeOriginal ?? x.CreateDate;
+  if (!(when instanceof Date) || Number.isNaN(when.getTime())) return undefined;
+  const clock = Date.UTC(when.getFullYear(), when.getMonth(), when.getDate(), when.getHours(), when.getMinutes(), when.getSeconds());
+  const off = [x.OffsetTimeOriginal, x.OffsetTime].find((o): o is string => typeof o === "string" && /^[+-]\d{2}:\d{2}$/.test(o));
+  if (off) {
+    const sign = off[0] === "-" ? -1 : 1;
+    return new Date(clock - sign * (Number(off.slice(1, 3)) * 60 + Number(off.slice(4, 6))) * 60_000);
+  }
+  // The GPS clock is UTC; trust it when it is within a day of the camera's clock (a time zone apart, at most).
+  if (typeof x.GPSDateStamp === "string" && Array.isArray(x.GPSTimeStamp) && x.GPSTimeStamp.length === 3) {
+    const [y, m, d] = x.GPSDateStamp.split(":").map(Number);
+    const [hh, mm, ss] = x.GPSTimeStamp.map(Number);
+    const gps = Date.UTC(y, m - 1, d, hh, mm, Math.floor(ss));
+    if (Number.isFinite(gps) && Math.abs(gps - clock) <= 14 * 3_600_000) return new Date(gps);
+  }
+  return new Date(clock);
+}
+
+/** Date taken, place and camera from EXIF (JPEG, HEIC, PNG, WebP, TIFF: exifr reads them all). */
+export async function readExif(bytes: Buffer): Promise<{ takenAt?: Date; lat?: number; lon?: number; camera?: string } | null> {
   try {
     const exifr = (await import("exifr")).default;
-    const x = await exifr.parse(bytes, { gps: true, tiff: true, exif: true, pick: ["DateTimeOriginal", "CreateDate", "Make", "Model", "latitude", "longitude", "GPSLatitude", "GPSLongitude"] });
+    const x = await exifr.parse(bytes, {
+      gps: true, tiff: true, exif: true,
+      pick: ["DateTimeOriginal", "CreateDate", "OffsetTimeOriginal", "OffsetTime", "Make", "Model", "latitude", "longitude", "GPSLatitude", "GPSLongitude", "GPSLatitudeRef", "GPSLongitudeRef", "GPSDateStamp", "GPSTimeStamp"],
+    });
     if (!x) return null;
-    const when = x.DateTimeOriginal ?? x.CreateDate;
-    const takenAt = when instanceof Date && !Number.isNaN(when.getTime()) ? when : undefined;
-    const lat = typeof x.latitude === "number" && Number.isFinite(x.latitude) ? x.latitude : undefined;
-    const lon = typeof x.longitude === "number" && Number.isFinite(x.longitude) ? x.longitude : undefined;
+    const takenAt = exifMoment(x);
+    const ok = typeof x.latitude === "number" && typeof x.longitude === "number" && Number.isFinite(x.latitude) && Number.isFinite(x.longitude)
+      && Math.abs(x.latitude) <= 90 && Math.abs(x.longitude) <= 180 && !(x.latitude === 0 && x.longitude === 0);
     const camera = [x.Make, x.Model].filter((s) => typeof s === "string" && s.trim()).join(" ").trim() || undefined;
-    return { takenAt, lat, lon, camera };
+    return { takenAt, lat: ok ? x.latitude : undefined, lon: ok ? x.longitude : undefined, camera };
   } catch {
     return null;
   }

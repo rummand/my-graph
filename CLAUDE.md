@@ -96,6 +96,18 @@ nothing links two graphs. The family graph keeps the household rules; other grap
   rotated refresh tokens, env `GOOGLE_*`, `MICROSOFT_*`, `DROPBOX_*`), MCP servers and Record (the assistant may use
   their tools; writing tools always need a single-use approval from the person, unattended runs get reading tools
   only), and **plugin** (platform admin only, below).
+- **Importers** (`src/lib/importers`): structured sources read without a model, each kept as a library source with
+  one change set: family trees (`.ged`), contacts (`.vcf`, iPhone, Google Contacts, CardDAV), photos and places (EXIF,
+  iPhone, Google Photos picker, Google location history), chats (WhatsApp, Messenger/Instagram, iMessage) and notes
+  (Obsidian, Notion export, Apple Notes), health (iPhone; always sensitive + private), work batches (GitHub, Linear,
+  Jira, Slack, Notion API, Home Assistant). Importer modules are pure (`detect` + `read` → ImportPlan); JSON batches
+  from the iPhone app and the Mac helper use the fixed shapes in `schemas.ts` at `POST /api/import/<id>`; connectors
+  call `importPayload()`. The reading queue loads code at server start: restart the dev server after changing it.
+  **Danish connectors** live in `src/lib/connectors/dk/` with `region: "dk"` (Aula, Holdsport, MinUddannelse/Meebook,
+  Digital Post, sundhed.dk) and get their own gallery section. **My Graph for Mac** (`connectors/mac`): a one-file
+  helper for Messages and Notes, paired with a one-time code. **Apps** (`connectors/mcp/directory.ts`): a curated,
+  vendor-verified directory of remote MCP servers (Miro, Canva, Asana, Atlassian, Stripe, PayPal, Zapier …) on the
+  existing MCP connection; writing tools stay off and need approval each time.
 - **My Graph as an MCP server** (`src/lib/mcp-server`, `/api/mcp`, `/.well-known/*`, `/settings/ai-apps`): tools
   `search_graph get_node list_people timeline history who_said get_document ask propose_changes` for Claude, ChatGPT
   and Claude Code. Every key or OAuth grant is one person + one graph + `read | propose`; the person is re-resolved on
@@ -172,6 +184,7 @@ index files.
 | versioning | `src/lib/changes/**`, `src/lib/history/**`, `src/app/api/{changes,history,checkpoints}/**`, `src/app/(app)/{changes,history}/**`, `src/components/{changes,history}/**` |
 | web | `src/lib/web/**`, `src/app/api/web/**` |
 | connectors | `src/lib/connectors/**`, `src/app/api/connections/**`, `src/app/(app)/connections/**`, `src/components/connections/**` |
+| importers | `src/lib/importers/**`, `src/app/api/import/**` |
 | cross-graph links | `src/lib/links/**`, `src/app/api/links/**`, `src/components/links/**` |
 | documents | `src/lib/artifacts/**`, `src/lib/design-sets/**`, `src/app/api/{artifacts,design-sets}/**`, `src/app/(app)/artifacts/**`, `src/components/artifacts/**` |
 

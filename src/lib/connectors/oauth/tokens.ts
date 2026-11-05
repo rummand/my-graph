@@ -78,23 +78,34 @@ function jsonOf(res: HttpResponse): Record<string, unknown> | null {
 /** POST to the provider's token endpoint with the app's own client id and secret. */
 export async function tokenRequest(transport: Transport, p: ProviderInfo, form: Record<string, string>, signal?: AbortSignal): Promise<TokenAnswer> {
   if (!p.clientId || !p.clientSecret) throw needsYou("This kind of connection isn't set up on this My Graph yet. Ask whoever runs it to add the app's client id and secret.", "providerNotSetUp");
-  const body = new URLSearchParams({ ...form, client_id: p.clientId, client_secret: p.clientSecret }).toString();
+  // Notion: no PKCE, the app's credentials as HTTP Basic and a JSON body. Everyone else: a form with them in it.
+  const fields: Record<string, string> = { ...form };
+  if (p.pkce === false) delete fields.code_verifier;
+  if (p.tokenAuth !== "basic") Object.assign(fields, { client_id: p.clientId, client_secret: p.clientSecret });
+  const json = p.tokenFormat === "json";
+  const body = json ? JSON.stringify(fields) : new URLSearchParams(fields).toString();
   let res: HttpResponse;
   try {
     res = await transport({
       url: p.tokenUrl, method: "POST", body, timeoutMs: 20_000, maxBytes: 64 * 1024, signal,
-      headers: { "content-type": "application/x-www-form-urlencoded", accept: "application/json" },
+      headers: {
+        "content-type": json ? "application/json" : "application/x-www-form-urlencoded", accept: "application/json",
+        ...(p.tokenAuth === "basic" ? { authorization: `Basic ${Buffer.from(`${p.clientId}:${p.clientSecret}`).toString("base64")}` } : {}),
+      },
     });
   } catch (e) {
     throw willRetry(`Couldn't reach the sign-in server (${e instanceof Error ? e.message : String(e)}).`, "network");
   }
-  const b = jsonOf(res);
-  if (res.status >= 200 && res.status < 300) return parseTokenAnswer(b);
+  const b = p.unwrapToken ? p.unwrapToken(jsonOf(res)) : jsonOf(res);
+  // Slack refuses with HTTP 200 and an error: treat that like a 400.
+  const refusedOk = res.status >= 200 && res.status < 300 && typeof b?.error === "string" && !!b.error;
+  if (res.status >= 200 && res.status < 300 && !refusedOk) return parseTokenAnswer(b);
+  const status = refusedOk ? 400 : res.status;
   const err = typeof b?.error === "string" ? b.error : "";
-  if (res.status === 429 || res.status >= 500) throw willRetry("The sign-in server is busy. It will try again.", "serverError");
-  if (err === "invalid_grant" || err === "invalid_token" || res.status === 401 || (res.status === 400 && form.grant_type === "refresh_token")) throw signInAgain();
+  if (status === 429 || status >= 500) throw willRetry("The sign-in server is busy. It will try again.", "serverError");
+  if (err === "invalid_grant" || err === "invalid_token" || status === 401 || (status === 400 && form.grant_type === "refresh_token")) throw signInAgain();
   if (err === "invalid_client" || err === "unauthorized_client") throw needsYou("The provider refused My Graph's app (its client id or secret is wrong or expired). Whoever runs My Graph needs to check the app settings.", "providerRefused");
-  const why = (typeof b?.error_description === "string" ? b.error_description : err || `HTTP ${res.status}`).slice(0, 200);
+  const why = (typeof b?.error_description === "string" ? b.error_description : err || `HTTP ${status}`).slice(0, 200);
   throw needsYou(`The sign-in was refused: ${why}.`, "oauthRefused");
 }
 

@@ -63,7 +63,12 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         NSCameraUsageDescription: Take a photo of a letter or note to add it to your library.
-        NSPhotoLibraryUsageDescription: Choose photos to add to your library.
+        NSPhotoLibraryUsageDescription: Send the details of your photos (when and where they were taken, albums, favourites) to My Graph, only if you turn this on under From this iPhone.
+        NSContactsUsageDescription: Send your contacts (names, numbers, addresses, birthdays and related names) to My Graph, where you review what it finds before anything is added.
+        NSLocationWhenInUseUsageDescription: Notice the places you visit, only if you turn on Places under From this iPhone.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Notice places where you stay a while, also while My Graph is closed, so they can be added to your graph after you review them. Turn it off at any time under From this iPhone.
+        NSHealthShareUsageDescription: Send the health information you choose (like height, weight and vaccinations) to My Graph, where only you can see it.
+        NSHealthClinicalHealthRecordsShareUsageDescription: Send the health records you choose (vaccinations, conditions, medications, allergies and lab results) to My Graph, where only you can see them.
         NSMicrophoneUsageDescription: Speak your question in Ask instead of typing it.
         NSSpeechRecognitionUsageDescription: Turn what you say in Ask into text. When the iPhone can, this happens on the iPhone itself.
         CFBundleURLTypes:
@@ -76,6 +81,10 @@ targets:
         com.apple.developer.associated-domains: [webcredentials:$(WEB_DOMAIN)]
         # Remote notifications (APNs). Xcode switches this to "production" when it exports for TestFlight/App Store.
         aps-environment: development
+        # Apple Health, for "From this iPhone" → Health (read only). Optional: remove these two keys if your App ID
+        # doesn't have HealthKit; the app then says Health can't be opened and everything else works.
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: [health-records]
     dependencies:
       - target: MyGraphShare
       - target: MyGraphWidget

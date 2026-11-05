@@ -35,9 +35,11 @@ import { participantsOf, resolveThreads, splitMbox, threadKeyFor, type Participa
 import { CONTAINER_KINDS, detectFileType, kindFromMime, MAX_UPLOAD_BYTES, MBOX_MIME } from "./mime";
 import { buildProposalOps, correspondentOps, describeCounts, edgeKey, type KnownNode } from "./proposals";
 import { readZip } from "./zip";
+import { photoCoords, photoPlaceOps, takenAtFallback } from "./formats/image-place";
 import { importerById, importerForArchive } from "@/lib/importers/registry";
 import type { ImportKnown, ImportPlan, Importer } from "@/lib/importers/types";
 import { localeOf } from "@/lib/assistant/locale";
+import { describeDanish, readDanishDocument, withDanishOps } from "@/lib/importers/dk/document";
 import { loadRecording, recordingPlanFor, type RecordingInput } from "./recording-store";
 
 const AGENT = "library-ingest";
@@ -168,6 +170,9 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       threadKey = threadKey ?? ex.threadKey ?? null;
       externalId = externalId ?? ex.externalId ?? null;
       Object.assign(meta, ex.meta);
+      // A photo without an EXIF date: the time its source gave (Google Photos' createTime, as meta.takenAt).
+      const taken = kind === "image" && !dates.some((d) => d.origin === "exif") ? takenAtFallback(meta) : null;
+      if (taken) { dates.push(taken); occurredAt ??= taken.at; }
       warnings.push(...ex.warnings);
     } else {
       const rec = src.kind === "recording" ? await loadRecording(src.id) : null;
@@ -181,6 +186,14 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
     // A pasted web page stays a web page when it is read again.
     meta.docKind = src.kind === "web" ? "web_page" : docKindOf({ mime: src.mime, kind: src.kind, meta, ocrChars: ocrCharsOf(textContent) });
     meta.documentDateChecked = true;
+    // Danish public letters, Digital Post notices and sundhed.dk printouts (src/lib/importers/dk), read without a model.
+    const danish = importPlan ? null : readDanishDocument({ fileKind: kind, title: src.title, segments, email: meta.email, now: new Date() });
+    if (danish) meta.danish = describeDanish(danish);
+    if (danish?.sensitive && (!src.sensitive || src.visibility !== "private")) {
+      // Health records: sensitive and private from here on, before anything is embedded or read (mux without fallback).
+      src.sensitive = true; src.visibility = "private"; muxMeta.sensitive = true;
+      await db.update(sources).set({ sensitive: true, visibility: "private" }).where(eq(sources.id, sourceId));
+    }
     if (docDate) meta.documentDateFrom = { origin: docDate.origin, quote: docDate.quote ?? null };
     await db.update(sources).set({
       textContent, threadKey, externalId, meta: { ...meta, warnings },
@@ -247,6 +260,10 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       }
     }
     const recording = src.kind === "recording" ? await recordingPlanFor(v, src, docNodeId) : null;
+    // A photo taken at a place the graph knows: propose the link (EXIF GPS within 150 m).
+    const placeOps = !importPlan && kind === "image" && photoCoords(meta)
+      ? photoPlaceOps({ meta, known: await knownPlaces(v), docNodeId, sourceId: src.id, existingEdges: await existingEdges(v), mint: () => randomUUID() })
+      : [];
     if (importPlan) {
       step = "proposing what it adds";
       await progress({ step: "proposing", label: "Proposing what it adds" });
@@ -257,7 +274,7 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       }
       await withdrawUndecidedProposals(v, src.id);
       Object.assign(meta, await proposeImport(v, { id: src.id, title: documentTitleOf(meta, src.title), connectionId: src.connectionId, visibility: src.visibility, docNodeId }, importer!, importPlan, groups));
-    } else if (groups.length || recording || (participants.length && !meta.correspondentsDone)) {
+    } else if (groups.length || recording || placeOps.length || danish || (participants.length && !meta.correspondentsDone)) {
       step = "proposing what it adds";
       await progress({ step: "proposing", label: "Proposing what it adds" });
       // Read again: the earlier proposal from this file, if nobody has decided on it yet, is replaced.
@@ -269,7 +286,8 @@ export async function processSource(viewer: Viewer, sourceId: string, opts: { fr
       // …and so is one a run cut off by a restart made but never recorded on the source.
       await withdrawUndecidedProposals(v, src.id);
       const p = await proposeFromSource(v, { id: src.id, title: documentTitleOf(meta, src.title), visibility: src.visibility, docNodeId, header: emailHeader(meta) },
-        groups, meta.correspondentsDone ? [] : participants, recording);
+        groups, meta.correspondentsDone ? [] : participants, recording, placeOps,
+        danish ? await danishRefiner(v, danish, src.id, docNodeId, src.visibility) : undefined);
       Object.assign(meta, p);
       if (participants.length) meta.correspondentsDone = true;
     }
@@ -602,6 +620,10 @@ export async function proposeFromSource(
   v: Viewer, src: { id: string; title: string; visibility: "private" | "parents" | "household"; docNodeId: string | null; header: string },
   groups: { ex: Extraction; chunks: StoredChunk[] }[], participants: Participant[],
   recording: RecordingInput | null = null,
+  /** Ops worked out without the model (a photo's place, from EXIF). */
+  extra: ChangeInput[] = [],
+  /** Rework the whole list with what the graph knows (Danish letters and health printouts, src/lib/importers/dk). */
+  refine?: (changes: ChangeInput[], ctx: { known: KnownNode[]; edges: ReadonlySet<string>; mint: () => string }) => ChangeInput[],
 ): Promise<ProposalMeta> {
   const known = await knownNodes(v);
   const mint = () => randomUUID();
@@ -622,12 +644,17 @@ export async function proposeFromSource(
   // In a meeting, "Speaker 4" names nobody: what the reading proposed about such a label is dropped.
   if (rec && recording) plan.counts.people -= recording.tidy(plan.changes, rec.edgeKeys);
   await assignKinds(v, plan.changes);
-  const changes = [...(rec?.changes ?? []), ...people, ...plan.changes];
+  const changes = [...(rec?.changes ?? []), ...people, ...plan.changes, ...extra];
   if (recording) recording.refine(changes);
+  const tally = (op: string) => changes.filter((c) => c.op === op).length;
+  const [remindersBefore, nodesBefore] = [tally("addReminder"), tally("addNode")];
+  if (refine) changes.splice(0, changes.length, ...refine([...changes], { known: withPeople, edges: edgesNow, mint }));
+  const [refinedReminders, refinedNodes] = [tally("addReminder") - remindersBefore, tally("addNode") - nodesBefore];
   const counts = {
     ...plan.counts, people: plan.counts.people + people.length + (rec?.counts.people ?? 0), events: plan.counts.events + (rec?.counts.events ?? 0),
-    other: plan.counts.other + (rec?.counts.other ?? 0), connections: plan.counts.connections + (rec?.counts.connections ?? 0), reminders: plan.counts.reminders + (rec?.counts.reminders ?? 0),
+    other: plan.counts.other + (rec?.counts.other ?? 0), connections: plan.counts.connections + (rec?.counts.connections ?? 0) + extra.length, reminders: plan.counts.reminders + (rec?.counts.reminders ?? 0) + refinedReminders,
   };
+  if (refinedNodes > 0) counts.other += refinedNodes;
   const now = new Date().toISOString();
   if (changes.length === 0) return { proposedAt: now, proposed: counts, proposedTotal: 0 };
 
@@ -758,9 +785,25 @@ async function archiveImporter(title: string, storageKey: string): Promise<Impor
   return importerForArchive(title, names);
 }
 
+/** The Danish proposals for a source, as a refiner of everything else proposed from it. */
+async function danishRefiner(
+  v: Viewer, danish: NonNullable<ReturnType<typeof readDanishDocument>>, sourceId: string, docNodeId: string | null, visibility: "private" | "parents" | "household",
+): Promise<NonNullable<Parameters<typeof proposeFromSource>[6]>> {
+  const locale = (await localeOf(v.id).catch(() => "en")) === "da" ? "da" : "en";
+  return (changes, c) => withDanishOps(danish, changes, {
+    sourceId, docNodeId, known: c.known, existingEdges: c.edges, visibility, selfNodeId: v.personNodeId, now: new Date(), mint: c.mint, locale,
+  });
+}
+
+/** Places the viewer can read, with their props (coordinates), for a photo's place. */
+async function knownPlaces(v: Viewer): Promise<ImportKnown[]> {
+  const list = await gbrain.listNodes(v, { type: "place", limit: 1000 }).catch(() => [] as gbrain.GNode[]);
+  return list.map((n) => ({ id: n.id, type: n.type, kind: n.kind ?? null, label: n.label, aliases: n.aliases, startAt: null, props: n.props ?? {} }));
+}
+
 /** What the graph already holds, with props, for an importer to match against (as the viewer may read it). */
 async function importKnown(v: Viewer): Promise<ImportKnown[]> {
-  const types = ["person", "place", "event", "topic", "organization", "document"] as const;
+  const types = ["person", "place", "event", "topic", "organization", "document", "project", "thing"] as const;
   const lists = await Promise.all(types.map((type) => gbrain.listNodes(v, { type, limit: 500 }).catch(() => [] as gbrain.GNode[])));
   return lists.flat().map((n) => ({
     id: n.id, type: n.type, kind: n.kind ?? null, label: n.label, aliases: n.aliases, startAt: n.startAt?.toISOString() ?? null, props: n.props ?? {},
@@ -773,7 +816,7 @@ async function readImport(v: Viewer, src: typeof sources.$inferSelect, importer:
     : undefined;
   const plan = await importer.read({ filename: src.title, bytes: raw, entries }, {
     sourceId: src.id, graphKind: v.graphKind, visibility: src.visibility, known: await importKnown(v), existingEdges: await existingEdges(v),
-    now: new Date(), mint: () => randomUUID(), locale: (await localeOf(v.id).catch(() => "en")) === "da" ? "da" : "en",
+    now: new Date(), mint: () => randomUUID(), locale: (await localeOf(v.id).catch(() => "en")) === "da" ? "da" : "en", selfNodeId: v.personNodeId,
   });
   // Every op points back at this source, whatever the importer filled in.
   for (const c of plan.changes) c.receipt = { ...(c.receipt ?? {}), sourceId: src.id };
@@ -799,7 +842,11 @@ async function proposeImport(
       groups, known: [...known, ...proposed], sourceId: src.id, docNodeId: src.docNodeId, existingEdges: await existingEdges(v),
       visibility: src.visibility, remindFor: await reminderPeople(v, known), mint: () => randomUUID(), sourceTitle: src.title,
     });
-    plan.changes.push(...extra.changes);
+    // In a chat export the exporter is "You" / "Du": the model mustn't propose them as a person.
+    const SELF = new Set(["du", "you", "me", "mig", "jeg", "i"]);
+    const selfIds = new Set(extra.changes.flatMap((c) => (c.op === "addNode" && c.type === "person" && SELF.has(c.label.trim().toLowerCase()) && c.nodeId ? [c.nodeId] : [])));
+    plan.changes.push(...extra.changes.filter((c) =>
+      !(c.op === "addNode" && c.nodeId && selfIds.has(c.nodeId)) && !(c.op === "addEdge" && (selfIds.has(c.fromId) || selfIds.has(c.toId)))));
     plan.counts = { ...plan.counts, read: (plan.counts.read ?? 0) + extra.changes.length };
   }
   const total = plan.changes.length;

@@ -153,6 +153,7 @@ private struct RouterStack<Content: View>: View {
         case .changeSet(let id): ChangeSetDetailView(changeSetId: id)
         case .history(let id, let label): HistoryView(subjectId: id, subjectName: label)
         case .documents: DocumentsView()
+        case .fromPhone: FromPhoneView()
         case .settings: SettingsView()
         case .timeline: TimelineScreen()
         case .conversations: ConversationsView()
@@ -217,6 +218,7 @@ private struct ChromeModifier: ViewModifier {
                                 Button { router.push(.memory) } label: { Label("Memory", systemImage: "brain") }
                                 Button { router.push(.changes) } label: { Label("Changes", systemImage: "arrow.triangle.branch") }
                                 Button { router.push(.documents) } label: { Label("Documents", systemImage: "doc.richtext") }
+                                Button { router.push(.fromPhone) } label: { Label("From this iPhone", systemImage: "iphone.and.arrow.forward") }
                                 Button { router.push(.settings) } label: { Label("Settings", systemImage: "gearshape") }
                             }
                             Button(role: .destructive) { Task { await app.signOut() } } label: {
@@ -226,7 +228,7 @@ private struct ChromeModifier: ViewModifier {
                             Avatar(name: app.myName ?? "?", id: app.myPersonId, size: 30)
                         }
                         .accessibilityLabel(Text("More"))
-                        .accessibilityHint(Text("Memory, changes, documents, settings and sign out"))
+                        .accessibilityHint(Text("Memory, changes, documents, from this iPhone, settings and sign out"))
                         .accessibilityIdentifier("more.menu")
                     }
                 }

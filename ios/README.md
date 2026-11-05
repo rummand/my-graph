@@ -93,6 +93,30 @@ None of this is compiled into Release builds.
   first when the notification is about another one, and opens the web for screens the app doesn't have
   (connections, the practice). Settings → "Sent by My Graph" shows the server's switches and quiet hours
   (`/api/devices/settings`). Debug builds register as `sandbox`, Release as `production`.
+- **From this iPhone** (More → From this iPhone; also Library's + menu, and a row at the top of Library while no
+  source is on). Four sources, each off until the person turns it on, each with what it reads, Send now and how the
+  last send went ("Sent 312 contacts to Family" → **Review what it found** opens Changes). Everything goes to
+  `POST /api/import/<contacts|photos|places|health>` `{ title, visibility, data }` in the current graph, in batches
+  under 9 MB (`MyGraph/FromPhone/PhoneImportKit.swift`, shapes = `src/lib/importers/schemas.ts`); the server only
+  proposes changes. Per server + graph the app keeps an id → fingerprint ledger (Application Support), so later sends
+  carry only what changed; a batch that fails (or a 429) stays for next time.
+  - **Contacts** (`CNContactStore`, full or limited access): names, emails, phones, addresses, birthday (`--MM-DD`
+    without a year), organisation, job title, related names with the iPhone's localized labels. The card's note is
+    not read (Apple's notes entitlement).
+  - **Photos**: by default only photos the person picks (PHPicker, no library access): each is uploaded through
+    `/api/library` (HEIC, other formats and anything over 4096 px or 15 MB become JPEG, keeping date and GPS), then
+    its details are sent with the upload's `sourceId`. "Also send details of every photo" is a separate opt-in
+    (library access; a limited library sends only what was shared). No faces or names (PhotoKit has none).
+  - **Places**: `startMonitoringVisits` with "Always" location (asked in iOS's two steps, after the explanation).
+    Visits wait in a small file on the phone and are sent when the app opens or in the background refresh, at most
+    every 6 hours, and only into the graph Places was turned on in. Pause, delete stored visits; turning Places off
+    deletes them. "Look up place names" uses Apple Maps (CLGeocoder), 25 per send.
+  - **Health** (HealthKit, read only, always `private`): latest height, weight and resting heart rate, and where
+    Health Records exist (`supportsHealthRecords()`, not in Denmark today) vaccinations, conditions, medications,
+    allergies, labs and procedures, with date/value/note read from the FHIR resource. The HealthKit entitlement
+    (`com.apple.developer.healthkit` + `health-records`) is in `project.yml`; remove those two keys if your App ID
+    doesn't have HealthKit, and the Health switch says it can't open Health.
+  - Debug: `-MGRoute phone`, and `-MGPhoneSend contacts|health|places` turns a source on and sends it.
 - **Widget.** "Next up" fetches reminders and today's events with the shared session. If it can't, it falls back to
   the snapshot the app writes to the App Group.
 - **Design.** Colours follow DESIGN.md's tokens for light and dark (`Shared/Theme.swift`).
@@ -219,6 +243,9 @@ and ticked, a reminder added from chat, and a few library facts delivered.
 - Dictation with real speech: the simulator has no voice to hear; the test checks the permission flow, the listening
   state and the language switch.
 - Adding the widget to the Home Screen. Its view was checked inside the app at widget sizes.
+- From this iPhone: Health (authorization sheets, Health Records), Places (real visits need a device moving
+  about) and picking photos. Contacts was sent from the simulator to the dev server, and a second send said
+  "Nothing new since the last send".
 - "Always allow" on a suggestion or a chat proposal (the UI tests cover Approve and Deny, which share the code path).
 - The language switch in Settings: it saves on the account, and SwiftUI text switches at once through `\.locale`, but
   text built in code (`String(localized:)`) follows only after the app is opened again.

@@ -91,6 +91,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // Places: iOS relaunches the app in the background to hand over a visit; the delegate must be listening.
+        PlacesMonitor.shared.resumeIfOn()
         return true
     }
 

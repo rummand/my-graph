@@ -24,15 +24,17 @@ import { clampEvery } from "../manifest";
 import { connectorById, offeredIn } from "../registry";
 import { ConnectionError, kick } from "../store";
 import { apiFor } from "./session";
-import { apiBase, buildAuthorizeUrl, isOAuthConnector, missingScope, providerInfo, providerOf, type OAuthConnectorId } from "./providers";
+import { apiBase, buildAuthorizeUrl, isOAuthConnector, scopesFor, missingScope, providerInfo, providerOf, type OAuthConnectorId } from "./providers";
 import { readTokens, tokenRequest, writeTokens, type TokenState } from "./tokens";
+import { NOTION_VERSION } from "../notion/api";
 
 const PENDING_MS = 15 * 60_000;
 export const CALLBACK_PATH = "/api/connections/oauth/callback";
 
 /** Names shown until the account is known ("Gmail", then "Gmail: anna@gmail.com"). */
 export const DEFAULT_TITLES: Record<OAuthConnectorId, string> = {
-  gmail: "Gmail", google_calendar: "Google Calendar", google_drive: "Google Drive", microsoft: "Outlook and OneDrive", dropbox: "Dropbox",
+  gmail: "Gmail", google_calendar: "Google Calendar", google_drive: "Google Drive", google_contacts: "Google Contacts", google_photos: "Google Photos", microsoft: "Outlook and OneDrive", dropbox: "Dropbox",
+  slack: "Slack", notion: "Notion", github_oauth: "GitHub", linear_oauth: "Linear",
 };
 
 function assertMayConnect(v: Viewer) {
@@ -90,7 +92,7 @@ export async function startProviderOAuth(v: Viewer, req: Request, input: StartIn
     void audit(v, "connections.create", { type: "connection", id }, { connector: connectorId, auth: "oauth" }).catch(() => {});
   }
   const account = typeof config.account === "string" ? config.account : null;
-  return { connectionId: id, authorizeUrl: buildAuthorizeUrl(p, connectorId, { redirectUri, state, challenge, loginHint: account }) };
+  return { connectionId: id, authorizeUrl: buildAuthorizeUrl(p, connectorId, { redirectUri, state, challenge, loginHint: account, scopes: scopesFor(connectorId, config) }) };
 }
 
 const same = (a: string, b: string) => {
@@ -125,6 +127,29 @@ export async function accountOf(conn: { id: string; connector: string }, secrets
       const r = await api({ url: `${base.graph}/me?$select=mail,userPrincipalName` });
       const b = r.status === 200 ? r.json<{ mail?: string; userPrincipalName?: string }>() : null;
       return b?.mail ?? b?.userPrincipalName ?? null;
+    }
+    if (provider === "slack") {
+      // auth.test: who and which workspace ("anna @ Acme"). Slack answers 200 with ok:false on a problem.
+      const r = await api({ url: `${base.slack}/auth.test`, method: "POST" });
+      const b = r.status === 200 ? r.json<{ ok?: boolean; user?: string; team?: string }>() : null;
+      return b?.ok && b.user ? (b.team ? `${b.user} @ ${b.team}` : b.user) : null;
+    }
+    if (provider === "notion") {
+      // The integration's own bot user carries the workspace name and the person who connected it.
+      const r = await api({ url: `${base.notion}/users/me`, headers: { "notion-version": NOTION_VERSION } });
+      const b = r.status === 200 ? r.json<{ bot?: { workspace_name?: string; owner?: { user?: { person?: { email?: string } } } } }>() : null;
+      return b?.bot?.workspace_name ?? b?.bot?.owner?.user?.person?.email ?? null;
+    }
+    if (provider === "github") {
+      const r = await api({ url: `${base.github}/user`, headers: { accept: "application/vnd.github+json" } });
+      const b = r.status === 200 ? r.json<{ login?: string }>() : null;
+      return b?.login ?? null;
+    }
+    if (provider === "linear") {
+      const r = await api({ url: base.linear, method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ query: "{ viewer { email organization { name } } }" }) });
+      const b = r.status === 200 ? r.json<{ data?: { viewer?: { email?: string; organization?: { name?: string } } } }>() : null;
+      const v = b?.data?.viewer;
+      return v?.email ? (v.organization?.name ? `${v.email} @ ${v.organization.name}` : v.email) : null;
     }
     const r = await api({ url: `${base.dropbox}/users/get_current_account`, method: "POST", headers: { "content-type": "application/json" }, body: "null" });
     return r.status === 200 ? (r.json<{ email?: string }>()?.email ?? null) : null;
